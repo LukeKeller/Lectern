@@ -10,12 +10,14 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "openapi": "tsx scripts/emit-openapi.ts"
   },
   "dependencies": {
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^6.0.2",
     "vitest": "^4.1.3"
   }

@@ -1,0 +1,3388 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Lectern API",
+    "version": "0.1.0",
+    "description": "Unified RSS + read-later reader API (MiniFlux + Readeck behind one contract)."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Card": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "miniflux",
+              "readeck"
+            ]
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "article",
+              "rss",
+              "email",
+              "pdf"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "later",
+              "shortlist",
+              "archive",
+              "feed"
+            ]
+          },
+          "readState": {
+            "default": "unopened",
+            "type": "string",
+            "enum": [
+              "unopened",
+              "reading",
+              "finished"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "siteName": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "wordCount": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readingTimeMinutes": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readingProgress": {
+            "default": 0,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "readAnchor": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "highlightCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "note": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "sourceId",
+          "category",
+          "location",
+          "readState",
+          "title",
+          "author",
+          "siteName",
+          "url",
+          "wordCount",
+          "readingTimeMinutes",
+          "readingProgress",
+          "readAnchor",
+          "tags",
+          "highlightCount",
+          "note",
+          "savedAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "Highlight": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "note": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "default": "yellow",
+            "type": "string",
+            "enum": [
+              "yellow",
+              "red",
+              "blue",
+              "green"
+            ]
+          },
+          "startSelector": {
+            "type": "string"
+          },
+          "startOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "endSelector": {
+            "type": "string"
+          },
+          "endOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "text",
+          "note",
+          "color",
+          "startSelector",
+          "startOffset",
+          "endSelector",
+          "endOffset",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "Tag": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "name",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "SavedView": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "query": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "pinned": {
+            "default": false,
+            "type": "boolean"
+          },
+          "sortBy": {
+            "default": "savedAt",
+            "type": "string",
+            "enum": [
+              "savedAt",
+              "updatedAt",
+              "title",
+              "wordCount",
+              "readingProgress"
+            ]
+          },
+          "sortDir": {
+            "default": "desc",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "query",
+          "pinned",
+          "sortBy",
+          "sortDir",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "and"
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/__schema0"
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "or"
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/__schema0"
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "not"
+                  },
+                  "node": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "node"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "term"
+                  },
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "location",
+                      "category",
+                      "source",
+                      "tag",
+                      "author",
+                      "site",
+                      "title",
+                      "words",
+                      "progress",
+                      "saved",
+                      "updated",
+                      "highlighted"
+                    ]
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "contains",
+                      "has",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "before",
+                      "after"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "field",
+                  "op",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/documents": {
+      "get": {
+        "operationId": "listDocuments",
+        "summary": "List documents",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "later",
+                "shortlist",
+                "archive",
+                "feed"
+              ]
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "article",
+                "rss",
+                "email",
+                "pdf"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "miniflux",
+                "readeck"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedAfter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "withContent",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "miniflux",
+                              "readeck"
+                            ]
+                          },
+                          "sourceId": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "article",
+                              "rss",
+                              "email",
+                              "pdf"
+                            ]
+                          },
+                          "location": {
+                            "type": "string",
+                            "enum": [
+                              "inbox",
+                              "later",
+                              "shortlist",
+                              "archive",
+                              "feed"
+                            ]
+                          },
+                          "readState": {
+                            "default": "unopened",
+                            "type": "string",
+                            "enum": [
+                              "unopened",
+                              "reading",
+                              "finished"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "author": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "siteName": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "wordCount": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "readingTimeMinutes": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "readingProgress": {
+                            "default": 0,
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "readAnchor": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tags": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "highlightCount": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "note": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "savedAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "sourceId",
+                          "category",
+                          "location",
+                          "readState",
+                          "title",
+                          "author",
+                          "siteName",
+                          "url",
+                          "wordCount",
+                          "readingTimeMinutes",
+                          "readingProgress",
+                          "readAnchor",
+                          "tags",
+                          "highlightCount",
+                          "note",
+                          "savedAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "results",
+                    "nextCursor",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "saveDocument",
+        "summary": "Save a document",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Save a document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "miniflux",
+                        "readeck"
+                      ]
+                    },
+                    "sourceId": {
+                      "type": "string"
+                    },
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "article",
+                        "rss",
+                        "email",
+                        "pdf"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "later",
+                        "shortlist",
+                        "archive",
+                        "feed"
+                      ]
+                    },
+                    "readState": {
+                      "default": "unopened",
+                      "type": "string",
+                      "enum": [
+                        "unopened",
+                        "reading",
+                        "finished"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "author": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "siteName": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "wordCount": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingTimeMinutes": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingProgress": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "readAnchor": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tags": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "highlightCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "note": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "savedAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "sourceId",
+                    "category",
+                    "location",
+                    "readState",
+                    "title",
+                    "author",
+                    "siteName",
+                    "url",
+                    "wordCount",
+                    "readingTimeMinutes",
+                    "readingProgress",
+                    "readAnchor",
+                    "tags",
+                    "highlightCount",
+                    "note",
+                    "savedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "html": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "location": {
+                    "default": "inbox",
+                    "type": "string",
+                    "enum": [
+                      "inbox",
+                      "later",
+                      "shortlist",
+                      "archive",
+                      "feed"
+                    ]
+                  }
+                },
+                "required": [
+                  "url",
+                  "tags",
+                  "location"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}": {
+      "get": {
+        "operationId": "getDocument",
+        "summary": "Get a document",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get a document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "miniflux",
+                        "readeck"
+                      ]
+                    },
+                    "sourceId": {
+                      "type": "string"
+                    },
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "article",
+                        "rss",
+                        "email",
+                        "pdf"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "later",
+                        "shortlist",
+                        "archive",
+                        "feed"
+                      ]
+                    },
+                    "readState": {
+                      "default": "unopened",
+                      "type": "string",
+                      "enum": [
+                        "unopened",
+                        "reading",
+                        "finished"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "author": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "siteName": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "wordCount": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingTimeMinutes": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingProgress": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "readAnchor": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tags": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "highlightCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "note": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "savedAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "sourceId",
+                    "category",
+                    "location",
+                    "readState",
+                    "title",
+                    "author",
+                    "siteName",
+                    "url",
+                    "wordCount",
+                    "readingTimeMinutes",
+                    "readingProgress",
+                    "readAnchor",
+                    "tags",
+                    "highlightCount",
+                    "note",
+                    "savedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateDocument",
+        "summary": "Update a document",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Update a document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "miniflux",
+                        "readeck"
+                      ]
+                    },
+                    "sourceId": {
+                      "type": "string"
+                    },
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "article",
+                        "rss",
+                        "email",
+                        "pdf"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "later",
+                        "shortlist",
+                        "archive",
+                        "feed"
+                      ]
+                    },
+                    "readState": {
+                      "default": "unopened",
+                      "type": "string",
+                      "enum": [
+                        "unopened",
+                        "reading",
+                        "finished"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "author": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "siteName": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "wordCount": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingTimeMinutes": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readingProgress": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "readAnchor": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tags": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "highlightCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "note": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "savedAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "sourceId",
+                    "category",
+                    "location",
+                    "readState",
+                    "title",
+                    "author",
+                    "siteName",
+                    "url",
+                    "wordCount",
+                    "readingTimeMinutes",
+                    "readingProgress",
+                    "readAnchor",
+                    "tags",
+                    "highlightCount",
+                    "note",
+                    "savedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "enum": [
+                      "inbox",
+                      "later",
+                      "shortlist",
+                      "archive",
+                      "feed"
+                    ]
+                  },
+                  "readingProgress": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "readAnchor": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDocument",
+        "summary": "Delete a document",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete a document"
+          }
+        }
+      }
+    },
+    "/documents/{id}/content": {
+      "get": {
+        "operationId": "getDocumentContent",
+        "summary": "Get article HTML",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get article HTML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "html": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "html"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}/highlights": {
+      "get": {
+        "operationId": "listHighlights",
+        "summary": "List highlights for a document",
+        "tags": [
+          "highlights"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List highlights for a document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "highlights": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "note": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "color": {
+                            "default": "yellow",
+                            "type": "string",
+                            "enum": [
+                              "yellow",
+                              "red",
+                              "blue",
+                              "green"
+                            ]
+                          },
+                          "startSelector": {
+                            "type": "string"
+                          },
+                          "startOffset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endSelector": {
+                            "type": "string"
+                          },
+                          "endOffset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "documentId",
+                          "text",
+                          "note",
+                          "color",
+                          "startSelector",
+                          "startOffset",
+                          "endSelector",
+                          "endOffset",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "highlights"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createHighlight",
+        "summary": "Create a highlight",
+        "tags": [
+          "highlights"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a highlight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "color": {
+                      "default": "yellow",
+                      "type": "string",
+                      "enum": [
+                        "yellow",
+                        "red",
+                        "blue",
+                        "green"
+                      ]
+                    },
+                    "startSelector": {
+                      "type": "string"
+                    },
+                    "startOffset": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "endSelector": {
+                      "type": "string"
+                    },
+                    "endOffset": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "documentId",
+                    "text",
+                    "note",
+                    "color",
+                    "startSelector",
+                    "startOffset",
+                    "endSelector",
+                    "endOffset",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "default": "yellow",
+                    "type": "string",
+                    "enum": [
+                      "yellow",
+                      "red",
+                      "blue",
+                      "green"
+                    ]
+                  },
+                  "note": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "startSelector": {
+                    "type": "string"
+                  },
+                  "startOffset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "endSelector": {
+                    "type": "string"
+                  },
+                  "endOffset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "text",
+                  "color",
+                  "note",
+                  "startSelector",
+                  "startOffset",
+                  "endSelector",
+                  "endOffset"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/highlights/{id}": {
+      "delete": {
+        "operationId": "deleteHighlight",
+        "summary": "Delete a highlight",
+        "tags": [
+          "highlights"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete a highlight"
+          }
+        }
+      }
+    },
+    "/tags": {
+      "get": {
+        "operationId": "listTags",
+        "summary": "List tags",
+        "tags": [
+          "tags"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List tags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tags"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/views": {
+      "get": {
+        "operationId": "listViews",
+        "summary": "List saved views",
+        "tags": [
+          "views"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List saved views",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "views": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "query": {
+                            "$ref": "#/$defs/__schema0"
+                          },
+                          "pinned": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "sortBy": {
+                            "default": "savedAt",
+                            "type": "string",
+                            "enum": [
+                              "savedAt",
+                              "updatedAt",
+                              "title",
+                              "wordCount",
+                              "readingProgress"
+                            ]
+                          },
+                          "sortDir": {
+                            "default": "desc",
+                            "type": "string",
+                            "enum": [
+                              "asc",
+                              "desc"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "query",
+                          "pinned",
+                          "sortBy",
+                          "sortDir",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "views"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "and"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "or"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "not"
+                            },
+                            "node": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "node"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "term"
+                            },
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "location",
+                                "category",
+                                "source",
+                                "tag",
+                                "author",
+                                "site",
+                                "title",
+                                "words",
+                                "progress",
+                                "saved",
+                                "updated",
+                                "highlighted"
+                              ]
+                            },
+                            "op": {
+                              "type": "string",
+                              "enum": [
+                                "eq",
+                                "neq",
+                                "contains",
+                                "has",
+                                "gt",
+                                "gte",
+                                "lt",
+                                "lte",
+                                "before",
+                                "after"
+                              ]
+                            },
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "field",
+                            "op",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createView",
+        "summary": "Create a saved view",
+        "tags": [
+          "views"
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Create a saved view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "query": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "pinned": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "sortBy": {
+                      "default": "savedAt",
+                      "type": "string",
+                      "enum": [
+                        "savedAt",
+                        "updatedAt",
+                        "title",
+                        "wordCount",
+                        "readingProgress"
+                      ]
+                    },
+                    "sortDir": {
+                      "default": "desc",
+                      "type": "string",
+                      "enum": [
+                        "asc",
+                        "desc"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "query",
+                    "pinned",
+                    "sortBy",
+                    "sortDir",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "and"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "or"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "not"
+                            },
+                            "node": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "node"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "term"
+                            },
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "location",
+                                "category",
+                                "source",
+                                "tag",
+                                "author",
+                                "site",
+                                "title",
+                                "words",
+                                "progress",
+                                "saved",
+                                "updated",
+                                "highlighted"
+                              ]
+                            },
+                            "op": {
+                              "type": "string",
+                              "enum": [
+                                "eq",
+                                "neq",
+                                "contains",
+                                "has",
+                                "gt",
+                                "gte",
+                                "lt",
+                                "lte",
+                                "before",
+                                "after"
+                              ]
+                            },
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "field",
+                            "op",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "query": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "pinned": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "sortBy": {
+                    "default": "savedAt",
+                    "type": "string",
+                    "enum": [
+                      "savedAt",
+                      "updatedAt",
+                      "title",
+                      "wordCount",
+                      "readingProgress"
+                    ]
+                  },
+                  "sortDir": {
+                    "default": "desc",
+                    "type": "string",
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "query",
+                  "pinned",
+                  "sortBy",
+                  "sortDir"
+                ],
+                "additionalProperties": false,
+                "$defs": {
+                  "__schema0": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "and"
+                          },
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "or"
+                          },
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "not"
+                          },
+                          "node": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "node"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "term"
+                          },
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "location",
+                              "category",
+                              "source",
+                              "tag",
+                              "author",
+                              "site",
+                              "title",
+                              "words",
+                              "progress",
+                              "saved",
+                              "updated",
+                              "highlighted"
+                            ]
+                          },
+                          "op": {
+                            "type": "string",
+                            "enum": [
+                              "eq",
+                              "neq",
+                              "contains",
+                              "has",
+                              "gt",
+                              "gte",
+                              "lt",
+                              "lte",
+                              "before",
+                              "after"
+                            ]
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "field",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/views/{id}": {
+      "patch": {
+        "operationId": "updateView",
+        "summary": "Update a saved view",
+        "tags": [
+          "views"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Update a saved view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "query": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "pinned": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "sortBy": {
+                      "default": "savedAt",
+                      "type": "string",
+                      "enum": [
+                        "savedAt",
+                        "updatedAt",
+                        "title",
+                        "wordCount",
+                        "readingProgress"
+                      ]
+                    },
+                    "sortDir": {
+                      "default": "desc",
+                      "type": "string",
+                      "enum": [
+                        "asc",
+                        "desc"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "query",
+                    "pinned",
+                    "sortBy",
+                    "sortDir",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "and"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "or"
+                            },
+                            "nodes": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/__schema0"
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "nodes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "not"
+                            },
+                            "node": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "node"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "term"
+                            },
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "location",
+                                "category",
+                                "source",
+                                "tag",
+                                "author",
+                                "site",
+                                "title",
+                                "words",
+                                "progress",
+                                "saved",
+                                "updated",
+                                "highlighted"
+                              ]
+                            },
+                            "op": {
+                              "type": "string",
+                              "enum": [
+                                "eq",
+                                "neq",
+                                "contains",
+                                "has",
+                                "gt",
+                                "gte",
+                                "lt",
+                                "lte",
+                                "before",
+                                "after"
+                              ]
+                            },
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "field",
+                            "op",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "query": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "pinned": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "sortBy": {
+                    "default": "savedAt",
+                    "type": "string",
+                    "enum": [
+                      "savedAt",
+                      "updatedAt",
+                      "title",
+                      "wordCount",
+                      "readingProgress"
+                    ]
+                  },
+                  "sortDir": {
+                    "default": "desc",
+                    "type": "string",
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "$defs": {
+                  "__schema0": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "and"
+                          },
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "or"
+                          },
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "not"
+                          },
+                          "node": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "node"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "term"
+                          },
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "location",
+                              "category",
+                              "source",
+                              "tag",
+                              "author",
+                              "site",
+                              "title",
+                              "words",
+                              "progress",
+                              "saved",
+                              "updated",
+                              "highlighted"
+                            ]
+                          },
+                          "op": {
+                            "type": "string",
+                            "enum": [
+                              "eq",
+                              "neq",
+                              "contains",
+                              "has",
+                              "gt",
+                              "gte",
+                              "lt",
+                              "lte",
+                              "before",
+                              "after"
+                            ]
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "field",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteView",
+        "summary": "Delete a saved view",
+        "tags": [
+          "views"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete a saved view"
+          }
+        }
+      }
+    },
+    "/sync": {
+      "get": {
+        "operationId": "syncPull",
+        "summary": "Pull changes since a cursor",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pull changes since a cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "cards": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "miniflux",
+                              "readeck"
+                            ]
+                          },
+                          "sourceId": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "article",
+                              "rss",
+                              "email",
+                              "pdf"
+                            ]
+                          },
+                          "location": {
+                            "type": "string",
+                            "enum": [
+                              "inbox",
+                              "later",
+                              "shortlist",
+                              "archive",
+                              "feed"
+                            ]
+                          },
+                          "readState": {
+                            "default": "unopened",
+                            "type": "string",
+                            "enum": [
+                              "unopened",
+                              "reading",
+                              "finished"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "author": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "siteName": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "wordCount": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "readingTimeMinutes": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "readingProgress": {
+                            "default": 0,
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "readAnchor": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tags": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "highlightCount": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "note": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "savedAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "sourceId",
+                          "category",
+                          "location",
+                          "readState",
+                          "title",
+                          "author",
+                          "siteName",
+                          "url",
+                          "wordCount",
+                          "readingTimeMinutes",
+                          "readingProgress",
+                          "readAnchor",
+                          "tags",
+                          "highlightCount",
+                          "note",
+                          "savedAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "deletedIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "cursor": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "cards",
+                    "deletedIds",
+                    "cursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "syncPush",
+        "summary": "Push queued mutations",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Push queued mutations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "applied": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "conflicts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "applied",
+                    "conflicts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "mutations": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "setLocation"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "location": {
+                              "type": "string",
+                              "enum": [
+                                "inbox",
+                                "later",
+                                "shortlist",
+                                "archive",
+                                "feed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "location"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "setReadingProgress"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "readingProgress": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "readAnchor": {
+                              "default": null,
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "readingProgress",
+                            "readAnchor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "setTags"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "tags"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "setNote"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "delete"
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "addHighlight"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "text": {
+                              "type": "string"
+                            },
+                            "color": {
+                              "default": "yellow",
+                              "type": "string",
+                              "enum": [
+                                "yellow",
+                                "red",
+                                "blue",
+                                "green"
+                              ]
+                            },
+                            "note": {
+                              "default": null,
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "startSelector": {
+                              "type": "string"
+                            },
+                            "startOffset": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "endSelector": {
+                              "type": "string"
+                            },
+                            "endOffset": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "text",
+                            "color",
+                            "note",
+                            "startSelector",
+                            "startOffset",
+                            "endSelector",
+                            "endOffset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "removeHighlight"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "highlightId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "highlightId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "mutations"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

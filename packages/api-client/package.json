@@ -4,18 +4,23 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mock": "./src/mock-server.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "lint": "eslint src"
+    "test": "vitest run",
+    "lint": "eslint src",
+    "mock": "tsx src/mock-cli.ts"
   },
   "dependencies": {
-    "@lectern/shared": "workspace:*"
+    "@lectern/shared": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4.19.2",
     "typescript": "^6.0.2",
     "vitest": "^4.1.3"
   }

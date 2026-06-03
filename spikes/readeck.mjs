@@ -12,7 +12,10 @@ const SAMPLE = [
 async function rd(path, { method = "GET", body } = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { Authorization: "Bearer " + TOKEN, ...(body ? { "content-type": "application/json" } : {}) },
+    headers: {
+      Authorization: "Bearer " + TOKEN,
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -24,7 +27,8 @@ async function rd(path, { method = "GET", body } = {}) {
   }
   return { status: res.status, headers: Object.fromEntries(res.headers), json, text };
 }
-const log = (l, v) => console.log(`\n## ${l}\n${typeof v === "string" ? v : JSON.stringify(v, null, 2)}`);
+const log = (l, v) =>
+  console.log(`\n## ${l}\n${typeof v === "string" ? v : JSON.stringify(v, null, 2)}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const findings = {};
 
@@ -52,7 +56,15 @@ for (const url of SAMPLE) {
   const c = await createBookmark(url);
   created.push({ url, ...c });
 }
-log("create responses", created.map((c) => ({ url: c.url, status: c.status, id: c.id, idSource: c.json?.id ? "body" : "header/location" })));
+log(
+  "create responses",
+  created.map((c) => ({
+    url: c.url,
+    status: c.status,
+    id: c.id,
+    idSource: c.json?.id ? "body" : "header/location",
+  })),
+);
 
 // Wait for extraction, then report quality
 const extraction = [];
@@ -82,20 +94,36 @@ log("bookmark fields", findings.bookmarkFields);
 
 const article = await rd(`/api/bookmarks/${main.id}/article`);
 findings.articleHtmlLen = article.text?.length ?? 0;
-log("article html length / snippet", `${findings.articleHtmlLen}\n${(article.text ?? "").replace(/\s+/g, " ").slice(0, 200)}`);
+log(
+  "article html length / snippet",
+  `${findings.articleHtmlLen}\n${(article.text ?? "").replace(/\s+/g, " ").slice(0, 200)}`,
+);
 
 // reading progress + anchor round-trip (THE decisive capability)
-const patchProg = await rd(`/api/bookmarks/${main.id}`, { method: "PATCH", body: { read_progress: 42, read_anchor: "#node-5" } });
+const patchProg = await rd(`/api/bookmarks/${main.id}`, {
+  method: "PATCH",
+  body: { read_progress: 42, read_anchor: "#node-5" },
+});
 const afterProg = await rd(`/api/bookmarks/${main.id}`);
 findings.progressWrite = afterProg.json?.read_progress === 42;
 findings.anchorWrite = afterProg.json?.read_anchor === "#node-5";
-log("progress round-trip", { patch: patchProg.status, read_progress: afterProg.json?.read_progress, read_anchor: afterProg.json?.read_anchor });
+log("progress round-trip", {
+  patch: patchProg.status,
+  read_progress: afterProg.json?.read_progress,
+  read_anchor: afterProg.json?.read_anchor,
+});
 
 // labels round-trip
-let patchLabels = await rd(`/api/bookmarks/${main.id}`, { method: "PATCH", body: { add_labels: ["lectern", "spike"] } });
+let patchLabels = await rd(`/api/bookmarks/${main.id}`, {
+  method: "PATCH",
+  body: { add_labels: ["lectern", "spike"] },
+});
 let afterLabels = await rd(`/api/bookmarks/${main.id}`);
 if (!(afterLabels.json?.labels ?? []).includes("lectern")) {
-  patchLabels = await rd(`/api/bookmarks/${main.id}`, { method: "PATCH", body: { labels: ["lectern", "spike"] } });
+  patchLabels = await rd(`/api/bookmarks/${main.id}`, {
+    method: "PATCH",
+    body: { labels: ["lectern", "spike"] },
+  });
   afterLabels = await rd(`/api/bookmarks/${main.id}`);
 }
 findings.labelWrite = (afterLabels.json?.labels ?? []).includes("lectern");
@@ -104,7 +132,10 @@ log("labels round-trip", { patch: patchLabels.status, labels: afterLabels.json?.
 // annotations / highlights
 const annoList = await rd(`/api/bookmarks/${main.id}/annotations`);
 findings.annotationsListStatus = annoList.status;
-const annoCreate = await rd(`/api/bookmarks/${main.id}/annotations`, { method: "POST", body: { color: "yellow" } });
+const annoCreate = await rd(`/api/bookmarks/${main.id}/annotations`, {
+  method: "POST",
+  body: { color: "yellow" },
+});
 log("annotations list status / create probe", {
   list: { status: annoList.status, isArray: Array.isArray(annoList.json) },
   createProbe: { status: annoCreate.status, body: annoCreate.json },
@@ -113,8 +144,14 @@ log("annotations list status / create probe", {
 // search + pagination headers
 const search = await rd(`/api/bookmarks?search=bloat&limit=5`);
 findings.searchStatus = search.status;
-findings.paginationHeaders = Object.keys(search.headers).filter((h) => /total|page|link|count/i.test(h));
-log("search?search=bloat", { status: search.status, count: Array.isArray(search.json) ? search.json.length : "n/a", paginationHeaders: findings.paginationHeaders });
+findings.paginationHeaders = Object.keys(search.headers).filter((h) =>
+  /total|page|link|count/i.test(h),
+);
+log("search?search=bloat", {
+  status: search.status,
+  count: Array.isArray(search.json) ? search.json.length : "n/a",
+  paginationHeaders: findings.paginationHeaders,
+});
 
 // updated-since style delta probe
 const updated = await rd(`/api/bookmarks?updated_since=2000-01-01T00:00:00Z&limit=1`);

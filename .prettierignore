@@ -5,6 +5,7 @@ build
 coverage
 pnpm-lock.yaml
 LICENSE
+packages/shared/openapi.json
 
 # Self-managed / not ours to reformat
 apps/web

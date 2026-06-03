@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Card, Location } from "./model";
+import { Card, Highlight, Location } from "./model";
 
 const base = {
   id: "c1",
@@ -18,9 +18,10 @@ describe("Card schema", () => {
     const card = Card.parse(base);
     expect(card.tags).toEqual([]);
     expect(card.readingProgress).toBe(0);
+    expect(card.readState).toBe("unopened");
     expect(card.highlightCount).toBe(0);
     expect(card.author).toBeNull();
-    expect(card.readAnchor).toBeNull();
+    expect(card.readingTimeMinutes).toBeNull();
   });
 
   it("clamps reading progress to the 0..1 range", () => {
@@ -34,5 +35,28 @@ describe("Card schema", () => {
 
   it("rejects an unknown location", () => {
     expect(() => Location.parse("nowhere")).toThrow();
+  });
+});
+
+describe("Highlight schema", () => {
+  it("requires DOM range anchors and defaults color/note", () => {
+    const h = Highlight.parse({
+      id: "h1",
+      documentId: "c1",
+      text: "selected text",
+      startSelector: "main>p:nth-child(2)",
+      startOffset: 4,
+      endSelector: "main>p:nth-child(2)",
+      endOffset: 17,
+      createdAt: "2026-06-03T00:00:00Z",
+    });
+    expect(h.color).toBe("yellow");
+    expect(h.note).toBeNull();
+  });
+
+  it("rejects a highlight missing range selectors", () => {
+    expect(() =>
+      Highlight.parse({ id: "h", documentId: "c", text: "x", createdAt: "t" }),
+    ).toThrow();
   });
 });

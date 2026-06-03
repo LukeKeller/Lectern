@@ -7,7 +7,7 @@ Postgres 17. Reproduce with `spikes/miniflux.mjs` and `spikes/readeck.mjs`.
 ## Decision
 
 **Lock Readeck as the read-later backend** (ADR 0002 → Accepted). The decisive capability —
-writable reading progress *and* highlights over a token API — is confirmed working, and
+writable reading progress _and_ highlights over a token API — is confirmed working, and
 extraction quality on a representative sample is good. Wallabag was not stood up for a full
 side-by-side: its lack of API-exposed reading progress already disqualifies it on the primary
 criterion. Re-run `spikes/readeck.mjs` with your own URLs to validate extraction on your real
@@ -18,19 +18,19 @@ sources before scaling up.
 Auth: HTTP Basic (`admin:adminpass`) works directly against `/v1/*` in dev; production uses a
 per-user `X-Auth-Token`.
 
-| Capability | Result |
-| --- | --- |
-| `GET /v1/me` | ok |
-| `POST /v1/categories`, `POST /v1/feeds` | feed created, 30 entries fetched |
-| `GET /v1/entries?feed_id=&limit=&order=&direction=` | ok (filter + sort) |
-| `GET /v1/feeds/counters` | `{ reads, unreads }` |
-| `PUT /v1/entries {entry_ids, status:"read"}` | status → `read` (204) |
-| `PUT /v1/entries/{id}/bookmark` | `starred` → true (204) |
-| `GET /v1/entries/{id}/fetch-content` | re-scrapes original (content 4410 chars) |
-| `GET /v1/entries?changed_after=<unix>` | **works** — use for delta sync |
-| `GET /v1/entries?published_after=<unix>` | works (publish-time filter) |
-| `GET /v1/entries?search=` | full-text search ok |
-| `GET /v1/export` | OPML ok |
+| Capability                                          | Result                                   |
+| --------------------------------------------------- | ---------------------------------------- |
+| `GET /v1/me`                                        | ok                                       |
+| `POST /v1/categories`, `POST /v1/feeds`             | feed created, 30 entries fetched         |
+| `GET /v1/entries?feed_id=&limit=&order=&direction=` | ok (filter + sort)                       |
+| `GET /v1/feeds/counters`                            | `{ reads, unreads }`                     |
+| `PUT /v1/entries {entry_ids, status:"read"}`        | status → `read` (204)                    |
+| `PUT /v1/entries/{id}/bookmark`                     | `starred` → true (204)                   |
+| `GET /v1/entries/{id}/fetch-content`                | re-scrapes original (content 4410 chars) |
+| `GET /v1/entries?changed_after=<unix>`              | **works** — use for delta sync           |
+| `GET /v1/entries?published_after=<unix>`            | works (publish-time filter)              |
+| `GET /v1/entries?search=`                           | full-text search ok                      |
+| `GET /v1/export`                                    | OPML ok                                  |
 
 Entry fields: `id, user_id, feed_id, status, hash, title, url, comments_url, published_at,
 created_at, changed_at, content, author, share_code, starred, reading_time, enclosures, feed, tags`.
@@ -44,16 +44,16 @@ not a user-writable triage mechanism. `reading_time` is an integer (minutes).
 Auth: `Authorization: Bearer <token>`; tokens minted in the UI (Profile → API Tokens) with
 scoped roles. First run requires UI onboarding/login before the API unlocks.
 
-| Capability | Result |
-| --- | --- |
-| `POST /api/bookmarks {url}` | `202 Accepted`; id returned in **header/location**, not body |
-| `GET /api/bookmarks/{id}` | full bookmark; `state===0`/`loaded===true` when ready |
-| `GET /api/bookmarks/{id}/article` | clean article HTML (42,940 chars for danluu) |
-| `PATCH {read_progress:42, read_anchor:"#node-5"}` | **round-trips** ✓ (the decisive capability) |
-| `PATCH {add_labels:[...]}` | labels round-trip ✓ |
-| `GET /api/bookmarks/{id}/annotations` | `200`, array (highlights) |
-| `POST .../annotations` | requires `start_selector, start_offset, end_selector, end_offset` (+ `color`, optional `note`) |
-| `GET /api/bookmarks?search=` | full-text; pagination via headers `total-count, total-pages, current-page, link` |
+| Capability                                        | Result                                                                                         |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `POST /api/bookmarks {url}`                       | `202 Accepted`; id returned in **header/location**, not body                                   |
+| `GET /api/bookmarks/{id}`                         | full bookmark; `state===0`/`loaded===true` when ready                                          |
+| `GET /api/bookmarks/{id}/article`                 | clean article HTML (42,940 chars for danluu)                                                   |
+| `PATCH {read_progress:42, read_anchor:"#node-5"}` | **round-trips** ✓ (the decisive capability)                                                    |
+| `PATCH {add_labels:[...]}`                        | labels round-trip ✓                                                                            |
+| `GET /api/bookmarks/{id}/annotations`             | `200`, array (highlights)                                                                      |
+| `POST .../annotations`                            | requires `start_selector, start_offset, end_selector, end_offset` (+ `color`, optional `note`) |
+| `GET /api/bookmarks?search=`                      | full-text; pagination via headers `total-count, total-pages, current-page, link`               |
 
 Bookmark fields: `id, href, created, updated, state, loaded, url, title, site_name, site,
 authors, lang, text_direction, document_type, type, has_article, description, is_deleted,
@@ -61,12 +61,12 @@ is_marked, is_archived, labels, read_progress, resources, links, word_count, rea
 
 Extraction sample (all `has_article: true`):
 
-| URL | words | reading_time | title |
-| --- | --- | --- | --- |
-| danluu.com/web-bloat | 4314 | 21 | How web bloat impacts users with slow connections |
-| overreacted.io/a-complete-guide-to-useeffect | 10198 | 50 | A Complete Guide to useEffect |
-| blog.codinghorror.com/the-best-code-is-no-code-at-all | 728 | 3 | The Best Code is No Code At All |
-| en.wikipedia.org/wiki/RSS | 3880 | 19 | RSS |
+| URL                                                   | words | reading_time | title                                             |
+| ----------------------------------------------------- | ----- | ------------ | ------------------------------------------------- |
+| danluu.com/web-bloat                                  | 4314  | 21           | How web bloat impacts users with slow connections |
+| overreacted.io/a-complete-guide-to-useeffect          | 10198 | 50           | A Complete Guide to useEffect                     |
+| blog.codinghorror.com/the-best-code-is-no-code-at-all | 728   | 3            | The Best Code is No Code At All                   |
+| en.wikipedia.org/wiki/RSS                             | 3880  | 19           | RSS                                               |
 
 ## Implications for D2 (model + adapters)
 

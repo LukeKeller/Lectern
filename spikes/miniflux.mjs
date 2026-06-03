@@ -1,7 +1,8 @@
 // D1 spike: exercise the MiniFlux REST API we rely on.
 // Run: node --env-file=.env spikes/miniflux.mjs
 const BASE = process.env.MINIFLUX_URL ?? "http://localhost:8088";
-const AUTH = "Basic " + Buffer.from(process.env.MINIFLUX_BASIC ?? "admin:adminpass").toString("base64");
+const AUTH =
+  "Basic " + Buffer.from(process.env.MINIFLUX_BASIC ?? "admin:adminpass").toString("base64");
 const FEED_URL = "https://simonwillison.net/atom/everything/";
 
 async function mf(path, { method = "GET", body } = {}) {
@@ -19,7 +20,8 @@ async function mf(path, { method = "GET", body } = {}) {
   }
   return { status: res.status, json };
 }
-const log = (l, v) => console.log(`\n## ${l}\n${typeof v === "string" ? v : JSON.stringify(v, null, 2)}`);
+const log = (l, v) =>
+  console.log(`\n## ${l}\n${typeof v === "string" ? v : JSON.stringify(v, null, 2)}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const findings = {};
 
@@ -36,7 +38,10 @@ const categoryId = cat.json.id;
 log("category id", categoryId);
 
 // Feed (idempotent)
-let feed = await mf("/v1/feeds", { method: "POST", body: { feed_url: FEED_URL, category_id: categoryId } });
+let feed = await mf("/v1/feeds", {
+  method: "POST",
+  body: { feed_url: FEED_URL, category_id: categoryId },
+});
 let feedId = feed.json?.feed_id;
 if (!feedId) {
   const all = await mf("/v1/feeds");
@@ -68,12 +73,20 @@ const id = entry.id;
 const counters = await mf("/v1/feeds/counters");
 log("counters keys", Object.keys(counters.json));
 
-const markRead = await mf("/v1/entries", { method: "PUT", body: { entry_ids: [id], status: "read" } });
+const markRead = await mf("/v1/entries", {
+  method: "PUT",
+  body: { entry_ids: [id], status: "read" },
+});
 const bookmark = await mf(`/v1/entries/${id}/bookmark`, { method: "PUT" });
 const after = await mf(`/v1/entries/${id}`);
 findings.statusWrite = after.json.status === "read";
 findings.starWrite = after.json.starred === true;
-log("after mark-read+bookmark", { status: markRead.status, bookmark: bookmark.status, entryStatus: after.json.status, starred: after.json.starred });
+log("after mark-read+bookmark", {
+  status: markRead.status,
+  bookmark: bookmark.status,
+  entryStatus: after.json.status,
+  starred: after.json.starred,
+});
 
 const fetched = await mf(`/v1/entries/${id}/fetch-content`);
 findings.fetchContentLen = fetched.json?.content?.length ?? 0;
@@ -83,8 +96,10 @@ log("fetch-content status / content length", `${fetched.status} / ${findings.fet
 const ts = Math.floor(Date.now() / 1000) - 3600;
 const changedAfter = await mf(`/v1/entries?changed_after=${ts}&limit=1`);
 const publishedAfter = await mf(`/v1/entries?published_after=${ts}&limit=1`);
-findings.changedAfterWorks = changedAfter.status === 200 && typeof changedAfter.json?.total === "number";
-findings.publishedAfterWorks = publishedAfter.status === 200 && typeof publishedAfter.json?.total === "number";
+findings.changedAfterWorks =
+  changedAfter.status === 200 && typeof changedAfter.json?.total === "number";
+findings.publishedAfterWorks =
+  publishedAfter.status === 200 && typeof publishedAfter.json?.total === "number";
 log("delta params (changed_after / published_after)", {
   changed_after: { status: changedAfter.status, total: changedAfter.json?.total },
   published_after: { status: publishedAfter.status, total: publishedAfter.json?.total },
