@@ -12,6 +12,7 @@
 	predicate={later}
 	{baseQuery}
 	empty="Nothing saved for later yet."
+	emptyIcon="clock"
 	actions={[
 		{ label: 'Shortlist', location: 'shortlist' },
 		{ label: 'Archive', location: 'archive' }

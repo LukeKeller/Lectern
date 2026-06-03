@@ -12,6 +12,7 @@
 	predicate={shortlist}
 	{baseQuery}
 	empty="Your shortlist is empty."
+	emptyIcon="star"
 	actions={[
 		{ label: 'Later', location: 'later' },
 		{ label: 'Archive', location: 'archive' }

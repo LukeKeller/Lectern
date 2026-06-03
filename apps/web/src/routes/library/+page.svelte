@@ -18,6 +18,7 @@
 	predicate={library}
 	{baseQuery}
 	empty="Your library is empty."
+	emptyIcon="book"
 	actions={[
 		{ label: 'Later', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' },

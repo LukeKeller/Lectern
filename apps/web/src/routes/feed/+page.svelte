@@ -12,6 +12,7 @@
 	predicate={feed}
 	{baseQuery}
 	empty="No feed items."
+	emptyIcon="rss"
 	actions={[
 		{ label: 'Save', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' }

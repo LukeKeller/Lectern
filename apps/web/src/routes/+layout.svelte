@@ -13,6 +13,9 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import type { ThemeMode } from '$lib/typography';
+	import type { Card } from '@lectern/shared';
+	import { db } from '$lib/db';
+	import { liveCards } from '$lib/live.svelte';
 
 	let { children } = $props();
 
@@ -41,6 +44,36 @@
 		{ id: '/search', label: 'Search', icon: 'search' },
 		{ id: '/feeds', label: 'Feeds', icon: 'folder' }
 	] as const satisfies readonly NavItem[];
+
+	// Live per-location counts for the nav, mirroring Readwise's sidebar badges.
+	// A single toArray keeps the liveQuery simple; the mirror is a personal-scale
+	// library so the reduce is cheap and re-runs only when cards change.
+	const allCards = liveCards(() => db.cards.toArray());
+	const counts = $derived.by(() => {
+		const c = { inbox: 0, later: 0, shortlist: 0, archive: 0, feed: 0 };
+		for (const card of (allCards.value ?? []) as Card[]) {
+			if (card.location in c) c[card.location as keyof typeof c] += 1;
+		}
+		return c;
+	});
+	function navCount(id: string): number {
+		switch (id) {
+			case '/':
+				return counts.inbox;
+			case '/later':
+				return counts.later;
+			case '/shortlist':
+				return counts.shortlist;
+			case '/archive':
+				return counts.archive;
+			case '/feed':
+				return counts.feed;
+			case '/library':
+				return counts.inbox + counts.later + counts.shortlist + counts.archive;
+			default:
+				return 0;
+		}
+	}
 
 	const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'auto'];
 	const THEME_ICON: Record<ThemeMode, IconName> = { light: 'sun', dark: 'moon', auto: 'auto' };
@@ -181,6 +214,7 @@
 	</a>
 
 	<nav aria-label="Primary">
+		<p class="section">Library</p>
 		<ul>
 			{#each primary as item (item.id)}
 				<li>
@@ -191,13 +225,13 @@
 					>
 						<Icon name={item.icon} />
 						<span>{item.label}</span>
+						{#if navCount(item.id) > 0}<span class="nav-count">{navCount(item.id)}</span>{/if}
 					</a>
 				</li>
 			{/each}
 		</ul>
 
-		<hr />
-
+		<p class="section">Tools</p>
 		<ul>
 			{#each tools as item (item.id)}
 				<li>
@@ -367,11 +401,6 @@
 		flex-direction: column;
 		gap: 1px;
 	}
-	nav hr {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 0.6rem 0.5rem;
-	}
 	.section {
 		margin: 0.9rem 0.55rem 0.3rem;
 		font-size: var(--text-2xs);
@@ -379,6 +408,9 @@
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		color: var(--text-muted);
+	}
+	nav > .section:first-child {
+		margin-top: 0.15rem;
 	}
 
 	nav a,
@@ -412,6 +444,18 @@
 		background: var(--accent-soft);
 		color: var(--accent);
 		font-weight: 600;
+	}
+	.nav-count {
+		margin-left: auto;
+		flex-shrink: 0;
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		opacity: 0.85;
+	}
+	nav a.active .nav-count {
+		color: var(--accent);
 	}
 
 	.foot {

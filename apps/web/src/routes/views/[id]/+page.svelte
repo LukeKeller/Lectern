@@ -22,6 +22,7 @@
 		sortBy={view.sortBy}
 		sortDir={view.sortDir}
 		empty="No cards match this view."
+		emptyIcon="views"
 	/>
 	<p class="query page">{viewQueryString(view.query)}</p>
 {:else if viewsStore.loaded}

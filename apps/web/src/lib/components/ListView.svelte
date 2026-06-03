@@ -11,7 +11,7 @@
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import CardList from './CardList.svelte';
-	import Icon from './Icon.svelte';
+	import Icon, { type IconName } from './Icon.svelte';
 
 	interface TriageAction {
 		label: string;
@@ -23,6 +23,7 @@
 		predicate,
 		actions = [],
 		empty = 'Nothing here.',
+		emptyIcon = 'inbox',
 		baseQuery,
 		sortBy = $bindable<ViewSortBy>('updatedAt'),
 		sortDir = $bindable<SortDir>('desc')
@@ -31,6 +32,7 @@
 		predicate: (card: Card) => boolean;
 		actions?: TriageAction[];
 		empty?: string;
+		emptyIcon?: IconName;
 		/** The query AST this list represents, enabling "save as view". */
 		baseQuery?: QueryNode;
 		sortBy?: ViewSortBy;
@@ -168,6 +170,7 @@
 		{cards}
 		{actions}
 		{empty}
+		{emptyIcon}
 		{selectedIndex}
 		ontriage={triageById}
 		onselect={(i) => (selectedIndex = i)}

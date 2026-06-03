@@ -31,7 +31,7 @@
 
 	{#if query.trim()}
 		<p class="muted">{results.length} result{results.length === 1 ? '' : 's'}</p>
-		<CardList cards={results} empty="No matches." />
+		<CardList cards={results} empty="No matches." emptyIcon="search" />
 	{:else}
 		<p class="muted">Search titles, authors, sites, and tags across your whole library.</p>
 	{/if}

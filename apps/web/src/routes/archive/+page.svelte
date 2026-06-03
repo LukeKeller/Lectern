@@ -12,6 +12,7 @@
 	predicate={archive}
 	{baseQuery}
 	empty="Nothing archived yet."
+	emptyIcon="archive"
 	actions={[
 		{ label: 'Later', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' }
