@@ -427,11 +427,11 @@
 		position: fixed;
 		inset: 0 0 auto 0;
 		z-index: 30;
-		height: var(--topbar-h);
+		height: calc(var(--topbar-h) + env(safe-area-inset-top));
 		display: none;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0 0.5rem;
+		padding: env(safe-area-inset-top) 0.5rem 0;
 		background: color-mix(in srgb, var(--bg) 88%, transparent);
 		backdrop-filter: blur(10px);
 		border-bottom: 1px solid var(--border);
@@ -602,7 +602,8 @@
 
 	main {
 		margin-left: var(--sidebar-w);
-		padding: clamp(1.5rem, 3vw, 3rem) clamp(1.1rem, 4vw, 3rem) 5rem;
+		padding: clamp(1.5rem, 3vw, 3rem) clamp(1.1rem, 4vw, 3rem)
+			calc(5rem + env(safe-area-inset-bottom));
 	}
 
 	@media (max-width: 820px) {
@@ -622,7 +623,7 @@
 		}
 		main {
 			margin-left: 0;
-			padding-top: calc(var(--topbar-h) + 1rem);
+			padding-top: calc(var(--topbar-h) + env(safe-area-inset-top) + 1rem);
 		}
 	}
 </style>

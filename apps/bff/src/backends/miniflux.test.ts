@@ -63,6 +63,20 @@ describe("minifluxEntryToCard", () => {
     expect(card.author).toBeNull();
     expect(card.siteName).toBeNull();
   });
+
+  it("falls back to the feed link when the entry url is empty", () => {
+    const card = minifluxEntryToCard({ ...baseEntry, url: "" });
+    expect(card.url).toBe("https://simonwillison.net/");
+    expect(() => Card.parse(card)).not.toThrow();
+  });
+
+  it("yields a droppable (invalid) card only when no link exists at all", () => {
+    // No entry url and no feed: nothing to fall back to. The card is invalid and
+    // is dropped on the read path (see overlay-store cardFromRow), never crashing.
+    const card = minifluxEntryToCard({ ...baseEntry, url: "", feed: undefined });
+    expect(card.url).toBe("");
+    expect(Card.safeParse(card).success).toBe(false);
+  });
 });
 
 describe("minifluxReadState", () => {

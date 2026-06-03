@@ -3,12 +3,32 @@
 	<head>
 		<meta charset="utf-8" />
 		<title>Lectern</title>
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
-		<meta name="theme-color" content="#3a5e8c" />
+		<meta name="theme-color" content="#f6f4ee" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="Lectern" />
 		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+		<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
 		<link rel="manifest" href="/manifest.webmanifest" />
-		<link rel="apple-touch-icon" href="/icon.svg" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<script>
+			// Apply the saved theme + matching status-bar colour before first paint
+			// so the PWA chrome (top status bar) never flashes the wrong colour.
+			(function () {
+				try {
+					var raw = localStorage.getItem('lectern.reader');
+					var t = raw ? JSON.parse(raw).theme || 'auto' : 'auto';
+					if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+					var dark =
+						t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+					var m = document.querySelector('meta[name="theme-color"]');
+					if (m) m.setAttribute('content', dark ? '#1a1815' : '#f6f4ee');
+				} catch (e) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

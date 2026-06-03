@@ -10,8 +10,8 @@ import {
   isNull,
   sql as dsql,
 } from "drizzle-orm";
+import { Card } from "@lectern/shared";
 import type {
-  Card,
   CreateViewRequest,
   Highlight,
   HighlightColor,
@@ -404,7 +404,7 @@ function defaultLocation(source: Source): Location {
  * lives in `metadata.card`, with the BFF-authoritative overlay columns merged on
  * top. Returns null for rows that have no indexed backend card yet.
  */
-function cardFromRow(row: DocumentRow, highlightCount: number): Card | null {
+export function cardFromRow(row: DocumentRow, highlightCount: number): Card | null {
   const meta = (row.metadata ?? null) as { card?: Card } | null;
   const base = meta?.card ?? null;
   if (!base) return null;
@@ -416,7 +416,18 @@ function cardFromRow(row: DocumentRow, highlightCount: number): Card | null {
     readAnchor: row.readAnchor,
   };
   const merged = mergeOverlay(base, overlay, highlightCount);
-  return row.title ? { ...merged, title: row.title } : merged;
+  const card = row.title ? { ...merged, title: row.title } : merged;
+  // Defensive: a single poisoned index row (e.g. an empty `url` from a quirky
+  // upstream entry) must never fail the whole read/sync batch. Drop it here so
+  // `/sync` and `/documents` stay resilient; the bad item is simply omitted.
+  const parsed = Card.safeParse(card);
+  if (!parsed.success) {
+    console.warn(
+      `[overlay] dropping invalid card ${row.id}: ${parsed.error.issues[0]?.message ?? "invalid"}`,
+    );
+    return null;
+  }
+  return parsed.data;
 }
 
 function rowFromCard(card: Card): NewDocumentRow {

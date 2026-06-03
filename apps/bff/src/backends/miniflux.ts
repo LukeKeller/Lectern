@@ -90,7 +90,10 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
     title: entry.title,
     author: entry.author || null,
     siteName: entry.feed?.title ?? null,
-    url: entry.url,
+    // Some MiniFlux entries (e.g. webmention/comment items) carry an empty
+    // `url`; fall back to the feed's canonical link so the card keeps a valid,
+    // openable URL and survives `Card` validation on the sync read path.
+    url: entry.url || entry.feed?.site_url || entry.feed?.feed_url || "",
     wordCount: null,
     readingTimeMinutes: entry.reading_time ?? null,
     readingProgress: 0,
