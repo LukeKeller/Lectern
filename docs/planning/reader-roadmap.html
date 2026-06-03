@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lectern × Reader — UI/UX Roadmap</title>
+<meta name="generator" content="claude-code">
+<meta name="generated" content="2026-06-03">
+<!--
+  Claude Code HTML report template.
+  Replace {{TITLE}}, {{ISO_DATE}}, {{AGENT}}, {{SUBTITLE}}, and the contents of <main>.
+  Optional CDN add-ons (uncomment if needed):
+    Prism (syntax highlight): set <html data-prism> AND uncomment the prism block.
+    Mermaid (diagrams): set <html data-mermaid> AND uncomment the mermaid block.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    /* Catppuccin Latte */
+    --bg: #eff1f5;
+    --fg: #4c4f69;
+    --muted: #6c6f85;
+    --subtle: #e6e9ef;
+    --border: #ccd0da;
+    --accent: #1e66f5;
+    --accent-fg: #eff1f5;
+    --code-bg: #e6e9ef;
+    --code-fg: #4c4f69;
+    --info: #1e66f5;
+    --warn: #df8e1d;
+    --error: #d20f39;
+    --success: #40a02b;
+    --note: #8839ef;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04);
+    --radius: 8px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  html[data-theme="dark"] {
+    /* Catppuccin Mocha */
+    --bg: #1e1e2e;
+    --fg: #cdd6f4;
+    --muted: #a6adc8;
+    --subtle: #313244;
+    --border: #45475a;
+    --accent: #89b4fa;
+    --accent-fg: #11111b;
+    --code-bg: #181825;
+    --code-fg: #cdd6f4;
+    --info: #89b4fa;
+    --warn: #f9e2af;
+    --error: #f38ba8;
+    --success: #a6e3a1;
+    --note: #cba6f7;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      /* Catppuccin Mocha */
+      --bg: #1e1e2e; --fg: #cdd6f4; --muted: #a6adc8; --subtle: #313244;
+      --border: #45475a; --accent: #89b4fa; --accent-fg: #11111b;
+      --code-bg: #181825; --code-fg: #cdd6f4;
+      --info: #89b4fa; --warn: #f9e2af; --error: #f38ba8; --success: #a6e3a1; --note: #cba6f7;
+      --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg)); --diff-add-fg: var(--success);
+      --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg)); --diff-del-fg: var(--error);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 0;
+    min-height: 100vh;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.toc { display: none; }
+  }
+  header.top {
+    grid-column: 1 / -1;
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  header.top .title { font-weight: 600; font-size: 15px; }
+  header.top .meta { color: var(--muted); font-size: 13px; }
+  header.top .actions { display: flex; gap: 8px; }
+  button.btn {
+    appearance: none;
+    background: var(--subtle);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  aside.toc {
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    position: sticky; top: 56px;
+    align-self: start;
+    max-height: calc(100vh - 56px);
+    overflow: auto;
+  }
+  aside.toc h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .08em; }
+  aside.toc ol { list-style: none; padding: 0; margin: 0; }
+  aside.toc li { margin: 2px 0; }
+  aside.toc li.h3 { padding-left: 12px; }
+  aside.toc a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  aside.toc a:hover { color: var(--fg); background: var(--subtle); }
+  aside.toc a.active { color: var(--accent); background: var(--subtle); }
+  main {
+    padding: 32px clamp(16px, 4vw, 48px);
+    max-width: 900px;
+    width: 100%;
+  }
+  main h1 { font-size: 28px; margin: 0 0 8px; }
+  main .lede { color: var(--muted); margin: 0 0 28px; font-size: 16px; }
+  main h2 {
+    margin-top: 40px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 22px;
+    scroll-margin-top: 72px;
+  }
+  main h3 { font-size: 17px; margin-top: 28px; scroll-margin-top: 72px; }
+  main p { margin: 12px 0; }
+  main a { color: var(--accent); }
+  main ul, main ol { padding-left: 24px; }
+  main li { margin: 4px 0; }
+
+  /* Callouts */
+  .callout {
+    border-left: 3px solid var(--info);
+    background: var(--subtle);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 16px 0;
+  }
+  .callout .callout-title {
+    font-weight: 600; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .callout.info  { border-color: var(--info); }
+  .callout.info  .callout-title { color: var(--info); }
+  .callout.warn  { border-color: var(--warn); }
+  .callout.warn  .callout-title { color: var(--warn); }
+  .callout.error { border-color: var(--error); }
+  .callout.error .callout-title { color: var(--error); }
+  .callout.success { border-color: var(--success); }
+  .callout.success .callout-title { color: var(--success); }
+  .callout.note { border-color: var(--note); }
+  .callout.note .callout-title { color: var(--note); }
+
+  /* Code */
+  code, pre, kbd, samp { font-family: var(--mono); font-size: 13.5px; }
+  :not(pre) > code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 0.92em;
+  }
+  pre.code {
+    position: relative;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  pre.code .lang {
+    position: absolute; top: 6px; right: 44px;
+    font-size: 11px; color: var(--muted);
+    text-transform: lowercase;
+  }
+  pre.code .copy {
+    position: absolute; top: 6px; right: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 4px;
+    font-size: 11px; padding: 2px 8px; cursor: pointer;
+  }
+  pre.code .copy:hover { color: var(--fg); }
+  pre.code code { background: transparent; border: 0; padding: 0; }
+
+  /* Diff */
+  pre.diff .add { display: block; background: var(--diff-add-bg); color: var(--diff-add-fg); }
+  pre.diff .del { display: block; background: var(--diff-del-bg); color: var(--diff-del-fg); }
+  pre.diff .add::before { content: "+ "; opacity: .6; }
+  pre.diff .del::before { content: "- "; opacity: .6; }
+
+  /* Tables */
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  table.data th, table.data td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.data thead th {
+    background: var(--subtle);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    position: sticky; top: 56px;
+  }
+  table.data tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--subtle) 50%, transparent); }
+  table.data tbody tr:hover td { background: var(--subtle); }
+
+  /* Checklist */
+  ul.checklist { list-style: none; padding-left: 4px; }
+  ul.checklist li { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+  ul.checklist input[type=checkbox] { margin-top: 5px; cursor: pointer; }
+  ul.checklist li.done > label { color: var(--muted); text-decoration: line-through; }
+
+  /* Details */
+  details.section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    margin: 12px 0;
+    background: var(--subtle);
+  }
+  details.section[open] { background: var(--bg); }
+  details.section > summary {
+    cursor: pointer; font-weight: 600; padding: 4px 0;
+    list-style: none;
+  }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "\25B8"; display: inline-block; margin-right: 8px;
+    transition: transform .15s ease; color: var(--muted);
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+
+  /* Badges */
+  .badge {
+    display: inline-block; padding: 1px 8px;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+    background: var(--subtle); border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.p0 { background: var(--error); color: #fff; border-color: transparent; }
+  .badge.p1 { background: var(--warn); color: #fff; border-color: transparent; }
+  .badge.p2 { background: var(--info); color: #fff; border-color: transparent; }
+  .badge.p3 { background: var(--subtle); }
+  .badge.ok { background: var(--success); color: #fff; border-color: transparent; }
+
+  /* KBD */
+  kbd {
+    background: var(--subtle); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 4px;
+    padding: 1px 6px; font-size: 12px;
+  }
+
+  /* Print */
+  @media print {
+    header.top, aside.toc, .copy, .actions, .feedback-block, .modal-overlay { display: none !important; }
+    .layout { grid-template-columns: 1fr; }
+    main { max-width: 100%; padding: 0; }
+    a { color: inherit; text-decoration: none; }
+    pre.code, table.data { page-break-inside: avoid; }
+  }
+
+  /* Feedback */
+  .feedback-block { margin: 18px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
+  .feedback-block .fb-toggle { font-size: 12px; padding: 3px 10px; color: var(--muted); }
+  .feedback-block .fb-toggle:hover { color: var(--fg); }
+  .fb-form { margin-top: 8px; }
+  .fb-form textarea {
+    width: 100%; min-height: 80px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--fg);
+    font: inherit; font-size: 14px; resize: vertical;
+  }
+  .fb-form textarea:focus { outline: none; border-color: var(--accent); }
+  .fb-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .fb-status { color: var(--muted); font-size: 12px; }
+  .fb-list { list-style: none; padding: 0; margin: 10px 0 0; }
+  .fb-item {
+    position: relative;
+    background: var(--subtle); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 36px 8px 10px;
+    margin: 6px 0; font-size: 14px;
+  }
+  .fb-meta { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .fb-body { white-space: pre-wrap; word-break: break-word; }
+  .fb-del {
+    position: absolute; top: 6px; right: 6px;
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 18px; line-height: 1; cursor: pointer;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .fb-del:hover { background: var(--bg); color: var(--error); }
+
+  .btn.review { position: relative; }
+  .btn.review[data-count="0"] { display: none; }
+  .btn.review .count {
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: 999px; padding: 0 6px; margin-left: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 50; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    max-width: 760px; width: 100%; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+  }
+  .modal-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-head h2 { margin: 0; font-size: 16px; border: 0; padding: 0; }
+  .modal-body { padding: 14px 18px; overflow: auto; flex: 1; }
+  .modal-foot {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  }
+  .review-group { margin-bottom: 14px; }
+  .review-group h3 { margin: 0 0 4px; font-size: 14px; padding: 0; }
+  .review-group .fb-item { margin: 4px 0; padding-right: 10px; }
+  pre.preview {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; font-family: var(--mono); font-size: 12px;
+    margin: 8px 0 0;
+  }
+
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); border-color: transparent; }
+</style>
+
+<!-- Optional: Prism syntax highlighting (uncomment + add data-prism on <html>)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>
+-->
+
+<!-- Optional: Mermaid diagrams (uncomment + add data-mermaid on <html>)
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches
+    || document.documentElement.dataset.theme === "dark";
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+</script>
+-->
+</head>
+<body>
+<div class="layout">
+  <header class="top">
+    <div>
+      <div class="title">Lectern × Reader — UI/UX Roadmap</div>
+      <div class="meta">Claude Code &middot; <time datetime="2026-06-03">2026-06-03</time> &middot; living tracker</div>
+    </div>
+    <div class="actions">
+      <button class="btn review" data-action="review" data-count="0" title="Review feedback collected on sections">Review<span class="count">0</span></button>
+      <button class="btn" data-action="theme" title="Toggle theme">Theme</button>
+      <button class="btn" data-action="print" title="Print or save as PDF">Print</button>
+    </div>
+  </header>
+
+  <aside class="toc" aria-label="Table of contents">
+    <h4>Contents</h4>
+    <ol id="toc"></ol>
+  </aside>
+
+  <main id="content">
+    <h1>Lectern × Reader — UI/UX Roadmap</h1>
+    <p class="lede">Reader-inspired features for Lectern, kept up to date as work ships. Toggle a checkbox when an item lands.</p>
+
+    <h2 id="status">Status</h2>
+    <div class="callout info">
+      <div class="callout-title">Living tracker</div>
+      <div><strong>Now building:</strong> the reading-view overhaul (P0). Legend — checkbox ticked = shipped &amp; deployed; <span class="badge p0">P0</span>/<span class="badge p1">P1</span> priority; <span class="badge ok">done</span> already live; <span class="badge p1">wip</span> in progress.</div>
+    </div>
+
+    <h2 id="reading">Reading experience &mdash; P0</h2>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> <strong>Paragraph focus + advance</strong> — accent bar on the current paragraph; <kbd>Space</kbd>/<kbd>&darr;</kbd>/<kbd>j</kbd> next, <kbd>&uarr;</kbd>/<kbd>k</kbd> prev, auto-scroll to keep it centered <span class="badge p0">P0</span></label></li>
+      <li><label><input type="checkbox"> <strong>Highlighting UI</strong> — select-to-highlight and <kbd>H</kbd> on the focused paragraph; render highlights in the article; highlight notes; edit/remove (the highlight API + storage already exist) <span class="badge p0">P0</span></label></li>
+      <li><label><input type="checkbox"> <strong>Right panel: Info + Notebook</strong> — Info = metadata (domain, published, length, progress, saved, author); Notebook = this doc's highlights &amp; notes; toggle <kbd>]</kbd> <span class="badge p0">P0</span></label></li>
+      <li><label><input type="checkbox"> <strong>Left Table of Contents</strong> built from headings; click to jump; toggle <kbd>[</kbd> <span class="badge p0">P0</span></label></li>
+    </ul>
+
+    <h2 id="reading-polish">Reading polish &mdash; P1</h2>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Find in document (<kbd>Cmd/Ctrl+F</kbd> in-article search) <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Progress readout: % read + &ldquo;~N min left&rdquo; <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Long-form / focus mode toggle (hide chrome) <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Mark feed item seen on open <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Auto-advance to next document after triage <span class="badge p1">P1</span></label></li>
+    </ul>
+
+    <h2 id="library">Library &amp; navigation &mdash; P1</h2>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Bulk actions — &ldquo;Mark all as seen&rdquo; / &ldquo;Archive all&rdquo; on lists/Feed <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Split-by-status tabs (Unseen / Seen; Inbox / Later / Archive) <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Smart default views — Continue reading, Quick reads (&lt;10m), Long reads (&gt;30m), Recently highlighted <span class="badge p1">P1</span></label></li>
+      <li><label><input type="checkbox"> Saved-view count badges + emoji icons + reorder/pin <span class="badge p2">P2</span></label></li>
+      <li><label><input type="checkbox"> Cover thumbnails in list rows (needs <code>coverImage</code> on Card) <span class="badge p2">P2</span></label></li>
+      <li><label><input type="checkbox"> Power filter bar — expose the query language (domain/author/words/minutes/progress/has/date ops/negation) <span class="badge p2">P2</span></label></li>
+    </ul>
+
+    <h2 id="shipped">Shipped this session</h2>
+    <ul class="checklist">
+      <li class="done"><label><input type="checkbox" checked> Feed: hide read items (on by default) <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Owned full article text + Postgres full-text search <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Reader-style keyboard navigation + <kbd>?</kbd> shortcut sheet <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Sidebar live counts + grouped nav <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Readwise-style list rows + source favicons + selection/depth polish <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Brand favicon, theme-color, document title <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Deployed-version badge in Settings + PWA auto-update <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Fixes: CSV-import location, Readeck list 404, index-as-source-of-truth + dedup, MiniFlux pagination <span class="badge ok">done</span></label></li>
+    </ul>
+
+    <h2 id="deferred">Deferred (out of current MVP)</h2>
+    <p>Captured for completeness; not planned now per the project's ADR/MVP.</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox" disabled> AI / Ghostreader (chat, summarize, auto-tag, custom prompts)</label></li>
+      <li><label><input type="checkbox" disabled> Text-to-speech (listen / AI voices)</label></li>
+      <li><label><input type="checkbox" disabled> YouTube / video + synced transcript</label></li>
+      <li><label><input type="checkbox" disabled> PDF annotate/zoom/snapshot; EPUB / paged scroll</label></li>
+      <li><label><input type="checkbox" disabled> Send to Kindle / Kindle digest</label></li>
+      <li><label><input type="checkbox" disabled> Public share bundles / links / highlight-as-image</label></li>
+      <li><label><input type="checkbox" disabled> e-ink mode; browser extension; native mobile apps; Daily Digest</label></li>
+    </ul>
+
+  </main>
+</div>
+
+<div class="modal-overlay" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="reviewTitle">Feedback review</h2>
+      <button class="btn" data-action="closeReview">Close</button>
+    </div>
+    <div class="modal-body">
+      <div id="reviewList"></div>
+      <details class="section" style="margin-top:14px">
+        <summary>Prompt preview</summary>
+        <pre class="preview" id="reviewPreview"></pre>
+      </details>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" data-action="copyPrompt">Copy as Claude prompt</button>
+      <button class="btn" data-action="copyJson">Copy JSON</button>
+      <button class="btn" data-action="clearAll">Clear all</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Theme: cycles auto -> light -> dark -> auto. Persists in localStorage.
+  (function () {
+    const root = document.documentElement;
+    const saved = localStorage.getItem("cc-theme");
+    if (saved) root.dataset.theme = saved;
+    document.querySelector('[data-action="theme"]').addEventListener("click", () => {
+      const order = ["auto", "light", "dark"];
+      const next = order[(order.indexOf(root.dataset.theme) + 1) % order.length];
+      root.dataset.theme = next;
+      localStorage.setItem("cc-theme", next);
+    });
+    document.querySelector('[data-action="print"]').addEventListener("click", () => window.print());
+  })();
+
+  // TOC: build from h2/h3 with ids.
+  (function () {
+    const toc = document.getElementById("toc");
+    if (!toc) return;
+    const headings = document.querySelectorAll("main h2[id], main h3[id]");
+    headings.forEach(h => {
+      const li = document.createElement("li");
+      li.className = h.tagName.toLowerCase();
+      const a = document.createElement("a");
+      a.href = "#" + h.id;
+      a.textContent = h.textContent;
+      li.appendChild(a);
+      toc.appendChild(li);
+    });
+    // Scrollspy
+    const links = new Map();
+    toc.querySelectorAll("a").forEach(a => links.set(a.getAttribute("href").slice(1), a));
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        const a = links.get(e.target.id);
+        if (!a) return;
+        if (e.isIntersecting) {
+          toc.querySelectorAll("a.active").forEach(x => x.classList.remove("active"));
+          a.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-72px 0px -70% 0px" });
+    headings.forEach(h => io.observe(h));
+  })();
+
+  // Copy buttons on code blocks.
+  document.querySelectorAll("pre.code .copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const code = btn.parentElement.querySelector("code");
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Err"; }
+    });
+  });
+
+  // Checklist: toggle .done class on parent <li> for strikethrough.
+  document.querySelectorAll("ul.checklist input[type=checkbox]").forEach(cb => {
+    const sync = () => cb.closest("li").classList.toggle("done", cb.checked);
+    cb.addEventListener("change", sync); sync();
+  });
+
+  // Per-section feedback + review modal.
+  (function () {
+    const main = document.getElementById("content");
+    if (!main) return;
+    const reviewBtn = document.querySelector('[data-action="review"]');
+    const modal = document.getElementById("reviewModal");
+    const reviewList = document.getElementById("reviewList");
+    const preview = document.getElementById("reviewPreview");
+    if (!reviewBtn || !modal) return;
+
+    const keyOf = id => `cc-fb:${location.pathname}:${id}`;
+    const load = id => { try { return JSON.parse(localStorage.getItem(keyOf(id)) || "[]"); } catch { return []; } };
+    const save = (id, items) => localStorage.setItem(keyOf(id), JSON.stringify(items));
+
+    function extractNode(node) {
+      if (!node || node.nodeType !== 1) return "";
+      const cl = node.classList || { contains: () => false };
+      if (cl.contains("feedback-block") || cl.contains("fb-toggle") ||
+          cl.contains("fb-form") || cl.contains("fb-list")) return "";
+
+      const tag = node.tagName;
+      const txt = s => (s || "").replace(/\s+/g, " ").trim();
+
+      if (tag === "H3") return `### ${node.textContent.trim()}`;
+      if (tag === "H4") return `#### ${node.textContent.trim()}`;
+      if (tag === "P")  return node.textContent.trim();
+
+      if (tag === "UL" && cl.contains("checklist")) {
+        return [...node.children].map(li => {
+          const cb = li.querySelector('input[type="checkbox"]');
+          const label = li.querySelector("label");
+          const t = txt(label ? label.textContent : li.textContent);
+          return `- [${cb && cb.checked ? "x" : " "}] ${t}`;
+        }).join("\n");
+      }
+      if (tag === "UL") return [...node.children].map(li => `- ${txt(li.textContent)}`).join("\n");
+      if (tag === "OL") return [...node.children].map((li, i) => `${i + 1}. ${txt(li.textContent)}`).join("\n");
+
+      if (tag === "TABLE" && cl.contains("data")) {
+        const headers = [...node.querySelectorAll("thead th")].map(th => txt(th.textContent));
+        const rows = [...node.querySelectorAll("tbody tr")].map(tr =>
+          [...tr.children].map(td => txt(td.textContent).replace(/\|/g, "\\|")).join(" | ")
+        );
+        if (!headers.length) return rows.join("\n");
+        return [headers.join(" | "), headers.map(() => "---").join(" | "), ...rows].join("\n");
+      }
+
+      if (tag === "PRE" && cl.contains("code")) {
+        const codeEl = node.querySelector("code");
+        if (cl.contains("diff")) {
+          const lines = [...(codeEl ? codeEl.children : [])].map(span => {
+            const sign = span.classList.contains("add") ? "+ "
+                       : span.classList.contains("del") ? "- " : "  ";
+            return sign + (span.textContent || "").replace(/\n+$/, "");
+          });
+          return "```diff\n" + lines.join("\n") + "\n```";
+        }
+        const langEl = node.querySelector(".lang");
+        const lang = langEl ? langEl.textContent.trim() : "";
+        const raw = codeEl ? codeEl.textContent : "";
+        return "```" + lang + "\n" + raw.replace(/\n+$/, "") + "\n```";
+      }
+
+      if (tag === "DIV" && cl.contains("callout")) {
+        const titleEl = node.querySelector(".callout-title");
+        const title = titleEl ? titleEl.textContent.trim() : "";
+        const clone = node.cloneNode(true);
+        const t2 = clone.querySelector(".callout-title");
+        if (t2) t2.remove();
+        const body = txt(clone.textContent);
+        const variant = ["info", "warn", "error", "success", "note"].find(v => cl.contains(v)) || "note";
+        return `> [${variant}${title ? ": " + title : ""}] ${body}`;
+      }
+
+      if (tag === "DETAILS") {
+        const sum = node.querySelector("summary");
+        const sumTxt = sum ? sum.textContent.trim() : "details";
+        if (!node.open) return `> (collapsed: ${sumTxt})`;
+        const inner = [...node.children]
+          .filter(c => c.tagName !== "SUMMARY")
+          .map(extractNode).filter(Boolean).join("\n\n");
+        return `**${sumTxt}**\n${inner}`;
+      }
+
+      return txt(node.textContent);
+    }
+
+    function sectionText(h) {
+      let node = h.nextElementSibling;
+      const parts = [];
+      while (node && node.tagName !== "H2") {
+        const t = extractNode(node);
+        if (t) parts.push(t);
+        node = node.nextElementSibling;
+      }
+      return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    function allFeedback() {
+      return [...main.querySelectorAll("h2[id]")]
+        .map(h => ({ id: h.id, title: h.textContent.trim(), context: sectionText(h), items: load(h.id) }))
+        .filter(s => s.items.length);
+    }
+
+    function updateCount() {
+      const n = allFeedback().reduce((a, s) => a + s.items.length, 0);
+      reviewBtn.dataset.count = String(n);
+      reviewBtn.querySelector(".count").textContent = n;
+    }
+
+    function renderList(block, id) {
+      const items = load(id);
+      const list = block.querySelector(".fb-list");
+      list.innerHTML = "";
+      items.forEach((it, idx) => {
+        const li = document.createElement("li");
+        li.className = "fb-item";
+        const meta = document.createElement("div"); meta.className = "fb-meta";
+        meta.textContent = new Date(it.at).toLocaleString();
+        const body = document.createElement("div"); body.className = "fb-body";
+        body.textContent = it.text;
+        const del = document.createElement("button"); del.className = "fb-del";
+        del.textContent = "×"; del.title = "Delete";
+        del.addEventListener("click", () => {
+          const cur = load(id); cur.splice(idx, 1); save(id, cur);
+          renderList(block, id); updateCount();
+        });
+        li.append(meta, body, del);
+        list.appendChild(li);
+      });
+    }
+
+    function buildPrompt() {
+      const sections = allFeedback();
+      if (!sections.length) return "";
+      const path = decodeURIComponent(location.pathname);
+      const title = (document.querySelector("main h1")?.textContent || document.title).trim();
+      const out = [
+        `Refine the HTML report at: ${path}`,
+        ``,
+        `Title: ${title}`,
+        ``,
+        `Apply the feedback below section-by-section. Edit the file in place. Preserve the template structure (callouts, code/diff blocks, tables, badges, TOC ids). Do not introduce new dependencies.`,
+        ``
+      ];
+      sections.forEach(s => {
+        const ctx = s.context.length > 1500 ? s.context.slice(0, 1500).trimEnd() + " …" : s.context;
+        out.push(`## Section: ${s.title}  (anchor: #${s.id})`);
+        out.push("");
+        out.push("Current content (excerpt):");
+        out.push('"""');
+        out.push(ctx);
+        out.push('"""');
+        out.push("");
+        out.push("Feedback:");
+        s.items.forEach(it => out.push(`- ${it.text}`));
+        out.push("");
+        out.push("---");
+        out.push("");
+      });
+      return out.join("\n");
+    }
+
+    function renderReview() {
+      const sections = allFeedback();
+      reviewList.innerHTML = "";
+      if (!sections.length) {
+        const p = document.createElement("p");
+        p.style.color = "var(--muted)";
+        p.textContent = 'No feedback yet. Use the "+ Feedback" button below any section.';
+        reviewList.appendChild(p);
+      } else {
+        sections.forEach(s => {
+          const g = document.createElement("div"); g.className = "review-group";
+          const h = document.createElement("h3"); h.textContent = s.title;
+          g.appendChild(h);
+          s.items.forEach(it => {
+            const item = document.createElement("div"); item.className = "fb-item";
+            const meta = document.createElement("div"); meta.className = "fb-meta";
+            meta.textContent = new Date(it.at).toLocaleString();
+            const body = document.createElement("div"); body.className = "fb-body";
+            body.textContent = it.text;
+            item.append(meta, body);
+            g.appendChild(item);
+          });
+          reviewList.appendChild(g);
+        });
+      }
+      preview.textContent = buildPrompt() || "(no feedback)";
+    }
+
+    const headings = [...main.querySelectorAll("h2[id]")];
+    headings.forEach((h, i) => {
+      const next = headings[i + 1] || null;
+      const block = document.createElement("div");
+      block.className = "feedback-block";
+      block.dataset.section = h.id;
+
+      const toggle = document.createElement("button");
+      toggle.className = "btn fb-toggle"; toggle.textContent = "+ Feedback";
+
+      const form = document.createElement("div"); form.className = "fb-form"; form.hidden = true;
+      const ta = document.createElement("textarea"); ta.className = "fb-text";
+      ta.placeholder = `Feedback for "${h.textContent.trim()}"...`;
+      const actions = document.createElement("div"); actions.className = "fb-actions";
+      const saveBtn = document.createElement("button"); saveBtn.className = "btn fb-save"; saveBtn.textContent = "Save";
+      const cancelBtn = document.createElement("button"); cancelBtn.className = "btn fb-cancel"; cancelBtn.textContent = "Cancel";
+      const hint = document.createElement("span"); hint.className = "fb-status";
+      hint.textContent = "Stored in this browser. Use Review to export.";
+      actions.append(saveBtn, cancelBtn, hint);
+      form.append(ta, actions);
+
+      const list = document.createElement("ul"); list.className = "fb-list";
+
+      block.append(toggle, form, list);
+      if (next) main.insertBefore(block, next);
+      else main.appendChild(block);
+
+      toggle.addEventListener("click", () => {
+        form.hidden = !form.hidden;
+        if (!form.hidden) ta.focus();
+      });
+      cancelBtn.addEventListener("click", () => { form.hidden = true; ta.value = ""; });
+      saveBtn.addEventListener("click", () => {
+        const text = ta.value.trim(); if (!text) return;
+        const items = load(h.id);
+        items.push({ text, at: new Date().toISOString() });
+        save(h.id, items);
+        ta.value = ""; form.hidden = true;
+        renderList(block, h.id); updateCount();
+      });
+      ta.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+        if (e.key === "Escape") { cancelBtn.click(); }
+      });
+
+      renderList(block, h.id);
+    });
+    updateCount();
+
+    reviewBtn.addEventListener("click", () => { renderReview(); modal.classList.add("open"); });
+    modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("open"); });
+    document.querySelector('[data-action="closeReview"]').addEventListener("click", () => modal.classList.remove("open"));
+    document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
+
+    async function copyAnd(btn, text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Copy failed"; }
+    }
+    document.querySelector('[data-action="copyPrompt"]').addEventListener("click", e => {
+      const t = buildPrompt(); if (t) copyAnd(e.currentTarget, t);
+    });
+    document.querySelector('[data-action="copyJson"]').addEventListener("click", e => {
+      copyAnd(e.currentTarget, JSON.stringify(allFeedback(), null, 2));
+    });
+    document.querySelector('[data-action="clearAll"]').addEventListener("click", () => {
+      if (!confirm("Clear all feedback for this report?")) return;
+      [...main.querySelectorAll("h2[id]")].forEach(h => localStorage.removeItem(keyOf(h.id)));
+      main.querySelectorAll(".feedback-block").forEach(b => renderList(b, b.dataset.section));
+      renderReview(); updateCount();
+    });
+
+  })();
+</script>
+</body>
+</html>
