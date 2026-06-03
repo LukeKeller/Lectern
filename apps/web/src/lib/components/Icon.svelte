@@ -25,7 +25,9 @@
 		| 'external'
 		| 'sliders'
 		| 'highlight'
-		| 'check';
+		| 'check'
+		| 'list'
+		| 'info';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -59,7 +61,9 @@
 			'<path d="M5 8h9M18 8h1M5 16h1M10 16h9"/><circle cx="16" cy="8" r="2"/><circle cx="8" cy="16" r="2"/>',
 		highlight:
 			'<path d="M5 19h6"/><path d="M9 14.5 14.5 9l3 3L12 17.5l-3.5.6z"/><path d="M14.5 9l1.8-1.8a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1L17.5 12"/>',
-		check: '<path d="M5 12.5 10 17.5 19.5 6.5"/>'
+		check: '<path d="M5 12.5 10 17.5 19.5 6.5"/>',
+		list: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+		info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/>'
 	};
 </script>
 

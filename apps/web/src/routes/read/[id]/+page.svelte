@@ -41,6 +41,15 @@
 	let barTop = $state(0);
 	let barH = $state(0);
 	let blocks: HTMLElement[] = [];
+	let tocOpen = $state(loadBool('lectern.reader.toc', false));
+	let panelOpen = $state(loadBool('lectern.reader.panel', true));
+	let headings = $state<{ id: string; text: string; level: number }[]>([]);
+	let activeHeading = $state('');
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem('lectern.reader.toc', tocOpen ? '1' : '0');
+		localStorage.setItem('lectern.reader.panel', panelOpen ? '1' : '0');
+	});
 
 	const styleVars = $derived(
 		Object.entries(readerCssVars(readerSettings.current))
@@ -100,6 +109,13 @@
 				raf = 0;
 				const m = scrollMetrics();
 				progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
+				// Scroll-spy: the last heading scrolled above the top band is "active".
+				let cur = '';
+				for (const h of headings) {
+					const el = document.getElementById(h.id);
+					if (el && el.getBoundingClientRect().top <= 120) cur = h.id;
+				}
+				activeHeading = cur;
 			});
 		}
 		if (timer) clearTimeout(timer);
@@ -183,10 +199,46 @@
 	}
 
 	function onKey(e: KeyboardEvent) {
-		// Space advances a paragraph (Shift+Space goes back); only consume the key
-		// when there's a paragraph to move to, otherwise leave native scrolling.
-		if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
-		if (advance(e.shiftKey ? -1 : 1)) e.preventDefault();
+		if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
+		if (e.key === ' ') {
+			// Space advances a paragraph (Shift+Space goes back).
+			if (advance(e.shiftKey ? -1 : 1)) e.preventDefault();
+		} else if (e.key === '[') {
+			tocOpen = !tocOpen;
+			e.preventDefault();
+		} else if (e.key === ']') {
+			panelOpen = !panelOpen;
+			e.preventDefault();
+		}
+	}
+
+	function loadBool(key: string, dflt: boolean): boolean {
+		if (typeof localStorage === 'undefined') return dflt;
+		const v = localStorage.getItem(key);
+		return v === null ? dflt : v === '1';
+	}
+
+	/** Build the table of contents from the article's headings, assigning ids. */
+	function buildToc() {
+		if (!articleEl) {
+			headings = [];
+			return;
+		}
+		headings = Array.from(articleEl.querySelectorAll<HTMLElement>('h2, h3'))
+			.map((el, i) => {
+				if (!el.id) el.id = `h-${i}`;
+				return {
+					id: el.id,
+					text: el.textContent?.trim() ?? '',
+					level: el.tagName === 'H3' ? 3 : 2
+				};
+			})
+			.filter((h) => h.text);
+	}
+
+	function jumpTo(e: MouseEvent, hid: string) {
+		e.preventDefault();
+		document.getElementById(hid)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 	}
 
 	// Keyboard control while reading: j/k (and arrows) scroll, e/l/s/i triage the
@@ -232,6 +284,7 @@
 			ready = true;
 			window.addEventListener('scroll', onScroll, { passive: true });
 			collectBlocks();
+			buildToc();
 			window.addEventListener('keydown', onKey);
 			window.addEventListener('resize', updateBar);
 		})();
@@ -256,6 +309,28 @@
 		<span>Back</span>
 	</a>
 	<div class="bar-right">
+		<button
+			type="button"
+			class="rail-btn"
+			class:on={tocOpen}
+			aria-pressed={tocOpen}
+			onclick={() => (tocOpen = !tocOpen)}
+			title="Contents ( [ )"
+			aria-label="Toggle contents"
+		>
+			<Icon name="list" size={16} />
+		</button>
+		<button
+			type="button"
+			class="rail-btn"
+			class:on={panelOpen}
+			aria-pressed={panelOpen}
+			onclick={() => (panelOpen = !panelOpen)}
+			title="Info ( ] )"
+			aria-label="Toggle info panel"
+		>
+			<Icon name="info" size={16} />
+		</button>
 		{#if card}
 			<!-- card.url is an external absolute URL, not an internal route -->
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
@@ -348,27 +423,93 @@
 	{/if}
 </nav>
 
-<div class="doc" style={styleVars} bind:this={docEl}>
-	{#if focusIndex >= 0}
-		<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
-	{/if}
-	{#if card}
-		<h1>{card.title}</h1>
-		<p class="byline">
-			{card.siteName ?? card.author ?? new URL(card.url).hostname}
-			{#if card.readingTimeMinutes}<span class="dot">·</span>{card.readingTimeMinutes} min read{/if}
-		</p>
-		<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
-	{/if}
+<div class="reader" class:toc-open={tocOpen} class:panel-open={panelOpen}>
+	<aside class="rail toc">
+		<p class="rail-head">Contents</p>
+		{#if headings.length}
+			<nav class="toc-list">
+				{#each headings as h (h.id)}
+					<a
+						href={`#${h.id}`}
+						class:lvl3={h.level === 3}
+						class:active={activeHeading === h.id}
+						onclick={(e) => jumpTo(e, h.id)}>{h.text}</a
+					>
+				{/each}
+			</nav>
+		{:else}
+			<p class="rail-empty">No headings.</p>
+		{/if}
+	</aside>
+	<div class="doc" style={styleVars} bind:this={docEl}>
+		{#if focusIndex >= 0}
+			<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
+		{/if}
+		{#if card}
+			<h1>{card.title}</h1>
+			<p class="byline">
+				{card.siteName ?? card.author ?? new URL(card.url).hostname}
+				{#if card.readingTimeMinutes}<span class="dot">·</span>{card.readingTimeMinutes} min read{/if}
+			</p>
+			<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
+		{/if}
 
-	{#if loading}
-		<p class="state">Loading…</p>
-	{:else if error}
-		<p class="state err">Could not load article: {error}</p>
-	{:else}
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		<article bind:this={articleEl}>{@html html}</article>
-	{/if}
+		{#if loading}
+			<p class="state">Loading…</p>
+		{:else if error}
+			<p class="state err">Could not load article: {error}</p>
+		{:else}
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<article bind:this={articleEl}>{@html html}</article>
+		{/if}
+	</div>
+	<aside class="rail panel">
+		<p class="rail-head">Info</p>
+		{#if card}
+			<dl class="meta">
+				<div>
+					<dt>Source</dt>
+					<dd>{card.siteName ?? new URL(card.url).hostname}</dd>
+				</div>
+				{#if card.author}<div>
+						<dt>Author</dt>
+						<dd>{card.author}</dd>
+					</div>{/if}
+				<div>
+					<dt>Type</dt>
+					<dd>{card.category}</dd>
+				</div>
+				{#if card.wordCount}
+					<div>
+						<dt>Length</dt>
+						<dd>
+							{card.wordCount.toLocaleString()} words{#if card.readingTimeMinutes}
+								· {card.readingTimeMinutes}
+								min{/if}
+						</dd>
+					</div>
+				{/if}
+				<div>
+					<dt>Progress</dt>
+					<dd>{Math.round(card.readingProgress * 100)}%</dd>
+				</div>
+				<div>
+					<dt>Saved</dt>
+					<dd>
+						{new Date(card.savedAt).toLocaleDateString(undefined, {
+							month: 'short',
+							day: 'numeric',
+							year: 'numeric'
+						})}
+					</dd>
+				</div>
+			</dl>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+			<a class="meta-orig" href={card.url} target="_blank" rel="noopener noreferrer"
+				>Open original <Icon name="external" size={13} /></a
+			>
+		{/if}
+	</aside>
 </div>
 
 <style>
@@ -673,6 +814,136 @@
 		}
 		.bar {
 			position: static;
+		}
+	}
+	.rail-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.rail-btn:hover {
+		color: var(--text);
+		background: var(--surface-alt);
+	}
+	.rail-btn.on {
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.reader {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1.6rem;
+		align-items: start;
+	}
+	.rail {
+		display: none;
+	}
+	.rail-head {
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		margin: 0 0 0.6rem;
+	}
+	.rail-empty {
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+	}
+	.toc-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.toc-list a {
+		display: block;
+		padding: 0.28rem 0.5rem;
+		border-radius: var(--radius);
+		color: var(--text-muted);
+		text-decoration: none;
+		line-height: 1.35;
+		border-left: 2px solid transparent;
+	}
+	.toc-list a.lvl3 {
+		padding-left: 1.2rem;
+		font-size: var(--text-2xs);
+	}
+	.toc-list a:hover {
+		color: var(--text);
+		background: var(--surface-alt);
+	}
+	.toc-list a.active {
+		color: var(--accent);
+		border-left-color: var(--accent);
+	}
+	.meta {
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.7rem;
+	}
+	.meta > div {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.meta dt {
+		font-size: var(--text-2xs);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
+	}
+	.meta dd {
+		margin: 0;
+		color: var(--text);
+	}
+	.meta-orig {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin-top: 1rem;
+		font-size: var(--text-sm);
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.meta-orig:hover {
+		text-decoration: underline;
+	}
+	@media (max-width: 979px) {
+		.rail-btn {
+			display: none;
+		}
+	}
+	@media (min-width: 980px) {
+		.reader.toc-open {
+			grid-template-columns: 13rem minmax(0, 1fr);
+		}
+		.reader.panel-open {
+			grid-template-columns: minmax(0, 1fr) 17rem;
+		}
+		.reader.toc-open.panel-open {
+			grid-template-columns: 13rem minmax(0, 1fr) 17rem;
+		}
+		.reader.toc-open .rail.toc,
+		.reader.panel-open .rail.panel {
+			display: block;
+		}
+		.rail {
+			position: sticky;
+			top: 3.4rem;
+			max-height: calc(100vh - 4.5rem);
+			overflow-y: auto;
 		}
 	}
 </style>
