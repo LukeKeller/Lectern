@@ -145,7 +145,7 @@ function sampleCards(): Card[] {
 
 function sampleHighlight(overrides: Partial<Highlight> = {}): Highlight {
   return Highlight.parse({
-    id: "hl_1",
+    id: `hl_${Math.random().toString(36).slice(2, 9)}`,
     documentId: "card_1",
     text: "highlighted text",
     startSelector: "main>p:nth-child(1)",
@@ -289,11 +289,20 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       return send(res, 200, sampleCard({ id, ...UpdateDocumentRequest.parse(body) }));
     if (!sub && method === "DELETE") return send(res, 204);
     if (sub === "/content" && method === "GET") {
-      return send(
-        res,
-        200,
-        DocumentContentResponse.parse({ id, html: "<main><p>Mock article body.</p></main>" }),
-      );
+      const article = [
+        "<h2>Introduction</h2>",
+        "<p>This opening paragraph is long enough to read comfortably and to select text within for highlighting during development.</p>",
+        "<p>A second paragraph continues the thought so the reader has several blocks to focus and navigate between with the keyboard.</p>",
+        "<h2>Background</h2>",
+        "<p>Background paragraph one sets the context in a few sentences of sample prose used while building the reading view.</p>",
+        "<p>Background paragraph two adds detail, giving the table of contents and paragraph focus real material to work with.</p>",
+        "<h3>Finer points</h3>",
+        "<p>A nested subsection paragraph, addressed by an h3 entry in the table of contents.</p>",
+        "<blockquote>A short pull quote to vary the block types within the article body.</blockquote>",
+        "<h2>Conclusion</h2>",
+        "<p>The closing paragraph wraps things up and gives the reader a final block to land on.</p>",
+      ].join("");
+      return send(res, 200, DocumentContentResponse.parse({ id, html: `<main>${article}</main>` }));
     }
     if (sub === "/highlights" && method === "GET")
       return send(res, 200, HighlightsResponse.parse({ highlights: [] }));
