@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Card, type QueryNode } from '@lectern/shared';
-import { collectTags, filterByTag, filterRead, matchesQuery, sortCards } from './lists';
+import { collectTags, filterByReadState, filterByTag, matchesQuery, sortCards } from './lists';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
 	return Card.parse({
@@ -95,19 +95,23 @@ describe('filterByTag / collectTags', () => {
 	});
 });
 
-describe('filterRead', () => {
+describe('filterByReadState', () => {
 	const cards = [
 		makeCard({ id: 'unopened', readState: 'unopened' }),
 		makeCard({ id: 'reading', readState: 'reading' }),
 		makeCard({ id: 'finished', readState: 'finished' })
 	];
 
-	it('drops finished (read) items when hiding read', () => {
-		expect(filterRead(cards, true).map((c) => c.id)).toEqual(['unopened', 'reading']);
+	it('keeps only unfinished items in unread mode', () => {
+		expect(filterByReadState(cards, 'unread').map((c) => c.id)).toEqual(['unopened', 'reading']);
 	});
 
-	it('passes everything through when not hiding read', () => {
-		expect(filterRead(cards, false)).toHaveLength(3);
+	it('keeps only finished items in read mode', () => {
+		expect(filterByReadState(cards, 'read').map((c) => c.id)).toEqual(['finished']);
+	});
+
+	it('passes everything through in all mode', () => {
+		expect(filterByReadState(cards, 'all')).toHaveLength(3);
 	});
 });
 

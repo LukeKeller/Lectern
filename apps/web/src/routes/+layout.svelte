@@ -10,6 +10,8 @@
 	import { activeList } from '$lib/list-controller.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { viewsStore } from '$lib/views-store.svelte';
+	import { matchesQuery } from '$lib/lists';
+	import { SMART_VIEWS } from '$lib/smart-views';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -264,6 +266,24 @@
 			{/each}
 		</ul>
 
+		<p class="section">Collections</p>
+		<ul>
+			{#each SMART_VIEWS as view (view.key)}
+				{@const count = ((allCards.value ?? []) as Card[]).filter(view.predicate).length}
+				<li>
+					<a
+						href={resolve('/collections/[key]', { key: view.key })}
+						class:active={isActive(`/collections/${view.key}`)}
+						aria-current={isActive(`/collections/${view.key}`) ? 'page' : undefined}
+					>
+						<Icon name={view.icon} />
+						<span>{view.label}</span>
+						{#if count > 0}<span class="nav-count">{count}</span>{/if}
+					</a>
+				</li>
+			{/each}
+		</ul>
+
 		<p class="section">Tools</p>
 		<ul>
 			{#each tools as item (item.id)}
@@ -284,6 +304,9 @@
 			<p class="section">Pinned</p>
 			<ul>
 				{#each viewsStore.pinned as view (view.id)}
+					{@const count = ((allCards.value ?? []) as Card[]).filter((c) =>
+						matchesQuery(c, view.query)
+					).length}
 					<li>
 						<a
 							href={resolve('/views/[id]', { id: view.id })}
@@ -292,6 +315,7 @@
 						>
 							<Icon name="bookmark" />
 							<span>{view.name}</span>
+							{#if count > 0}<span class="nav-count">{count}</span>{/if}
 						</a>
 					</li>
 				{/each}

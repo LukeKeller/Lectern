@@ -39,10 +39,11 @@ export function filterByTag(cards: Card[], tag: string | null | undefined): Card
 	return cards.filter((c) => c.tags.includes(tag));
 }
 
-/** Drop read (finished) items when `hideRead`; otherwise pass through unchanged. */
-export function filterRead(cards: Card[], hideRead: boolean): Card[] {
-	if (!hideRead) return cards;
-	return cards.filter((c) => c.readState !== 'finished');
+/** Filter cards by read state: 'unread' (not finished), 'read' (finished), or 'all'. */
+export function filterByReadState(cards: Card[], mode: 'unread' | 'read' | 'all'): Card[] {
+	if (mode === 'all') return cards;
+	const finished = mode === 'read';
+	return cards.filter((c) => (c.readState === 'finished') === finished);
 }
 
 /** Every distinct tag across the cards, sorted alphabetically. */

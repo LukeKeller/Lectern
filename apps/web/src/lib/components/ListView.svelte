@@ -6,7 +6,7 @@
 	import { db } from '$lib/db';
 	import { getSync } from '$lib/sync';
 	import { liveCards } from '$lib/live.svelte';
-	import { collectTags, filterByTag, filterRead, sortCards } from '$lib/lists';
+	import { collectTags, filterByTag, filterByReadState, sortCards } from '$lib/lists';
 	import { andQueries, tagQuery } from '$lib/views';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
@@ -47,25 +47,31 @@
 	let tagFilter = $state<string | null>(null);
 	let selectedIndex = $state(0);
 
-	// Optional "hide read" filter (the RSS feed enables it). Persisted per key and
-	// ON by default so the feed shows unread items first.
-	const hideReadStorage = $derived(hideReadKey ? `lectern.hideRead.${hideReadKey}` : null);
-	let hideRead = $state(
-		untrack(() =>
-			hideReadKey && typeof localStorage !== 'undefined'
-				? localStorage.getItem(`lectern.hideRead.${hideReadKey}`) !== '0'
-				: true
-		)
+	// Optional read-state filter (the RSS feed enables it). Persisted per key and
+	// defaulting to 'unread' so the feed shows unread items first.
+	type ReadFilter = 'unread' | 'read' | 'all';
+	const READ_FILTERS: { value: ReadFilter; label: string }[] = [
+		{ value: 'unread', label: 'Unread' },
+		{ value: 'read', label: 'Read' },
+		{ value: 'all', label: 'All' }
+	];
+	const readFilterStorage = $derived(hideReadKey ? `lectern.readFilter.${hideReadKey}` : null);
+	let readFilter = $state<ReadFilter>(
+		untrack(() => {
+			if (!hideReadKey || typeof localStorage === 'undefined') return 'unread';
+			const stored = localStorage.getItem(`lectern.readFilter.${hideReadKey}`);
+			return stored === 'read' || stored === 'all' ? stored : 'unread';
+		})
 	);
 	$effect(() => {
-		if (hideReadStorage && typeof localStorage !== 'undefined') {
-			localStorage.setItem(hideReadStorage, hideRead ? '1' : '0');
+		if (readFilterStorage && typeof localStorage !== 'undefined') {
+			localStorage.setItem(readFilterStorage, readFilter);
 		}
 	});
 
 	const matched = $derived((all.value ?? []).filter(predicate));
-	// Hide read (finished) items when the option is enabled and toggled on.
-	const afterRead = $derived(filterRead(matched, Boolean(hideReadKey) && hideRead));
+	// Apply the read-state filter only when this list opts in via hideReadKey.
+	const afterRead = $derived(hideReadKey ? filterByReadState(matched, readFilter) : matched);
 	const tags = $derived(collectTags(afterRead));
 	const cards = $derived(sortCards(filterByTag(afterRead, tagFilter), sortBy, sortDir));
 
@@ -77,6 +83,33 @@
 	function triageById(id: string, location: Location) {
 		const sync = getSync();
 		void sync.enqueue({ type: 'setLocation', id, location }).then(() => sync.flush());
+	}
+
+	// Bulk actions over the currently-visible cards, routed through the sync outbox.
+	function markAllRead() {
+		const sync = getSync();
+		let queued = false;
+		for (const card of cards) {
+			if (card.readState === 'finished') continue;
+			void sync.enqueue({
+				type: 'setReadingProgress',
+				id: card.id,
+				readingProgress: 1,
+				readAnchor: null
+			});
+			queued = true;
+		}
+		if (queued) void sync.flush();
+	}
+	function archiveAll() {
+		const sync = getSync();
+		let queued = false;
+		for (const card of cards) {
+			if (card.location === 'archive') continue;
+			void sync.enqueue({ type: 'setLocation', id: card.id, location: 'archive' });
+			queued = true;
+		}
+		if (queued) void sync.flush();
 	}
 
 	function openCard(card: Card | undefined) {
@@ -157,16 +190,18 @@
 				{sortDir === 'asc' ? '↑' : '↓'}
 			</button>
 			{#if hideReadKey}
-				<button
-					type="button"
-					class="chip"
-					class:active={hideRead}
-					aria-pressed={hideRead}
-					onclick={() => (hideRead = !hideRead)}
-					title={hideRead ? 'Read items hidden — click to show all' : 'Showing all items'}
-				>
-					Hide read
-				</button>
+				<div class="seg" role="group" aria-label="Filter by read state">
+					{#each READ_FILTERS as opt (opt.value)}
+						<button
+							type="button"
+							class:active={readFilter === opt.value}
+							aria-pressed={readFilter === opt.value}
+							onclick={() => (readFilter = opt.value)}
+						>
+							{opt.label}
+						</button>
+					{/each}
+				</div>
 			{/if}
 			{#if tags.length}
 				<div class="select">
@@ -174,6 +209,28 @@
 						<option value={null}>All tags</option>
 						{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
 					</select>
+				</div>
+			{/if}
+			{#if cards.length}
+				<div class="bulk" role="group" aria-label="Bulk actions">
+					<button
+						type="button"
+						class="ghost"
+						onclick={markAllRead}
+						title="Mark all visible items read"
+					>
+						<Icon name="check" size={15} />
+						Mark all read
+					</button>
+					<button
+						type="button"
+						class="ghost"
+						onclick={archiveAll}
+						title="Archive all visible items"
+					>
+						<Icon name="archive" size={15} />
+						Archive all
+					</button>
 				</div>
 			{/if}
 			{#if baseQuery}
@@ -282,30 +339,61 @@
 		border-color: var(--border-strong);
 		color: var(--text);
 	}
-	.chip {
-		height: 2rem;
-		padding: 0 0.7rem;
+	.seg {
+		display: flex;
+		gap: 0.2rem;
+		padding: 0.2rem;
+		background: var(--surface-alt);
+		border-radius: var(--radius);
+	}
+	.seg button {
+		padding: 0.3rem 0.6rem;
+		border: 0;
+		border-radius: calc(var(--radius) - 3px);
+		background: transparent;
+		color: var(--text-muted);
 		font-size: var(--text-sm);
 		font-weight: 500;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-full);
-		background: var(--surface);
-		color: var(--text-muted);
 		cursor: pointer;
 		white-space: nowrap;
 		transition:
-			border-color var(--dur-fast) var(--ease),
-			color var(--dur-fast) var(--ease),
-			background var(--dur-fast) var(--ease);
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
 	}
-	.chip:hover {
-		border-color: var(--border-strong);
+	.seg button:hover {
 		color: var(--text);
 	}
-	.chip.active {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		color: var(--accent);
+	.seg button.active {
+		background: var(--surface);
+		color: var(--text);
+		box-shadow: var(--shadow-sm);
+	}
+	.bulk {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+	}
+	.ghost {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 2rem;
+		padding: 0 0.6rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		white-space: nowrap;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.ghost:hover {
+		background: var(--surface-alt);
+		color: var(--text);
 	}
 	.save {
 		display: flex;
