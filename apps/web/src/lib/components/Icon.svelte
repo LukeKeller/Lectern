@@ -27,7 +27,9 @@
 		| 'highlight'
 		| 'check'
 		| 'list'
-		| 'info';
+		| 'info'
+		| 'newspaper'
+		| 'magazine';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -63,7 +65,11 @@
 			'<path d="M5 19h6"/><path d="M9 14.5 14.5 9l3 3L12 17.5l-3.5.6z"/><path d="M14.5 9l1.8-1.8a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1L17.5 12"/>',
 		check: '<path d="M5 12.5 10 17.5 19.5 6.5"/>',
 		list: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
-		info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/>'
+		info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+		newspaper:
+			'<path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H16a1 1 0 0 1 1 1v12.5a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 4 18.5z"/><path d="M17 9h1.5A1.5 1.5 0 0 1 20 10.5V18a2 2 0 0 1-2 2"/><path d="M7 8.5h6M7 11.5h6M7 14.5h4"/>',
+		magazine:
+			'<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 7.5h7"/><path d="M8.5 11h7M8.5 13.5h4.5"/>'
 	};
 </script>
 

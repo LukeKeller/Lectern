@@ -35,6 +35,16 @@ import {
 
 const NOW = "2026-06-03T12:00:00Z";
 
+// Feed timestamps are relative to the real clock so the daily Newspaper opens to
+// a populated edition (its default is yesterday's unread feed items) during
+// frontend dev. Noon avoids day-boundary timezone drift.
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
+}
+
 function sampleCard(overrides: Partial<Card> = {}): Card {
   return Card.parse({
     id: "card_1",
@@ -81,7 +91,7 @@ function sampleCards(): Card[] {
       wordCount: 10198,
       readingTimeMinutes: 50,
       readingProgress: 0,
-      tags: ["react"],
+      tags: ["react", "tech"],
     },
     {
       title: "Microsoft's new MAI models",
@@ -93,6 +103,7 @@ function sampleCards(): Card[] {
       wordCount: 620,
       readingTimeMinutes: 3,
       readingProgress: 0,
+      savedAt: daysAgo(1),
       tags: [],
     },
     {
@@ -129,7 +140,71 @@ function sampleCards(): Card[] {
       wordCount: 1100,
       readingTimeMinutes: 5,
       readingProgress: 0.1,
+      savedAt: daysAgo(1),
       tags: ["weeknotes"],
+    },
+    {
+      title: "The case for memory-safe systems languages",
+      siteName: "The Pragmatic Engineer",
+      author: "Gergely Orosz",
+      category: "rss",
+      source: "miniflux",
+      location: "feed",
+      wordCount: 2200,
+      readingTimeMinutes: 11,
+      readingProgress: 0,
+      savedAt: daysAgo(1),
+      tags: [],
+    },
+    {
+      title: "What I learned shipping a CLI to a million users",
+      siteName: "The Pragmatic Engineer",
+      author: "Gergely Orosz",
+      category: "rss",
+      source: "miniflux",
+      location: "feed",
+      wordCount: 1600,
+      readingTimeMinutes: 8,
+      readingProgress: 0,
+      savedAt: daysAgo(1),
+      tags: [],
+    },
+    {
+      title: "A field guide to small, sharp tools",
+      siteName: "Increment",
+      author: "Editorial",
+      category: "rss",
+      source: "miniflux",
+      location: "feed",
+      wordCount: 900,
+      readingTimeMinutes: 4,
+      readingProgress: 0,
+      savedAt: daysAgo(1),
+      tags: [],
+    },
+    {
+      title: "Designing data-intensive applications, revisited",
+      siteName: "martin.kleppmann.com",
+      author: "Martin Kleppmann",
+      category: "article",
+      source: "readeck",
+      location: "later",
+      wordCount: 6100,
+      readingTimeMinutes: 30,
+      readingProgress: 0,
+      tags: ["tech", "longread"],
+    },
+    {
+      title: "Profiling React renders without losing your mind",
+      siteName: "overreacted.io",
+      author: "Dan Abramov",
+      category: "article",
+      source: "readeck",
+      location: "archive",
+      wordCount: 3400,
+      readingTimeMinutes: 17,
+      readingProgress: 1,
+      tags: ["react", "performance"],
     },
   ] as const;
   return base.map((b, i) =>

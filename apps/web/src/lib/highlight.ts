@@ -105,9 +105,7 @@ export function renderHighlights(article: HTMLElement, highlights: Highlight[]):
 function wrapRange(range: Range, h: Highlight): void {
 	const container = range.commonAncestorContainer;
 	const root =
-		container.nodeType === Node.ELEMENT_NODE
-			? (container as Element)
-			: container.parentElement;
+		container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement;
 	if (!root) return;
 	const nodes: Text[] = [];
 	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {

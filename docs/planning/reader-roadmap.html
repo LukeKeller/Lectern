@@ -419,7 +419,7 @@
     <h2 id="status">Status</h2>
     <div class="callout info">
       <div class="callout-title">Living tracker</div>
-      <div><strong>P0 reading-view overhaul complete</strong> — paragraph focus, left TOC, Info panel, and highlighting + Notebook all shipped. Up next: <strong>reading polish (P1)</strong>. Legend — checkbox ticked = shipped &amp; deployed; <span class="badge p0">P0</span>/<span class="badge p1">P1</span> priority; <span class="badge ok">done</span> live.</div>
+      <div><strong>P0 reading-view overhaul complete</strong>, plus reading polish (find-in-doc + progress readout) and library P1 (bulk actions, split tabs, smart views). New: a <strong>Daily desk</strong> unique to Lectern — a printed <strong>Newspaper</strong> of yesterday's unread feed, and tag-bound <strong>Magazines</strong> of the saved library. Up next: the rest of reading polish (focus mode, mark-seen-on-open, auto-advance). Legend — checkbox ticked = shipped &amp; deployed; <span class="badge p0">P0</span>/<span class="badge p1">P1</span> priority; <span class="badge ok">done</span> live.</div>
     </div>
 
     <h2 id="reading">Reading experience &mdash; P0</h2>
@@ -432,8 +432,8 @@
 
     <h2 id="reading-polish">Reading polish &mdash; P1</h2>
     <ul class="checklist">
-      <li><label><input type="checkbox"> Find in document (<kbd>Cmd/Ctrl+F</kbd> in-article search) <span class="badge p1">P1</span></label></li>
-      <li><label><input type="checkbox"> Progress readout: % read + &ldquo;~N min left&rdquo; <span class="badge p1">P1</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Find in document (<kbd>Cmd/Ctrl+F</kbd> in-article search) <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Progress readout: % read + &ldquo;~N min left&rdquo; <span class="badge ok">done</span></label></li>
       <li><label><input type="checkbox"> Long-form / focus mode toggle (hide chrome) <span class="badge p1">P1</span></label></li>
       <li><label><input type="checkbox"> Mark feed item seen on open <span class="badge p1">P1</span></label></li>
       <li><label><input type="checkbox"> Auto-advance to next document after triage <span class="badge p1">P1</span></label></li>
@@ -441,12 +441,21 @@
 
     <h2 id="library">Library &amp; navigation &mdash; P1</h2>
     <ul class="checklist">
-      <li><label><input type="checkbox"> Bulk actions — &ldquo;Mark all as seen&rdquo; / &ldquo;Archive all&rdquo; on lists/Feed <span class="badge p1">P1</span></label></li>
-      <li><label><input type="checkbox"> Split-by-status tabs (Unseen / Seen; Inbox / Later / Archive) <span class="badge p1">P1</span></label></li>
-      <li><label><input type="checkbox"> Smart default views — Continue reading, Quick reads (&lt;10m), Long reads (&gt;30m), Recently highlighted <span class="badge p1">P1</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Bulk actions — &ldquo;Mark all as seen&rdquo; / &ldquo;Archive all&rdquo; on lists/Feed <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Split-by-status tabs (Unseen / Seen; Inbox / Later / Archive) <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> Smart default views — Continue reading, Quick reads (&lt;10m), Long reads (&gt;30m), Recently highlighted <span class="badge ok">done</span></label></li>
       <li><label><input type="checkbox"> Saved-view count badges + emoji icons + reorder/pin <span class="badge p2">P2</span></label></li>
       <li><label><input type="checkbox"> Cover thumbnails in list rows (needs <code>coverImage</code> on Card) <span class="badge p2">P2</span></label></li>
       <li><label><input type="checkbox"> Power filter bar — expose the query language (domain/author/words/minutes/progress/has/date ops/negation) <span class="badge p2">P2</span></label></li>
+    </ul>
+
+    <h2 id="daily">Daily desk &mdash; beyond Reader</h2>
+    <p>Lectern-original ways to read down a backlog. Not in Readwise Reader; they lean on what we already have (unified cards, categories, tags) and run fully client-side over the offline mirror.</p>
+    <ul class="checklist">
+      <li class="done"><label><input type="checkbox" checked> <strong>Daily Newspaper</strong> — yesterday's <em>unread feed</em> items, set in a print-style edition: masthead + dateline with day-by-day navigation, a promoted lead story, and sections grouped by publication in reflowing columns. &ldquo;Mark issue read&rdquo; clears the day. Reachable from the <strong>Daily</strong> nav group, the command palette, and <code>/newspaper</code>. <span class="badge ok">done</span></label></li>
+      <li class="done"><label><input type="checkbox" checked> <strong>Magazines</strong> — the saved <em>library</em> bound into themed issues: every tag shared by two or more articles becomes a collection of related reading, each with its own colour-coded cover. Reachable from the <strong>Daily</strong> nav group, the command palette, and <code>/magazine</code>. <span class="badge ok">done</span></label></li>
+      <li><label><input type="checkbox"> Group the Newspaper by MiniFlux feed <em>folder</em> (true topical sections) once <code>folderTitle</code> rides on the Card <span class="badge p2">P2</span></label></li>
+      <li><label><input type="checkbox"> &ldquo;Today&rdquo; / &ldquo;This week&rdquo; edition spans; printable / save-as-PDF newspaper <span class="badge p2">P2</span></label></li>
     </ul>
 
     <h2 id="shipped">Shipped this session</h2>

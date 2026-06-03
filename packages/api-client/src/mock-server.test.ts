@@ -35,7 +35,7 @@ describe("mock server serves the contract", () => {
 
   it("getContent returns article html", async () => {
     const c = await client.getContent("card_1");
-    expect(c.html).toContain("Mock article");
+    expect(c.html).toContain("<main>");
   });
 
   it("syncPull returns a cursor and cards", async () => {

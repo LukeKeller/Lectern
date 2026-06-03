@@ -44,6 +44,18 @@
 				run: () => void goto(resolve('/library'))
 			},
 			{
+				id: 'go-newspaper',
+				label: 'Newspaper',
+				group: 'Go to',
+				run: () => void goto(resolve('/newspaper'))
+			},
+			{
+				id: 'go-magazine',
+				label: 'Magazine',
+				group: 'Go to',
+				run: () => void goto(resolve('/magazine'))
+			},
+			{
 				id: 'go-search',
 				label: 'Search',
 				group: 'Go to',

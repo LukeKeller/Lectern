@@ -12,6 +12,8 @@
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { matchesQuery } from '$lib/lists';
 	import { SMART_VIEWS } from '$lib/smart-views';
+	import { buildEdition, latestIssueKey, yesterdayKey } from '$lib/newspaper';
+	import { buildMagazines } from '$lib/magazine';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -60,6 +62,14 @@
 		}
 		return c;
 	});
+	// Counts for the "Daily" desk: stories in the latest newspaper edition and the
+	// number of bound magazine issues. Computed from the same mirror as the lists.
+	const dailyCounts = $derived.by(() => {
+		const list = (allCards.value ?? []) as Card[];
+		const edition = buildEdition(list, latestIssueKey(list, yesterdayKey()));
+		return { newspaper: edition.total, magazine: buildMagazines(list).length };
+	});
+
 	function navCount(id: string): number {
 		switch (id) {
 			case '/':
@@ -264,6 +274,32 @@
 					</a>
 				</li>
 			{/each}
+		</ul>
+
+		<p class="section">Daily</p>
+		<ul>
+			<li>
+				<a
+					href={resolve('/newspaper')}
+					class:active={isActive('/newspaper')}
+					aria-current={isActive('/newspaper') ? 'page' : undefined}
+				>
+					<Icon name="newspaper" />
+					<span>Newspaper</span>
+					{#if dailyCounts.newspaper > 0}<span class="nav-count">{dailyCounts.newspaper}</span>{/if}
+				</a>
+			</li>
+			<li>
+				<a
+					href={resolve('/magazine')}
+					class:active={isActive('/magazine')}
+					aria-current={isActive('/magazine') ? 'page' : undefined}
+				>
+					<Icon name="magazine" />
+					<span>Magazine</span>
+					{#if dailyCounts.magazine > 0}<span class="nav-count">{dailyCounts.magazine}</span>{/if}
+				</a>
+			</li>
 		</ul>
 
 		<p class="section">Collections</p>

@@ -29,19 +29,33 @@ auto-update.
 | 4 | **Left Table of Contents** from headings; toggle `[`; click to jump | missing | Completes the 3-pane layout; great for long reads. |
 
 ## P1 — Reading polish
-- **Find in document** (`Cmd/Ctrl+F` in-article search).
-- **Progress readout**: % + "~N min left" (we have the bar; add the numbers).
+- ✅ **Find in document** (`Cmd/Ctrl+F` in-article search). *Shipped.*
+- ✅ **Progress readout**: % + "~N min left" (we have the bar; add the numbers). *Shipped.*
 - **Long-form / focus mode** toggle (hide chrome) — partly there; formalize.
 - **Mark feed item seen on open** (so hide-read flows naturally as you read).
 - **Auto-advance to next document** after triage/archive (toggleable).
 
 ## P1 — Library / navigation UX
-- **Bulk actions** — "Mark all as seen" / "Archive all" on the Feed/lists (`Shift+B`).
-- **Split views by status** — generalize hide-read into Unseen/Seen (and Inbox/Later/Archive) tabs.
-- **Smart default views** (cheap, query-based, high delight): Continue reading, Quick reads (<10m), Long reads (>30m), Recently highlighted, Recently added.
+- ✅ **Bulk actions** — "Mark all as seen" / "Archive all" on the Feed/lists. *Shipped.*
+- ✅ **Split views by status** — generalize hide-read into Unseen/Seen (and Inbox/Later/Archive) tabs. *Shipped.*
+- ✅ **Smart default views** (cheap, query-based, high delight): Continue reading, Quick reads (<10m), Long reads (>30m), Recently highlighted. *Shipped (`/collections/[key]`).*
 - **Saved-view polish**: count badges, emoji icon (first char of name), reorder/pin.
 - **Cover thumbnails** in list rows (needs `coverImage` on Card + extraction).
 - **Power filter bar** — expose the query language (domain/author/words/minutes/progress/has/date ops/`__not`) over the existing view AST.
+
+## Lectern-original — Daily desk (beyond Reader)
+Ways to read down a backlog that Readwise Reader doesn't have. Both are pure,
+client-side views over the offline mirror (`lib/newspaper.ts`, `lib/magazine.ts`),
+reachable from a new **Daily** sidebar group, the command palette, and direct URLs.
+- ✅ **Daily Newspaper** (`/newspaper`) — yesterday's **unread feed** items set in a
+  print-style edition: masthead + dateline with day-by-day navigation, a promoted
+  lead story (the day's longest read), and sections grouped by publication in
+  reflowing columns. "Mark issue read" clears the day. *Shipped.*
+- ✅ **Magazines** (`/magazine`) — the saved **library** bound into themed issues:
+  every tag shared by 2+ articles becomes a collection of related reading, each with
+  a colour-coded cover. *Shipped.*
+- Next: group the Newspaper by MiniFlux feed **folder** (true topical sections) once
+  `folderTitle` rides on the Card; "today"/"this week" spans; printable edition.
 
 ## Deliberately deferred (per ADR/MVP — note, don't build now)
 Ghostreader/**AI** (chat, summarize, auto-tag), **TTS**, **YouTube/video** +
