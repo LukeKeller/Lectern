@@ -9,7 +9,10 @@ import { LecternClient } from '@lectern/api-client';
  */
 
 const TOKEN_KEY = 'lectern.token';
-const DEFAULT_API_URL = 'http://127.0.0.1:8788/api/v1';
+// Same-origin by default: the BFF serves this SPA and the API together, so a
+// relative base resolves to the deployment's own /api/v1. In `pnpm dev` the Vite
+// proxy forwards /api to the mock. Override with PUBLIC_LECTERN_API_URL if needed.
+const DEFAULT_API_URL = '/api/v1';
 
 export function getApiUrl(): string {
 	return env.PUBLIC_LECTERN_API_URL ?? DEFAULT_API_URL;
@@ -29,6 +32,23 @@ export function setToken(token: string): void {
 export function clearToken(): void {
 	if (!browser) return;
 	localStorage.removeItem(TOKEN_KEY);
+}
+
+/**
+ * In the SSO-gated deployment the user is already authenticated, but /api needs
+ * the app's bearer token. Fetch it once from the SSO-protected /bootstrap route
+ * (same-origin, cookie auth) and cache it. No-ops in dev/mock (no /bootstrap).
+ */
+export async function bootstrapToken(): Promise<void> {
+	if (!browser || getToken()) return;
+	try {
+		const res = await fetch('/bootstrap', { credentials: 'include' });
+		if (!res.ok) return;
+		const data = (await res.json()) as { token?: string };
+		if (data.token) setToken(data.token);
+	} catch {
+		// Dev/mock or unauthenticated: proceed tokenless.
+	}
 }
 
 let client: LecternClient | undefined;

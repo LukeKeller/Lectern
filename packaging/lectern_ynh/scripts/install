@@ -10,6 +10,13 @@ source /usr/share/yunohost/helpers
 lectern_api_token=$(ynh_string_random --length=48)
 ynh_app_setting_set --key=lectern_api_token --value="$lectern_api_token"
 
+# Persist the backend config as settings. Password-type install questions are
+# NOT auto-saved, so without this the upgrade script can't re-render .env.
+ynh_app_setting_set --key=miniflux_url --value="$miniflux_url"
+ynh_app_setting_set --key=miniflux_token --value="$miniflux_token"
+ynh_app_setting_set --key=readeck_url --value="$readeck_url"
+ynh_app_setting_set --key=readeck_token --value="$readeck_token"
+
 #=================================================
 # INSTALL APP FILES (prebuilt artifact)
 #=================================================
@@ -28,6 +35,13 @@ ynh_script_progression "Applying the database schema..."
 for sqlfile in "$YNH_APP_BASEDIR/sources/migrations/"*.sql; do
     ynh_psql_db_shell <"$sqlfile"
 done
+
+# ynh_psql_db_shell runs as the postgres admin, so the tables it just created are
+# owned by postgres. Grant the app's DB user access (it connects via DATABASE_URL).
+ynh_psql_db_shell <<EOF
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$db_user";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$db_user";
+EOF
 
 #=================================================
 # CONFIGURATION

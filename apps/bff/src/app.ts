@@ -70,6 +70,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
   app.get("/healthz", async () => ({ status: "ok" }));
   app.get("/readyz", async () => ({ status: "ready" }));
 
+  // SSO-gated bootstrap: served under the main permission (SSOwat injects
+  // Ynh-User), so an authenticated web session can fetch the app's API token
+  // and use it for the bearer-gated /api routes without a manual paste.
+  app.get("/bootstrap", async (req) => ({ token: config.LECTERN_API_TOKEN, user: req.user }));
+
   // Serve the OpenAPI 3.1 document (no auth: outside the /api/v1 prefix).
   app.get("/api/openapi.json", async () => buildOpenApiDocument());
 
