@@ -7,6 +7,9 @@ import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
 import { buildRealDeps } from "./deps";
 import { BackendHttpError } from "./errors";
+import fastifyStatic from "@fastify/static";
+import { resolve as resolvePath } from "node:path";
+import { config } from "./config";
 
 /**
  * Injectable application dependencies. Tests pass in-memory fakes; production
@@ -77,6 +80,48 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     },
     { prefix: "/api/v1" },
   );
-
+  registerWebApp(app, resolved);
   return app;
+}
+
+/**
+ * Production single-service mode: when LECTERN_WEB_DIR is set, the BFF also serves
+ * the prebuilt web SPA and owns the Web Share Target endpoint. Skipped in tests
+ * (LECTERN_WEB_DIR defaults to ""), so route tests stay API-only.
+ */
+function registerWebApp(app: FastifyInstance, deps: AppDeps): void {
+  const webDir = config.LECTERN_WEB_DIR;
+  if (!webDir) return;
+  const root = resolvePath(webDir);
+
+  // Parse Web Share Target form posts without pulling in an extra dependency.
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_req, body, done) => {
+      done(null, Object.fromEntries(new URLSearchParams(body as string)));
+    },
+  );
+
+  // Web Share Target: the installed PWA posts a shared link here (same-origin,
+  // SSO-gated in production). Save it, then redirect back into the app.
+  app.post("/share-target", async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const shared = [body.url, body.text, body.title]
+      .map((v) => (typeof v === "string" ? v : ""))
+      .join(" ");
+    const url = shared.match(/https?:\/\/\S+/)?.[0];
+    if (url) await deps.readLater.save({ url });
+    return reply.redirect("/", 303);
+  });
+
+  app.register(fastifyStatic, { root, wildcard: false });
+
+  // SPA fallback: serve index.html for unmatched GETs that aren't API calls.
+  app.setNotFoundHandler((req, reply) => {
+    if (req.method === "GET" && !req.url.startsWith("/api")) {
+      return reply.sendFile("index.html");
+    }
+    return reply.code(404).send({ error: "not_found" });
+  });
 }

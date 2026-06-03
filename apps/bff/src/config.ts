@@ -17,6 +17,10 @@ const EnvSchema = z.object({
   MINIFLUX_API_TOKEN: z.string().default(""),
   READECK_URL: z.string().default("http://localhost:8089"),
   READECK_API_TOKEN: z.string().default(""),
+  /** When set, the BFF serves the prebuilt web SPA from this dir (production single-service). */
+  LECTERN_WEB_DIR: z.string().default(""),
+  /** Set to "1" to start the pg-boss polling jobs. */
+  LECTERN_ENABLE_JOBS: z.string().default(""),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
