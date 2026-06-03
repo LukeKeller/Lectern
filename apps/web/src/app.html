@@ -5,7 +5,12 @@
 		<title>Lectern</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
-		<meta name="theme-color" content="#f6f4ee" />
+		<!-- Status bar matches the app surface. Two media-scoped tags cover the
+		     default `auto` theme natively (no JS, no first-paint flash); the inline
+		     script below overrides both when the reader forces light/dark. Colours
+		     mirror `--bg` in app.css. -->
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ee" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1815" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -17,15 +22,21 @@
 		<script>
 			// Apply the saved theme + matching status-bar colour before first paint
 			// so the PWA chrome (top status bar) never flashes the wrong colour.
+			// `auto` leaves each media-scoped theme-color tag at its scheme-natural
+			// value (handled natively by the browser); a forced theme overrides both
+			// tags so whichever one the OS matches shows the forced colour.
 			(function () {
 				try {
+					var LIGHT = '#f6f4ee',
+						DARK = '#1a1815';
 					var raw = localStorage.getItem('lectern.reader');
 					var t = raw ? JSON.parse(raw).theme || 'auto' : 'auto';
 					if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-					var dark =
-						t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-					var m = document.querySelector('meta[name="theme-color"]');
-					if (m) m.setAttribute('content', dark ? '#1a1815' : '#f6f4ee');
+					var metas = document.querySelectorAll('meta[name="theme-color"]');
+					for (var i = 0; i < metas.length; i++) {
+						var natural = metas[i].media.indexOf('dark') !== -1 ? DARK : LIGHT;
+						metas[i].setAttribute('content', t === 'light' ? LIGHT : t === 'dark' ? DARK : natural);
+					}
 				} catch (e) {}
 			})();
 		</script>
