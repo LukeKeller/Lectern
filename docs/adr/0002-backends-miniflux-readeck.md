@@ -1,7 +1,7 @@
 # 2. Backends: MiniFlux (RSS) + Readeck (read-later)
 
 Date: 2026-06-03
-Status: Accepted (Readeck pending the D1 extraction bake-off)
+Status: Accepted (validated in D1 — see docs/spikes/D1-findings.md)
 
 ## Context
 
