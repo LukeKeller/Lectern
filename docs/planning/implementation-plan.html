@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en" data-theme="auto" data-mermaid>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Implementation Plan — Open-Source Readwise Reader Clone</title>
+<meta name="generator" content="claude-code">
+<meta name="generated" content="2026-06-03">
+<!--
+  Claude Code HTML report template.
+  Replace {{TITLE}}, {{ISO_DATE}}, {{AGENT}}, {{SUBTITLE}}, and the contents of <main>.
+  Optional CDN add-ons (uncomment if needed):
+    Prism (syntax highlight): set <html data-prism> AND uncomment the prism block.
+    Mermaid (diagrams): set <html data-mermaid> AND uncomment the mermaid block.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    /* Catppuccin Latte */
+    --bg: #eff1f5;
+    --fg: #4c4f69;
+    --muted: #6c6f85;
+    --subtle: #e6e9ef;
+    --border: #ccd0da;
+    --accent: #1e66f5;
+    --accent-fg: #eff1f5;
+    --code-bg: #e6e9ef;
+    --code-fg: #4c4f69;
+    --info: #1e66f5;
+    --warn: #df8e1d;
+    --error: #d20f39;
+    --success: #40a02b;
+    --note: #8839ef;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04);
+    --radius: 8px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  html[data-theme="dark"] {
+    /* Catppuccin Mocha */
+    --bg: #1e1e2e;
+    --fg: #cdd6f4;
+    --muted: #a6adc8;
+    --subtle: #313244;
+    --border: #45475a;
+    --accent: #89b4fa;
+    --accent-fg: #11111b;
+    --code-bg: #181825;
+    --code-fg: #cdd6f4;
+    --info: #89b4fa;
+    --warn: #f9e2af;
+    --error: #f38ba8;
+    --success: #a6e3a1;
+    --note: #cba6f7;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      /* Catppuccin Mocha */
+      --bg: #1e1e2e; --fg: #cdd6f4; --muted: #a6adc8; --subtle: #313244;
+      --border: #45475a; --accent: #89b4fa; --accent-fg: #11111b;
+      --code-bg: #181825; --code-fg: #cdd6f4;
+      --info: #89b4fa; --warn: #f9e2af; --error: #f38ba8; --success: #a6e3a1; --note: #cba6f7;
+      --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg)); --diff-add-fg: var(--success);
+      --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg)); --diff-del-fg: var(--error);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 0;
+    min-height: 100vh;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.toc { display: none; }
+  }
+  header.top {
+    grid-column: 1 / -1;
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  header.top .title { font-weight: 600; font-size: 15px; }
+  header.top .meta { color: var(--muted); font-size: 13px; }
+  header.top .actions { display: flex; gap: 8px; }
+  button.btn {
+    appearance: none;
+    background: var(--subtle);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  aside.toc {
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    position: sticky; top: 56px;
+    align-self: start;
+    max-height: calc(100vh - 56px);
+    overflow: auto;
+  }
+  aside.toc h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .08em; }
+  aside.toc ol { list-style: none; padding: 0; margin: 0; }
+  aside.toc li { margin: 2px 0; }
+  aside.toc li.h3 { padding-left: 12px; }
+  aside.toc a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  aside.toc a:hover { color: var(--fg); background: var(--subtle); }
+  aside.toc a.active { color: var(--accent); background: var(--subtle); }
+  main {
+    padding: 32px clamp(16px, 4vw, 48px);
+    max-width: 900px;
+    width: 100%;
+  }
+  main h1 { font-size: 28px; margin: 0 0 8px; }
+  main .lede { color: var(--muted); margin: 0 0 28px; font-size: 16px; }
+  main h2 {
+    margin-top: 40px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 22px;
+    scroll-margin-top: 72px;
+  }
+  main h3 { font-size: 17px; margin-top: 28px; scroll-margin-top: 72px; }
+  main p { margin: 12px 0; }
+  main a { color: var(--accent); }
+  main ul, main ol { padding-left: 24px; }
+  main li { margin: 4px 0; }
+
+  /* Callouts */
+  .callout {
+    border-left: 3px solid var(--info);
+    background: var(--subtle);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 16px 0;
+  }
+  .callout .callout-title {
+    font-weight: 600; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .callout.info  { border-color: var(--info); }
+  .callout.info  .callout-title { color: var(--info); }
+  .callout.warn  { border-color: var(--warn); }
+  .callout.warn  .callout-title { color: var(--warn); }
+  .callout.error { border-color: var(--error); }
+  .callout.error .callout-title { color: var(--error); }
+  .callout.success { border-color: var(--success); }
+  .callout.success .callout-title { color: var(--success); }
+  .callout.note { border-color: var(--note); }
+  .callout.note .callout-title { color: var(--note); }
+
+  /* Code */
+  code, pre, kbd, samp { font-family: var(--mono); font-size: 13.5px; }
+  :not(pre) > code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 0.92em;
+  }
+  pre.code {
+    position: relative;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  pre.code .lang {
+    position: absolute; top: 6px; right: 44px;
+    font-size: 11px; color: var(--muted);
+    text-transform: lowercase;
+  }
+  pre.code .copy {
+    position: absolute; top: 6px; right: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 4px;
+    font-size: 11px; padding: 2px 8px; cursor: pointer;
+  }
+  pre.code .copy:hover { color: var(--fg); }
+  pre.code code { background: transparent; border: 0; padding: 0; }
+
+  /* Diff */
+  pre.diff .add { display: block; background: var(--diff-add-bg); color: var(--diff-add-fg); }
+  pre.diff .del { display: block; background: var(--diff-del-bg); color: var(--diff-del-fg); }
+  pre.diff .add::before { content: "+ "; opacity: .6; }
+  pre.diff .del::before { content: "- "; opacity: .6; }
+
+  /* Tables */
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  table.data th, table.data td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.data thead th {
+    background: var(--subtle);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    position: sticky; top: 56px;
+  }
+  table.data tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--subtle) 50%, transparent); }
+  table.data tbody tr:hover td { background: var(--subtle); }
+
+  /* Checklist */
+  ul.checklist { list-style: none; padding-left: 4px; }
+  ul.checklist li { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+  ul.checklist input[type=checkbox] { margin-top: 5px; cursor: pointer; }
+  ul.checklist li.done > label { color: var(--muted); text-decoration: line-through; }
+
+  /* Details */
+  details.section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    margin: 12px 0;
+    background: var(--subtle);
+  }
+  details.section[open] { background: var(--bg); }
+  details.section > summary {
+    cursor: pointer; font-weight: 600; padding: 4px 0;
+    list-style: none;
+  }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "\25B8"; display: inline-block; margin-right: 8px;
+    transition: transform .15s ease; color: var(--muted);
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+
+  /* Badges */
+  .badge {
+    display: inline-block; padding: 1px 8px;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+    background: var(--subtle); border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.p0 { background: var(--error); color: #fff; border-color: transparent; }
+  .badge.p1 { background: var(--warn); color: #fff; border-color: transparent; }
+  .badge.p2 { background: var(--info); color: #fff; border-color: transparent; }
+  .badge.p3 { background: var(--subtle); }
+  .badge.ok { background: var(--success); color: #fff; border-color: transparent; }
+
+  /* KBD */
+  kbd {
+    background: var(--subtle); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 4px;
+    padding: 1px 6px; font-size: 12px;
+  }
+
+  /* Print */
+  @media print {
+    header.top, aside.toc, .copy, .actions, .feedback-block, .modal-overlay { display: none !important; }
+    .layout { grid-template-columns: 1fr; }
+    main { max-width: 100%; padding: 0; }
+    a { color: inherit; text-decoration: none; }
+    pre.code, table.data { page-break-inside: avoid; }
+  }
+
+  /* Feedback */
+  .feedback-block { margin: 18px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
+  .feedback-block .fb-toggle { font-size: 12px; padding: 3px 10px; color: var(--muted); }
+  .feedback-block .fb-toggle:hover { color: var(--fg); }
+  .fb-form { margin-top: 8px; }
+  .fb-form textarea {
+    width: 100%; min-height: 80px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--fg);
+    font: inherit; font-size: 14px; resize: vertical;
+  }
+  .fb-form textarea:focus { outline: none; border-color: var(--accent); }
+  .fb-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .fb-status { color: var(--muted); font-size: 12px; }
+  .fb-list { list-style: none; padding: 0; margin: 10px 0 0; }
+  .fb-item {
+    position: relative;
+    background: var(--subtle); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 36px 8px 10px;
+    margin: 6px 0; font-size: 14px;
+  }
+  .fb-meta { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .fb-body { white-space: pre-wrap; word-break: break-word; }
+  .fb-del {
+    position: absolute; top: 6px; right: 6px;
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 18px; line-height: 1; cursor: pointer;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .fb-del:hover { background: var(--bg); color: var(--error); }
+
+  .btn.review { position: relative; }
+  .btn.review[data-count="0"] { display: none; }
+  .btn.review .count {
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: 999px; padding: 0 6px; margin-left: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 50; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    max-width: 760px; width: 100%; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+  }
+  .modal-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-head h2 { margin: 0; font-size: 16px; border: 0; padding: 0; }
+  .modal-body { padding: 14px 18px; overflow: auto; flex: 1; }
+  .modal-foot {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  }
+  .review-group { margin-bottom: 14px; }
+  .review-group h3 { margin: 0 0 4px; font-size: 14px; padding: 0; }
+  .review-group .fb-item { margin: 4px 0; padding-right: 10px; }
+  pre.preview {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; font-family: var(--mono); font-size: 12px;
+    margin: 8px 0 0;
+  }
+
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); border-color: transparent; }
+</style>
+
+<!-- Optional: Prism syntax highlighting (uncomment + add data-prism on <html>)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>
+-->
+
+<!-- Mermaid diagrams -->
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches
+    || document.documentElement.dataset.theme === "dark";
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+</script>
+</head>
+<body>
+<div class="layout">
+  <header class="top">
+    <div>
+      <div class="title">Implementation Plan — Reader Clone</div>
+      <div class="meta">Claude Code &middot; <time datetime="2026-06-03">2026-06-03</time></div>
+    </div>
+    <div class="actions">
+      <button class="btn review" data-action="review" data-count="0" title="Review feedback collected on sections">Review<span class="count">0</span></button>
+      <button class="btn" data-action="theme" title="Toggle theme">Theme</button>
+      <button class="btn" data-action="print" title="Print or save as PDF">Print</button>
+    </div>
+  </header>
+
+  <aside class="toc" aria-label="Table of contents">
+    <h4>Contents</h4>
+    <ol id="toc"></ol>
+  </aside>
+
+  <main id="content">
+    <h1>Implementation Plan</h1>
+    <p class="lede">Work breakdown for the open-source Readwise Reader clone: twelve deliverables (D0–D11), each with concrete steps and a "done when" gate. Companion to the architecture plan. Use the per-section feedback buttons to comment before we name the project and scaffold the repo.</p>
+
+    <h2 id="summary">How to read this</h2>
+    <p>Each <strong>deliverable</strong> is an independently verifiable chunk of work with a clear acceptance gate. Deliverables map onto the architecture roadmap phases but are sliced for execution: D0–D8 get us to a deployed MVP; D9–D11 are post-MVP parity, enhancements, and the deferred EPUB/native-Android work.</p>
+    <ul>
+      <li><strong>Depends on</strong> — what must be done first.</li>
+      <li><strong>Track</strong> — Setup, Backend, Frontend, Deploy, or Future. Backend and Frontend tracks run in parallel after the contract (D2) is frozen.</li>
+      <li><strong>Steps</strong> — the checklist to execute (checkable in your browser).</li>
+      <li><strong>Done when</strong> — the observable acceptance criterion. No step is "done" on a scaffold that compiles; it is done when the behavior is verifiable.</li>
+    </ul>
+    <div class="callout note">
+      <div class="callout-title">Execution model</div>
+      <div>Once the repo exists, deliverables are dispatched to parallel subagents per track (backend vs frontend), coordinating on the frozen D2 contract. The frontend track (D5–D6) develops against a mock server generated from the D2 OpenAPI spec, so it does not block on the real BFF (D3–D4).</div>
+    </div>
+
+    <h2 id="sequencing">Delivery sequencing</h2>
+    <p>Dependency graph. The critical path to MVP is D0 → D1 → D2 → D3 → D4 → D8; the frontend track (D5 → D6 → D7) runs in parallel against the mock server and rejoins at packaging (D8).</p>
+    <pre class="mermaid">graph LR
+  D0["D0 Repo and toolchain"] --> D1["D1 Backend spike"]
+  D1 --> D2["D2 Shared model and contracts"]
+  D2 --> D3["D3 BFF data layer and adapters"]
+  D3 --> D4["D4 BFF API auth jobs"]
+  D2 --> D5["D5 PWA shell and data layer"]
+  D5 --> D6["D6 Reading experience"]
+  D4 --> D7["D7 Save flows"]
+  D6 --> D7
+  D4 --> D8["D8 YunoHost packaging"]
+  D6 --> D8
+  D7 --> D8
+  D8 --> D9["D9 Parity"]
+  D9 --> D10["D10 Enhancements"]
+  D10 --> D11["D11 Deferred"]</pre>
+    <table class="data">
+      <thead><tr><th>Deliverable</th><th>Track</th><th>Roadmap phase</th><th>Blocks</th></tr></thead>
+      <tbody>
+        <tr><td>D0 Repo &amp; toolchain</td><td>Setup</td><td>0</td><td>everything</td></tr>
+        <tr><td>D1 Backend spike</td><td>Setup</td><td>0</td><td>D2</td></tr>
+        <tr><td>D2 Shared model &amp; contracts</td><td>Setup</td><td>1</td><td>D3, D5</td></tr>
+        <tr><td>D3 BFF data layer &amp; adapters</td><td>Backend</td><td>1</td><td>D4</td></tr>
+        <tr><td>D4 BFF API, auth, jobs</td><td>Backend</td><td>1</td><td>D7, D8</td></tr>
+        <tr><td>D5 PWA shell &amp; data layer</td><td>Frontend</td><td>1</td><td>D6</td></tr>
+        <tr><td>D6 Reading experience</td><td>Frontend</td><td>1</td><td>D7, D8</td></tr>
+        <tr><td>D7 Save flows</td><td>Full-stack</td><td>1</td><td>D8</td></tr>
+        <tr><td>D8 YunoHost packaging</td><td>Deploy</td><td>1</td><td>D9</td></tr>
+        <tr><td>D9 Parity</td><td>Full-stack</td><td>2</td><td>D10</td></tr>
+        <tr><td>D10 Enhancements</td><td>Full-stack</td><td>3</td><td>D11</td></tr>
+        <tr><td>D11 Deferred (EPUB, native)</td><td>Future</td><td>4</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <div class="callout-title">Decisions to lock before D0</div>
+      <div>Four things gate the scaffold: (1) repo host — GitLab (your default) works for a custom YunoHost app installed via git URL; the official catalog is GitHub-based but optional. (2) License — AGPL-3.0-only or MIT. (3) Single-user vs multi-user from day one (single is far simpler). (4) Dev environment for the two backends — Docker Compose locally is fine even though production is native YunoHost. These are surfaced again at D0/D1.</div>
+    </div>
+
+    <h2 id="d0">D0 · Repo &amp; toolchain</h2>
+    <p><span class="badge p2">Phase 0</span> <strong>Track:</strong> Setup &middot; <strong>Depends on:</strong> —</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Pick repo host + create repo; choose and add LICENSE (AGPL-3.0-only recommended).</label></li>
+      <li><label><input type="checkbox"> Initialize a pnpm-workspace monorepo: <code>apps/web</code> (SvelteKit), <code>apps/bff</code> (Fastify), <code>packages/shared</code> (types + contracts), <code>packages/api-client</code>, <code>ynh/</code> (YunoHost package).</label></li>
+      <li><label><input type="checkbox"> Add base TS config, Biome (or ESLint + Prettier), Vitest, EditorConfig, commit hooks.</label></li>
+      <li><label><input type="checkbox"> Set up CI (lint, typecheck, test, build) — GitLab CI or GitHub Actions per host.</label></li>
+      <li><label><input type="checkbox"> Add Zod-validated env loading + <code>.env.example</code>; wire <code>pnpm dev</code> / <code>build</code> / <code>test</code> across the workspace.</label></li>
+      <li><label><input type="checkbox"> Seed <code>docs/adr/</code> with the architecture decisions (backends, native packaging, unified model) and a README skeleton.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div><code>pnpm install &amp;&amp; pnpm build &amp;&amp; pnpm test</code> is green in CI on the empty scaffold, and the first ADR is committed.</div></div>
+
+    <h2 id="d1">D1 · Backend provisioning &amp; API spike</h2>
+    <p><span class="badge p2">Phase 0</span> <strong>Track:</strong> Setup &middot; <strong>Depends on:</strong> D0</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Stand up MiniFlux + Readeck for development (Docker Compose locally); generate per-service API tokens into <code>.env</code>.</label></li>
+      <li><label><input type="checkbox"> Write a throwaway spike exercising MiniFlux: feeds, categories, entries with filters, <code>/feeds/counters</code>, mark read/unread, star, <code>fetch-content</code>, <code>changed_after</code> delta.</label></li>
+      <li><label><input type="checkbox"> Spike Readeck: create bookmark, list, get article HTML, write <code>read_progress</code> + <code>read_anchor</code>, labels, create/list highlights, search, sync endpoint.</label></li>
+      <li><label><input type="checkbox"> Confirm pagination, auth headers, full-content behavior, and that progress + highlight writes round-trip.</label></li>
+      <li><label><input type="checkbox"> Extraction bake-off: save ~15 of your real sources (paywalled, Substack, JS-heavy SPAs) into Readeck and Wallabag; compare quality.</label></li>
+      <li><label><input type="checkbox"> Decision gate: lock Readeck (or switch to Wallabag) and record the ADR.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>A short spike report exists, progress + highlight writes round-trip against both APIs, and the read-later backend decision is recorded as an ADR.</div></div>
+
+    <h2 id="d2">D2 · Shared domain model &amp; contracts</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Setup &middot; <strong>Depends on:</strong> D1 &middot; <em>freezing this unblocks both tracks</em></p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Define Zod schemas + TS types for the unified <code>Card</code>, enums (Source, Category, Location, ReadStatus), Tag, SavedView, Highlight, Note, SyncEnvelope, SaveRequest.</label></li>
+      <li><label><input type="checkbox"> Define the unified BFF API contract (documents list/get/create/update/delete, tags, views, highlights, save, sync) and emit an OpenAPI 3.1 spec.</label></li>
+      <li><label><input type="checkbox"> Define the swap-seam adapter interfaces <code>RssBackend</code> and <code>ReadLaterBackend</code>.</label></li>
+      <li><label><input type="checkbox"> Design the saved-view query AST + serialize/parse pair (the filter language Readwise exposes).</label></li>
+      <li><label><input type="checkbox"> Generate <code>packages/api-client</code> (typed fetch client) from the OpenAPI spec.</label></li>
+      <li><label><input type="checkbox"> Unit-test schema validation + query-AST round-trip; stand up a mock server from the spec for the frontend track.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>The shared package builds and exports types, the OpenAPI spec validates, the query AST round-trips in tests, and a mock server serves the contract.</div></div>
+
+    <h2 id="d3">D3 · BFF data layer &amp; backend adapters</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Backend &middot; <strong>Depends on:</strong> D2</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Drizzle schema + migrations: users, documents index, locations, tags, tag_links, saved_views, rss_progress, rss_highlights, backend_tokens (encrypted), sync_cursors, ingestion_log.</label></li>
+      <li><label><input type="checkbox"> Implement the MiniFlux adapter against <code>RssBackend</code> (list/filter, counters, mark-read, star, fetch-content, delta).</label></li>
+      <li><label><input type="checkbox"> Implement the Readeck adapter against <code>ReadLaterBackend</code> (bookmarks, article HTML, progress/anchor, labels, highlights, search, sync).</label></li>
+      <li><label><input type="checkbox"> Build the unification service: map backend records → <code>Card</code>; location ↔ backend-state mapping; tag unification + mirror to Readeck labels.</label></li>
+      <li><label><input type="checkbox"> Implement the token store (encrypted at rest; sourced from app settings / env).</label></li>
+      <li><label><input type="checkbox"> Adapter integration tests against the live dev backends (real, not mocked).</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>Given seeded feeds + a saved article, the unification service returns a correct merged Card list, and location/progress/tag writes land in the right store — verified by integration tests against live dev backends.</div></div>
+
+    <h2 id="d4">D4 · BFF API, auth &amp; jobs</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Backend &middot; <strong>Depends on:</strong> D3</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Build the Fastify app implementing the unified API (documents CRUD, tags, views, highlights, save, sync delta) with Zod request/response validation.</label></li>
+      <li><label><input type="checkbox"> Auth: production trusts the spoof-proof <code>Ynh-User</code> header for the web UI; <code>/api</code> validates app-issued bearer tokens; local dev shim user. Add token issuance.</label></li>
+      <li><label><input type="checkbox"> Background jobs (pg-boss): MiniFlux delta poll, Readeck poll/sync, orphan reconcile; configurable intervals.</label></li>
+      <li><label><input type="checkbox"> Serve OpenAPI at <code>/api/openapi.json</code>; add <code>/healthz</code> + <code>/readyz</code> for systemd/YunoHost.</label></li>
+      <li><label><input type="checkbox"> Structured logging + error mapping (honor MiniFlux 429 Retry-After with backoff).</label></li>
+      <li><label><input type="checkbox"> Route tests for every endpoint including auth-failure paths.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>The full unified API passes route tests (including auth failures), new feed items sync into the Card list within the poll interval, and health endpoints report ready.</div></div>
+
+    <h2 id="d5">D5 · PWA shell &amp; data layer</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Frontend &middot; <strong>Depends on:</strong> D2 (runs in parallel with D3/D4 via the mock server)</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> SvelteKit scaffold + routes (Home, Feed, Library, Search, <code>/read/[id]</code>, Settings).</label></li>
+      <li><label><input type="checkbox"> Wire the typed API client from <code>packages/api-client</code>.</label></li>
+      <li><label><input type="checkbox"> Dexie (IndexedDB) schema mirroring <code>Card</code>; sync engine: pull delta by cursor + outbound mutation queue with retry; online/offline detection.</label></li>
+      <li><label><input type="checkbox"> Auth handling: SSO redirect on web; token entry/storage for the installed PWA; attach bearer on API calls.</label></li>
+      <li><label><input type="checkbox"> PWA wiring: web app manifest, vite-plugin-pwa service worker (precache shell, runtime-cache content), install prompt, Web Share Target route stub.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>The app boots offline with cached data, pulls deltas when online, and replays queued offline mutations on reconnect — verified by toggling the network.</div></div>
+
+    <h2 id="d6">D6 · Reading experience</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Frontend &middot; <strong>Depends on:</strong> D5</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> List views (Inbox/Later/Shortlist/Archive/Feed) with triage actions, auto-advance, and sorting.</label></li>
+      <li><label><input type="checkbox"> Keyboard shortcuts + Cmd/Ctrl-K command palette (customizable key map).</label></li>
+      <li><label><input type="checkbox"> Reader view: DOMPurify-sanitized HTML render; typography controls (typeface/size/spacing/width via CSS vars); light/dark/auto themes; original-view toggle.</label></li>
+      <li><label><input type="checkbox"> Reading progress: scroll → percent + nearest anchor; restore on open; debounced push to the BFF.</label></li>
+      <li><label><input type="checkbox"> Tags UI (add/remove, chips, filter-by-tag) + document notes.</label></li>
+      <li><label><input type="checkbox"> Saved views: render predefined views + "save current filter as view" + pin to sidebar.</label></li>
+      <li><label><input type="checkbox"> Client full-text search via FlexSearch over cached documents.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>A saved article and an RSS item both read end-to-end with progress restored across a reload, triage moves persist, and tags/search/views work offline.</div></div>
+
+    <h2 id="d7">D7 · Save flows</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Full-stack &middot; <strong>Depends on:</strong> D4, D6</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> BFF <code>/api/save</code> (URL [+ optional HTML] → Readeck create bookmark → Card).</label></li>
+      <li><label><input type="checkbox"> Bookmarklet generator in Settings (desktop save to the running instance).</label></li>
+      <li><label><input type="checkbox"> Web Share Target: manifest entry + handler route that posts a shared URL to <code>/save</code>.</label></li>
+      <li><label><input type="checkbox"> "Save to read later" action on RSS items (BFF re-saves to Readeck; fallback MiniFlux <code>/save</code>).</label></li>
+      <li><label><input type="checkbox"> OPML import passthrough UI → MiniFlux <code>/v1/import</code>; basic feed/folder management (subscribe, move to folder).</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>Saving via bookmarklet, Android share target, manual URL, and RSS→read-later each produce a readable Card, and OPML import creates feeds.</div></div>
+
+    <h2 id="d8">D8 · YunoHost packaging &amp; deploy</h2>
+    <p><span class="badge p1">Phase 1</span> <strong>Track:</strong> Deploy &middot; <strong>Depends on:</strong> D4, D6, D7</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Create the <code>readaggregator_ynh</code> package from <code>example_ynh</code>; author <code>manifest.toml</code> (per the architecture skeleton).</label></li>
+      <li><label><input type="checkbox"> Build pipeline: produce a release tarball (prebuilt web assets + bundled BFF) with checksum + autoupdate strategy.</label></li>
+      <li><label><input type="checkbox"> Author scripts: install/upgrade/remove/backup/restore/change_url; <code>conf/nginx.conf</code> (reverse proxy + Web Share Target) + hardened <code>conf/systemd.service</code> (Node).</label></li>
+      <li><label><input type="checkbox"> Config panel for MiniFlux/Readeck base URLs + tokens; provision glue Postgres via the database resource.</label></li>
+      <li><label><input type="checkbox"> Install on the VPS; verify SSO web + token <code>/api</code> through nginx; run backup→restore and upgrade dry-runs.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div><code>yunohost app install &lt;git_url&gt;</code> yields a working SSO-gated app + token API on the VPS, backup/restore/upgrade pass, and it shows in the webadmin Services page. <strong>This is the MVP milestone.</strong></div></div>
+
+    <h2 id="d9">D9 · Parity features</h2>
+    <p><span class="badge p2">Phase 2</span> <strong>Track:</strong> Full-stack &middot; <strong>Depends on:</strong> D8</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> Highlights + notes end-to-end: Readeck annotations for saved articles, <code>rss_highlights</code> for RSS items; selection→highlight UI; render anchored highlights.</label></li>
+      <li><label><input type="checkbox"> Full saved-view query language: parser/evaluator (AND/OR/parens, date/numeric/text operators) compiling to backend params + glue filters.</label></li>
+      <li><label><input type="checkbox"> Newsletter→RSS bridge: per-user inbox address → Atom feed → auto-subscribe in MiniFlux.</label></li>
+      <li><label><input type="checkbox"> Browser extension (save + highlight the open web) reusing the save + highlight APIs.</label></li>
+      <li><label><input type="checkbox"> Bulk actions (mark-all-read, bulk archive/tag), public share links, and a MiniFlux <code>new_entries</code> webhook receiver for near-real-time sync.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>Highlights round-trip on both sources, arbitrary saved-view queries return correct result sets, and a forwarded newsletter appears in the Feed.</div></div>
+
+    <h2 id="d10">D10 · Enhancements</h2>
+    <p><span class="badge p2">Phase 3</span> <strong>Track:</strong> Full-stack &middot; <strong>Depends on:</strong> D9</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> AI service (Ghostreader-equivalent): document summary, chat-with-document, auto-tagging via an OpenAI-compatible endpoint or local Ollama; bring-your-own-key; per-document cache.</label></li>
+      <li><label><input type="checkbox"> TTS: browser SpeechSynthesis for the free path + optional self-hosted Piper proxy via the BFF.</label></li>
+      <li><label><input type="checkbox"> PDF reading: store in Readeck; PDF.js reader + highlighting.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>Each feature is usable behind a settings toggle without regressing the core reading/triage flows.</div></div>
+
+    <h2 id="d11">D11 · Deferred follow-ups</h2>
+    <p><span class="badge p3">Phase 4</span> <strong>Track:</strong> Future &middot; <strong>Depends on:</strong> D10</p>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> EPUB: OPDS browse/download client against your personal Calibre-Web/Kavita/Komga; epub.js reader; integrate into the Library.</label></li>
+      <li><label><input type="checkbox"> KOReader sync: run a <code>kosync</code>-compatible server so EPUB reading position syncs between this app and KOReader.</label></li>
+      <li><label><input type="checkbox"> Native Android: wrap the PWA as a TWA (Bubblewrap) or Capacitor app; prepare a Play Store listing.</label></li>
+    </ul>
+    <div class="callout success"><div class="callout-title">Done when</div><div>A book opens from OPDS with reading position syncing to/from KOReader, and an Android build installs from an APK/AAB.</div></div>
+
+    <h2 id="next">Immediate next steps</h2>
+    <ol>
+      <li>Name the project (then I can set <code>id</code>/package names consistently across the monorepo and the YunoHost manifest).</li>
+      <li>Confirm the four D0 decisions: repo host, license, single- vs multi-user, dev-backend setup.</li>
+      <li>Scaffold the repo (D0) and stand up the dev backends (D1).</li>
+    </ol>
+  </main>
+</div>
+
+<div class="modal-overlay" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="reviewTitle">Feedback review</h2>
+      <button class="btn" data-action="closeReview">Close</button>
+    </div>
+    <div class="modal-body">
+      <div id="reviewList"></div>
+      <details class="section" style="margin-top:14px">
+        <summary>Prompt preview</summary>
+        <pre class="preview" id="reviewPreview"></pre>
+      </details>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" data-action="copyPrompt">Copy as Claude prompt</button>
+      <button class="btn" data-action="copyJson">Copy JSON</button>
+      <button class="btn" data-action="clearAll">Clear all</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Theme: cycles auto -> light -> dark -> auto. Persists in localStorage.
+  (function () {
+    const root = document.documentElement;
+    const saved = localStorage.getItem("cc-theme");
+    if (saved) root.dataset.theme = saved;
+    document.querySelector('[data-action="theme"]').addEventListener("click", () => {
+      const order = ["auto", "light", "dark"];
+      const next = order[(order.indexOf(root.dataset.theme) + 1) % order.length];
+      root.dataset.theme = next;
+      localStorage.setItem("cc-theme", next);
+    });
+    document.querySelector('[data-action="print"]').addEventListener("click", () => window.print());
+  })();
+
+  // TOC: build from h2/h3 with ids.
+  (function () {
+    const toc = document.getElementById("toc");
+    if (!toc) return;
+    const headings = document.querySelectorAll("main h2[id], main h3[id]");
+    headings.forEach(h => {
+      const li = document.createElement("li");
+      li.className = h.tagName.toLowerCase();
+      const a = document.createElement("a");
+      a.href = "#" + h.id;
+      a.textContent = h.textContent;
+      li.appendChild(a);
+      toc.appendChild(li);
+    });
+    // Scrollspy
+    const links = new Map();
+    toc.querySelectorAll("a").forEach(a => links.set(a.getAttribute("href").slice(1), a));
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        const a = links.get(e.target.id);
+        if (!a) return;
+        if (e.isIntersecting) {
+          toc.querySelectorAll("a.active").forEach(x => x.classList.remove("active"));
+          a.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-72px 0px -70% 0px" });
+    headings.forEach(h => io.observe(h));
+  })();
+
+  // Copy buttons on code blocks.
+  document.querySelectorAll("pre.code .copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const code = btn.parentElement.querySelector("code");
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Err"; }
+    });
+  });
+
+  // Checklist: toggle .done class on parent <li> for strikethrough.
+  document.querySelectorAll("ul.checklist input[type=checkbox]").forEach(cb => {
+    const sync = () => cb.closest("li").classList.toggle("done", cb.checked);
+    cb.addEventListener("change", sync); sync();
+  });
+
+  // Per-section feedback + review modal.
+  (function () {
+    const main = document.getElementById("content");
+    if (!main) return;
+    const reviewBtn = document.querySelector('[data-action="review"]');
+    const modal = document.getElementById("reviewModal");
+    const reviewList = document.getElementById("reviewList");
+    const preview = document.getElementById("reviewPreview");
+    if (!reviewBtn || !modal) return;
+
+    const keyOf = id => `cc-fb:${location.pathname}:${id}`;
+    const load = id => { try { return JSON.parse(localStorage.getItem(keyOf(id)) || "[]"); } catch { return []; } };
+    const save = (id, items) => localStorage.setItem(keyOf(id), JSON.stringify(items));
+
+    function extractNode(node) {
+      if (!node || node.nodeType !== 1) return "";
+      const cl = node.classList || { contains: () => false };
+      if (cl.contains("feedback-block") || cl.contains("fb-toggle") ||
+          cl.contains("fb-form") || cl.contains("fb-list")) return "";
+
+      const tag = node.tagName;
+      const txt = s => (s || "").replace(/\s+/g, " ").trim();
+
+      if (tag === "H3") return `### ${node.textContent.trim()}`;
+      if (tag === "H4") return `#### ${node.textContent.trim()}`;
+      if (tag === "P")  return node.textContent.trim();
+
+      if (tag === "UL" && cl.contains("checklist")) {
+        return [...node.children].map(li => {
+          const cb = li.querySelector('input[type="checkbox"]');
+          const label = li.querySelector("label");
+          const t = txt(label ? label.textContent : li.textContent);
+          return `- [${cb && cb.checked ? "x" : " "}] ${t}`;
+        }).join("\n");
+      }
+      if (tag === "UL") return [...node.children].map(li => `- ${txt(li.textContent)}`).join("\n");
+      if (tag === "OL") return [...node.children].map((li, i) => `${i + 1}. ${txt(li.textContent)}`).join("\n");
+
+      if (tag === "TABLE" && cl.contains("data")) {
+        const headers = [...node.querySelectorAll("thead th")].map(th => txt(th.textContent));
+        const rows = [...node.querySelectorAll("tbody tr")].map(tr =>
+          [...tr.children].map(td => txt(td.textContent).replace(/\|/g, "\\|")).join(" | ")
+        );
+        if (!headers.length) return rows.join("\n");
+        return [headers.join(" | "), headers.map(() => "---").join(" | "), ...rows].join("\n");
+      }
+
+      if (tag === "PRE" && cl.contains("code")) {
+        const codeEl = node.querySelector("code");
+        if (cl.contains("diff")) {
+          const lines = [...(codeEl ? codeEl.children : [])].map(span => {
+            const sign = span.classList.contains("add") ? "+ "
+                       : span.classList.contains("del") ? "- " : "  ";
+            return sign + (span.textContent || "").replace(/\n+$/, "");
+          });
+          return "```diff\n" + lines.join("\n") + "\n```";
+        }
+        const langEl = node.querySelector(".lang");
+        const lang = langEl ? langEl.textContent.trim() : "";
+        const raw = codeEl ? codeEl.textContent : "";
+        return "```" + lang + "\n" + raw.replace(/\n+$/, "") + "\n```";
+      }
+
+      if (tag === "DIV" && cl.contains("callout")) {
+        const titleEl = node.querySelector(".callout-title");
+        const title = titleEl ? titleEl.textContent.trim() : "";
+        const clone = node.cloneNode(true);
+        const t2 = clone.querySelector(".callout-title");
+        if (t2) t2.remove();
+        const body = txt(clone.textContent);
+        const variant = ["info", "warn", "error", "success", "note"].find(v => cl.contains(v)) || "note";
+        return `> [${variant}${title ? ": " + title : ""}] ${body}`;
+      }
+
+      if (tag === "DETAILS") {
+        const sum = node.querySelector("summary");
+        const sumTxt = sum ? sum.textContent.trim() : "details";
+        if (!node.open) return `> (collapsed: ${sumTxt})`;
+        const inner = [...node.children]
+          .filter(c => c.tagName !== "SUMMARY")
+          .map(extractNode).filter(Boolean).join("\n\n");
+        return `**${sumTxt}**\n${inner}`;
+      }
+
+      return txt(node.textContent);
+    }
+
+    function sectionText(h) {
+      let node = h.nextElementSibling;
+      const parts = [];
+      while (node && node.tagName !== "H2") {
+        const t = extractNode(node);
+        if (t) parts.push(t);
+        node = node.nextElementSibling;
+      }
+      return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    function allFeedback() {
+      return [...main.querySelectorAll("h2[id]")]
+        .map(h => ({ id: h.id, title: h.textContent.trim(), context: sectionText(h), items: load(h.id) }))
+        .filter(s => s.items.length);
+    }
+
+    function updateCount() {
+      const n = allFeedback().reduce((a, s) => a + s.items.length, 0);
+      reviewBtn.dataset.count = String(n);
+      reviewBtn.querySelector(".count").textContent = n;
+    }
+
+    function renderList(block, id) {
+      const items = load(id);
+      const list = block.querySelector(".fb-list");
+      list.innerHTML = "";
+      items.forEach((it, idx) => {
+        const li = document.createElement("li");
+        li.className = "fb-item";
+        const meta = document.createElement("div"); meta.className = "fb-meta";
+        meta.textContent = new Date(it.at).toLocaleString();
+        const body = document.createElement("div"); body.className = "fb-body";
+        body.textContent = it.text;
+        const del = document.createElement("button"); del.className = "fb-del";
+        del.textContent = "×"; del.title = "Delete";
+        del.addEventListener("click", () => {
+          const cur = load(id); cur.splice(idx, 1); save(id, cur);
+          renderList(block, id); updateCount();
+        });
+        li.append(meta, body, del);
+        list.appendChild(li);
+      });
+    }
+
+    function buildPrompt() {
+      const sections = allFeedback();
+      if (!sections.length) return "";
+      const path = decodeURIComponent(location.pathname);
+      const title = (document.querySelector("main h1")?.textContent || document.title).trim();
+      const out = [
+        `Refine the HTML report at: ${path}`,
+        ``,
+        `Title: ${title}`,
+        ``,
+        `Apply the feedback below section-by-section. Edit the file in place. Preserve the template structure (callouts, code/diff blocks, tables, badges, TOC ids). Do not introduce new dependencies.`,
+        ``
+      ];
+      sections.forEach(s => {
+        const ctx = s.context.length > 1500 ? s.context.slice(0, 1500).trimEnd() + " …" : s.context;
+        out.push(`## Section: ${s.title}  (anchor: #${s.id})`);
+        out.push("");
+        out.push("Current content (excerpt):");
+        out.push('"""');
+        out.push(ctx);
+        out.push('"""');
+        out.push("");
+        out.push("Feedback:");
+        s.items.forEach(it => out.push(`- ${it.text}`));
+        out.push("");
+        out.push("---");
+        out.push("");
+      });
+      return out.join("\n");
+    }
+
+    function renderReview() {
+      const sections = allFeedback();
+      reviewList.innerHTML = "";
+      if (!sections.length) {
+        const p = document.createElement("p");
+        p.style.color = "var(--muted)";
+        p.textContent = 'No feedback yet. Use the "+ Feedback" button below any section.';
+        reviewList.appendChild(p);
+      } else {
+        sections.forEach(s => {
+          const g = document.createElement("div"); g.className = "review-group";
+          const h = document.createElement("h3"); h.textContent = s.title;
+          g.appendChild(h);
+          s.items.forEach(it => {
+            const item = document.createElement("div"); item.className = "fb-item";
+            const meta = document.createElement("div"); meta.className = "fb-meta";
+            meta.textContent = new Date(it.at).toLocaleString();
+            const body = document.createElement("div"); body.className = "fb-body";
+            body.textContent = it.text;
+            item.append(meta, body);
+            g.appendChild(item);
+          });
+          reviewList.appendChild(g);
+        });
+      }
+      preview.textContent = buildPrompt() || "(no feedback)";
+    }
+
+    const headings = [...main.querySelectorAll("h2[id]")];
+    headings.forEach((h, i) => {
+      const next = headings[i + 1] || null;
+      const block = document.createElement("div");
+      block.className = "feedback-block";
+      block.dataset.section = h.id;
+
+      const toggle = document.createElement("button");
+      toggle.className = "btn fb-toggle"; toggle.textContent = "+ Feedback";
+
+      const form = document.createElement("div"); form.className = "fb-form"; form.hidden = true;
+      const ta = document.createElement("textarea"); ta.className = "fb-text";
+      ta.placeholder = `Feedback for "${h.textContent.trim()}"...`;
+      const actions = document.createElement("div"); actions.className = "fb-actions";
+      const saveBtn = document.createElement("button"); saveBtn.className = "btn fb-save"; saveBtn.textContent = "Save";
+      const cancelBtn = document.createElement("button"); cancelBtn.className = "btn fb-cancel"; cancelBtn.textContent = "Cancel";
+      const hint = document.createElement("span"); hint.className = "fb-status";
+      hint.textContent = "Stored in this browser. Use Review to export.";
+      actions.append(saveBtn, cancelBtn, hint);
+      form.append(ta, actions);
+
+      const list = document.createElement("ul"); list.className = "fb-list";
+
+      block.append(toggle, form, list);
+      if (next) main.insertBefore(block, next);
+      else main.appendChild(block);
+
+      toggle.addEventListener("click", () => {
+        form.hidden = !form.hidden;
+        if (!form.hidden) ta.focus();
+      });
+      cancelBtn.addEventListener("click", () => { form.hidden = true; ta.value = ""; });
+      saveBtn.addEventListener("click", () => {
+        const text = ta.value.trim(); if (!text) return;
+        const items = load(h.id);
+        items.push({ text, at: new Date().toISOString() });
+        save(h.id, items);
+        ta.value = ""; form.hidden = true;
+        renderList(block, h.id); updateCount();
+      });
+      ta.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+        if (e.key === "Escape") { cancelBtn.click(); }
+      });
+
+      renderList(block, h.id);
+    });
+    updateCount();
+
+    reviewBtn.addEventListener("click", () => { renderReview(); modal.classList.add("open"); });
+    modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("open"); });
+    document.querySelector('[data-action="closeReview"]').addEventListener("click", () => modal.classList.remove("open"));
+    document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
+
+    async function copyAnd(btn, text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Copy failed"; }
+    }
+    document.querySelector('[data-action="copyPrompt"]').addEventListener("click", e => {
+      const t = buildPrompt(); if (t) copyAnd(e.currentTarget, t);
+    });
+    document.querySelector('[data-action="copyJson"]').addEventListener("click", e => {
+      copyAnd(e.currentTarget, JSON.stringify(allFeedback(), null, 2));
+    });
+    document.querySelector('[data-action="clearAll"]').addEventListener("click", () => {
+      if (!confirm("Clear all feedback for this report?")) return;
+      [...main.querySelectorAll("h2[id]")].forEach(h => localStorage.removeItem(keyOf(h.id)));
+      main.querySelectorAll(".feedback-block").forEach(b => renderList(b, b.dataset.section));
+      renderReview(); updateCount();
+    });
+
+  })();
+</script>
+</body>
+</html>

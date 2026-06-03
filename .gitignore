@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.svelte-kit/
+.vite/
+coverage/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Env: keep the example, ignore real secrets
+.env
+.env.*
+!.env.example

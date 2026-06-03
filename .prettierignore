@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+.svelte-kit
+coverage
+pnpm-lock.yaml
+LICENSE
+
+# Self-managed / not ours to reformat
+apps/web
+docs/planning

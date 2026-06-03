@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="en" data-theme="auto" data-mermaid>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Open-Source Readwise Reader Clone — Architecture & Plan</title>
+<meta name="generator" content="claude-code">
+<meta name="generated" content="2026-06-03">
+<!--
+  Claude Code HTML report template.
+  Replace {{TITLE}}, {{ISO_DATE}}, {{AGENT}}, {{SUBTITLE}}, and the contents of <main>.
+  Optional CDN add-ons (uncomment if needed):
+    Prism (syntax highlight): set <html data-prism> AND uncomment the prism block.
+    Mermaid (diagrams): set <html data-mermaid> AND uncomment the mermaid block.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    /* Catppuccin Latte */
+    --bg: #eff1f5;
+    --fg: #4c4f69;
+    --muted: #6c6f85;
+    --subtle: #e6e9ef;
+    --border: #ccd0da;
+    --accent: #1e66f5;
+    --accent-fg: #eff1f5;
+    --code-bg: #e6e9ef;
+    --code-fg: #4c4f69;
+    --info: #1e66f5;
+    --warn: #df8e1d;
+    --error: #d20f39;
+    --success: #40a02b;
+    --note: #8839ef;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04);
+    --radius: 8px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  html[data-theme="dark"] {
+    /* Catppuccin Mocha */
+    --bg: #1e1e2e;
+    --fg: #cdd6f4;
+    --muted: #a6adc8;
+    --subtle: #313244;
+    --border: #45475a;
+    --accent: #89b4fa;
+    --accent-fg: #11111b;
+    --code-bg: #181825;
+    --code-fg: #cdd6f4;
+    --info: #89b4fa;
+    --warn: #f9e2af;
+    --error: #f38ba8;
+    --success: #a6e3a1;
+    --note: #cba6f7;
+    --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg));
+    --diff-add-fg: var(--success);
+    --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg));
+    --diff-del-fg: var(--error);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      /* Catppuccin Mocha */
+      --bg: #1e1e2e; --fg: #cdd6f4; --muted: #a6adc8; --subtle: #313244;
+      --border: #45475a; --accent: #89b4fa; --accent-fg: #11111b;
+      --code-bg: #181825; --code-fg: #cdd6f4;
+      --info: #89b4fa; --warn: #f9e2af; --error: #f38ba8; --success: #a6e3a1; --note: #cba6f7;
+      --diff-add-bg: color-mix(in srgb, var(--success) 15%, var(--bg)); --diff-add-fg: var(--success);
+      --diff-del-bg: color-mix(in srgb, var(--error) 15%, var(--bg)); --diff-del-fg: var(--error);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 0;
+    min-height: 100vh;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.toc { display: none; }
+  }
+  header.top {
+    grid-column: 1 / -1;
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  header.top .title { font-weight: 600; font-size: 15px; }
+  header.top .meta { color: var(--muted); font-size: 13px; }
+  header.top .actions { display: flex; gap: 8px; }
+  button.btn {
+    appearance: none;
+    background: var(--subtle);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  aside.toc {
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    position: sticky; top: 56px;
+    align-self: start;
+    max-height: calc(100vh - 56px);
+    overflow: auto;
+  }
+  aside.toc h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .08em; }
+  aside.toc ol { list-style: none; padding: 0; margin: 0; }
+  aside.toc li { margin: 2px 0; }
+  aside.toc li.h3 { padding-left: 12px; }
+  aside.toc a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  aside.toc a:hover { color: var(--fg); background: var(--subtle); }
+  aside.toc a.active { color: var(--accent); background: var(--subtle); }
+  main {
+    padding: 32px clamp(16px, 4vw, 48px);
+    max-width: 900px;
+    width: 100%;
+  }
+  main h1 { font-size: 28px; margin: 0 0 8px; }
+  main .lede { color: var(--muted); margin: 0 0 28px; font-size: 16px; }
+  main h2 {
+    margin-top: 40px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 22px;
+    scroll-margin-top: 72px;
+  }
+  main h3 { font-size: 17px; margin-top: 28px; scroll-margin-top: 72px; }
+  main p { margin: 12px 0; }
+  main a { color: var(--accent); }
+  main ul, main ol { padding-left: 24px; }
+  main li { margin: 4px 0; }
+
+  /* Callouts */
+  .callout {
+    border-left: 3px solid var(--info);
+    background: var(--subtle);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 16px 0;
+  }
+  .callout .callout-title {
+    font-weight: 600; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .callout.info  { border-color: var(--info); }
+  .callout.info  .callout-title { color: var(--info); }
+  .callout.warn  { border-color: var(--warn); }
+  .callout.warn  .callout-title { color: var(--warn); }
+  .callout.error { border-color: var(--error); }
+  .callout.error .callout-title { color: var(--error); }
+  .callout.success { border-color: var(--success); }
+  .callout.success .callout-title { color: var(--success); }
+  .callout.note { border-color: var(--note); }
+  .callout.note .callout-title { color: var(--note); }
+
+  /* Code */
+  code, pre, kbd, samp { font-family: var(--mono); font-size: 13.5px; }
+  :not(pre) > code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 0.92em;
+  }
+  pre.code {
+    position: relative;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  pre.code .lang {
+    position: absolute; top: 6px; right: 44px;
+    font-size: 11px; color: var(--muted);
+    text-transform: lowercase;
+  }
+  pre.code .copy {
+    position: absolute; top: 6px; right: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 4px;
+    font-size: 11px; padding: 2px 8px; cursor: pointer;
+  }
+  pre.code .copy:hover { color: var(--fg); }
+  pre.code code { background: transparent; border: 0; padding: 0; }
+
+  /* Diff */
+  pre.diff .add { display: block; background: var(--diff-add-bg); color: var(--diff-add-fg); }
+  pre.diff .del { display: block; background: var(--diff-del-bg); color: var(--diff-del-fg); }
+  pre.diff .add::before { content: "+ "; opacity: .6; }
+  pre.diff .del::before { content: "- "; opacity: .6; }
+
+  /* Tables */
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  table.data th, table.data td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.data thead th {
+    background: var(--subtle);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    position: sticky; top: 56px;
+  }
+  table.data tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--subtle) 50%, transparent); }
+  table.data tbody tr:hover td { background: var(--subtle); }
+
+  /* Checklist */
+  ul.checklist { list-style: none; padding-left: 4px; }
+  ul.checklist li { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+  ul.checklist input[type=checkbox] { margin-top: 5px; cursor: pointer; }
+  ul.checklist li.done > label { color: var(--muted); text-decoration: line-through; }
+
+  /* Details */
+  details.section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    margin: 12px 0;
+    background: var(--subtle);
+  }
+  details.section[open] { background: var(--bg); }
+  details.section > summary {
+    cursor: pointer; font-weight: 600; padding: 4px 0;
+    list-style: none;
+  }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "\25B8"; display: inline-block; margin-right: 8px;
+    transition: transform .15s ease; color: var(--muted);
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+
+  /* Badges */
+  .badge {
+    display: inline-block; padding: 1px 8px;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+    background: var(--subtle); border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.p0 { background: var(--error); color: #fff; border-color: transparent; }
+  .badge.p1 { background: var(--warn); color: #fff; border-color: transparent; }
+  .badge.p2 { background: var(--info); color: #fff; border-color: transparent; }
+  .badge.p3 { background: var(--subtle); }
+  .badge.ok { background: var(--success); color: #fff; border-color: transparent; }
+
+  /* KBD */
+  kbd {
+    background: var(--subtle); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 4px;
+    padding: 1px 6px; font-size: 12px;
+  }
+
+  /* Print */
+  @media print {
+    header.top, aside.toc, .copy, .actions, .feedback-block, .modal-overlay { display: none !important; }
+    .layout { grid-template-columns: 1fr; }
+    main { max-width: 100%; padding: 0; }
+    a { color: inherit; text-decoration: none; }
+    pre.code, table.data { page-break-inside: avoid; }
+  }
+
+  /* Feedback */
+  .feedback-block { margin: 18px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
+  .feedback-block .fb-toggle { font-size: 12px; padding: 3px 10px; color: var(--muted); }
+  .feedback-block .fb-toggle:hover { color: var(--fg); }
+  .fb-form { margin-top: 8px; }
+  .fb-form textarea {
+    width: 100%; min-height: 80px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--fg);
+    font: inherit; font-size: 14px; resize: vertical;
+  }
+  .fb-form textarea:focus { outline: none; border-color: var(--accent); }
+  .fb-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .fb-status { color: var(--muted); font-size: 12px; }
+  .fb-list { list-style: none; padding: 0; margin: 10px 0 0; }
+  .fb-item {
+    position: relative;
+    background: var(--subtle); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 36px 8px 10px;
+    margin: 6px 0; font-size: 14px;
+  }
+  .fb-meta { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .fb-body { white-space: pre-wrap; word-break: break-word; }
+  .fb-del {
+    position: absolute; top: 6px; right: 6px;
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 18px; line-height: 1; cursor: pointer;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .fb-del:hover { background: var(--bg); color: var(--error); }
+
+  .btn.review { position: relative; }
+  .btn.review[data-count="0"] { display: none; }
+  .btn.review .count {
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: 999px; padding: 0 6px; margin-left: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 50; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    max-width: 760px; width: 100%; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+  }
+  .modal-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-head h2 { margin: 0; font-size: 16px; border: 0; padding: 0; }
+  .modal-body { padding: 14px 18px; overflow: auto; flex: 1; }
+  .modal-foot {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  }
+  .review-group { margin-bottom: 14px; }
+  .review-group h3 { margin: 0 0 4px; font-size: 14px; padding: 0; }
+  .review-group .fb-item { margin: 4px 0; padding-right: 10px; }
+  pre.preview {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; font-family: var(--mono); font-size: 12px;
+    margin: 8px 0 0;
+  }
+
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); border-color: transparent; }
+</style>
+
+<!-- Optional: Prism syntax highlighting (uncomment + add data-prism on <html>)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>
+-->
+
+<!-- Mermaid diagrams -->
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches
+    || document.documentElement.dataset.theme === "dark";
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+</script>
+</head>
+<body>
+<div class="layout">
+  <header class="top">
+    <div>
+      <div class="title">Open-Source Readwise Reader Clone</div>
+      <div class="meta">Claude Code &middot; <time datetime="2026-06-03">2026-06-03</time></div>
+    </div>
+    <div class="actions">
+      <button class="btn review" data-action="review" data-count="0" title="Review feedback collected on sections">Review<span class="count">0</span></button>
+      <button class="btn" data-action="theme" title="Toggle theme">Theme</button>
+      <button class="btn" data-action="print" title="Print or save as PDF">Print</button>
+    </div>
+  </header>
+
+  <aside class="toc" aria-label="Table of contents">
+    <h4>Contents</h4>
+    <ol id="toc"></ol>
+  </aside>
+
+  <main id="content">
+    <h1>Open-Source Readwise Reader Clone</h1>
+    <p class="lede">A self-hosted Readwise Reader alternative for RSS + read-later, assembled from MiniFlux (feeds) and Readeck (saved articles) behind a custom aggregator, delivered as an installable PWA and website, packaged as a native YunoHost app. EPUB reading is explicitly deferred.</p>
+
+    <h2 id="summary">Executive summary</h2>
+    <p>Readwise Reader's value is not any single backend feature — it is the <strong>unified experience</strong>: one inbox spanning RSS and saved articles, one triage workflow, cross-device reading progress, highlights, tags, saved smart-views, and offline full-text search. No single open-source tool reproduces that. The pragmatic build is therefore a <strong>thin unification layer over two best-in-class self-hosted backends</strong>:</p>
+    <ul>
+      <li><strong>MiniFlux</strong> — the RSS half. Single Go binary + Postgres, tiny footprint, excellent token-auth REST API, full-content scraping, webhooks, OPML. Already in the YunoHost catalog.</li>
+      <li><strong>Readeck</strong> — the read-later half. Single Go binary + Postgres, and uniquely among the candidates it exposes <em>writable reading progress</em> (<code>read_progress</code> + <code>read_anchor</code>) <em>and</em> highlights/annotations over a clean OpenAPI Bearer-token API. Already in the YunoHost catalog.</li>
+    </ul>
+    <p>We build exactly <strong>one</strong> new component: a TypeScript <strong>aggregator (backend-for-frontend) + PWA</strong> that owns the cross-source state the backends cannot (unified location/triage, unified tags, saved views, RSS-item progress/highlights), serves an offline-first reading UI, and is packaged as a single native YunoHost app. Docker is avoided throughout — everything is native, catalog-clean, and SSO-integrated.</p>
+
+    <div class="callout success">
+      <div class="callout-title">Headline recommendation</div>
+      <div>MiniFlux (RSS) + Readeck (read-later) as backends, both installed from the YunoHost catalog. One custom <strong>SvelteKit PWA + Node/Fastify BFF + small Postgres</strong> app for unification, packaged natively for YunoHost with SSO. Readeck is chosen over Wallabag specifically because it is the only option that syncs reading progress <em>and</em> highlights through its API — collapsing the hardest part of the clone into the backend.</div>
+    </div>
+
+    <h2 id="goal-scope">Goal &amp; scope decisions</h2>
+    <p>In scope: RSS feeds and saved-articles ("read later") with a Readwise-style triage, reading, annotation, and search experience, on web + Android (installable PWA acceptable in place of a native app), deployed on a YunoHost VPS.</p>
+    <table class="data">
+      <thead><tr><th>Decision</th><th>Call</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>RSS backend</td><td>MiniFlux</td><td>User-specified; confirmed best-fit (light, great API, catalog package).</td></tr>
+        <tr><td>Read-later backend</td><td>Readeck (Wallabag as swap-in)</td><td>Only candidate with API-exposed reading progress <em>and</em> highlights; light Go binary; catalog package.</td></tr>
+        <tr><td>Client</td><td>Installable PWA (web + Android)</td><td>One codebase covers website + Android; share-sheet save via Web Share Target; TWA wrapper later for Play Store.</td></tr>
+        <tr><td>EPUB reading</td><td><span class="badge p3">Deferred</span> follow-up</td><td>Out of initial scope. When added, needs <strong>OPDS</strong> (pull books from personal server) + <strong>KOReader sync (kosync)</strong> for cross-device position. Architecture leaves room; see roadmap Phase 4.</td></tr>
+        <tr><td>Deep Readwise highlights ecosystem</td><td><span class="badge p3">Out</span></td><td>Spaced-repetition Daily Review, note-app export — not a reader feature.</td></tr>
+        <tr><td>Twitter / YouTube / podcasts</td><td><span class="badge p3">Out</span></td><td>Adjacent media; excluded. (YouTube/podcast channels can still be plain RSS feeds in MiniFlux.)</td></tr>
+        <tr><td>Containerization</td><td>Native only</td><td>YunoHost does not treat Docker as first-class; native packaging keeps SSO, backups, and upgrades clean.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="readwise-anatomy">What Readwise Reader actually is</h2>
+    <p>Feature inventory distilled from the official Reader API reference and docs, tagged by clone priority. <span class="badge ok">Core</span> = must replicate; <span class="badge p2">Secondary</span> = valuable, later; <span class="badge p3">Out/Later</span> = excluded or deferred.</p>
+    <table class="data">
+      <thead><tr><th>Feature area</th><th>What it does</th><th>Scope</th></tr></thead>
+      <tbody>
+        <tr><td>Library vs Feed split</td><td>Curated saves (Library) vs auto-pushed RSS/newsletters (Feed, with Unseen/Seen).</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Triage workflows</td><td>Switchable configs: Triage (Inbox→Later→Archive), Shortlist (Later→Shortlist→Archive), Classic (Later→Archive).</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>RSS subscribe / OPML / folders</td><td>Add feeds by URL/search, OPML import/export, group feeds into folders; ~5-min refresh.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Save flows</td><td>Browser extension, mobile share sheet, manual URL, email-forwarding address, save-API.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Parsed readability + original view</td><td>Clean distraction-free text, toggle to original page/email.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Reading progress + sync</td><td><code>reading_progress</code> 0..1 + opened timestamps, synced across devices, offline.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Offline reading + search</td><td>Local-first; full-text search over Library works offline.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Highlights, notes, tags</td><td>Text highlights, highlight notes, document notes; document tags vs highlight tags (no inheritance). No highlight colors.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Filtered/saved views + query language</td><td>Smart saved filters (AND/OR, dates, tags, progress, words…), pinnable to sidebar.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Keyboard-driven + command palette</td><td>Fully customizable shortcuts, Cmd/Ctrl-K palette.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Documents REST API</td><td>CREATE/LIST/UPDATE/DELETE/TAGS with location, category, tags, reading progress, html.</td><td><span class="badge ok">Core</span></td></tr>
+        <tr><td>Text-to-speech</td><td>AI voices, follows text; online-only.</td><td><span class="badge p2">Secondary</span></td></tr>
+        <tr><td>PDF reading</td><td>Native + enhanced text mode, snapshot highlights, annotated export.</td><td><span class="badge p2">Secondary</span></td></tr>
+        <tr><td>Ghostreader (AI)</td><td>Summaries, chat-with-document, auto-tagging, word/passage prompts.</td><td><span class="badge p2">Secondary</span></td></tr>
+        <tr><td>Bulk actions, share links, desktop, webhooks</td><td>List-wide actions, public share, desktop apps, real-time webhooks.</td><td><span class="badge p2">Secondary</span></td></tr>
+        <tr><td>EPUB / ebooks</td><td>Upload DRM-free EPUBs, paged reading.</td><td><span class="badge p3">Later</span></td></tr>
+        <tr><td>Readwise highlights ecosystem</td><td>Spaced-repetition Daily Review, note-app export.</td><td><span class="badge p3">Out</span></td></tr>
+        <tr><td>Twitter threads, video/podcast transcripts</td><td>Adjacent media types.</td><td><span class="badge p3">Out</span></td></tr>
+      </tbody>
+    </table>
+    <details class="section">
+      <summary>Reader API surface worth mirroring (target shape for our unified API)</summary>
+      <p>Base <code>https://readwise.io/api/v3/</code>, header <code>Authorization: Token &lt;t&gt;</code>. Endpoints: <code>POST /save</code>, <code>GET /list</code> (cursor-paginated, filters by <code>location</code>/<code>category</code>/<code>tag</code>/<code>updatedAfter</code>, optional <code>withHtmlContent</code>), <code>PATCH /update/&lt;id&gt;</code>, <code>DELETE /delete/&lt;id&gt;</code>, <code>GET /tags</code>. Document fields include <code>id, url, source_url, title, author, category, location, tags, word_count, reading_time, reading_progress, first_opened_at, last_opened_at, summary, notes, html_content</code>. Categories: article|email|rss|pdf|highlight|note|tweet|video|epub. Locations: new|later|shortlist|archive|feed (shortlist is filter-only, not writable). Our BFF should expose this same shape so any Reader-compatible tooling can talk to it.</p>
+    </details>
+
+    <h2 id="backend-strategy">Backend strategy: MiniFlux + Readeck</h2>
+    <p>MiniFlux owns RSS; a read-later service owns saved articles. The read-later choice is the pivotal decision because it determines how much of the "hard" sync state we must build ourselves.</p>
+    <table class="data">
+      <thead><tr><th>Backend</th><th>Reading progress (API)</th><th>Highlights (API)</th><th>API quality / auth</th><th>Footprint</th><th>YunoHost</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Readeck</strong></td><td><span class="badge ok">Yes</span> <code>read_progress</code> + <code>read_anchor</code>, writable</td><td><span class="badge ok">Yes</span> highlights + annotations</td><td>OpenAPI, Bearer token + OAuth2</td><td>Go binary + Postgres, ~512MB</td><td><span class="badge ok">Pkg</span> 0.22.3</td><td><strong>Primary</strong></td></tr>
+        <tr><td>Wallabag</td><td><span class="badge p1">No</span> only read/unread + reading-time est.</td><td><span class="badge ok">Yes</span> annotations</td><td>Swagger, OAuth2 password grant (clunkier)</td><td>PHP + DB, heavier</td><td><span class="badge ok">Pkg</span> + LDAP/SSO</td><td>Runner-up (best extraction)</td></tr>
+        <tr><td>Karakeep</td><td><span class="badge p1">No</span> (planned)</td><td><span class="badge ok">Yes</span> color + notes</td><td>Excellent OpenAPI, Bearer</td><td>Node + Chromium + Meilisearch, ~2GB+</td><td><span class="badge p1">Heavy</span></td><td>Only if AI/Meili must-haves</td></tr>
+        <tr><td>Shiori / Linkding</td><td><span class="badge p0">No</span></td><td><span class="badge p0">No</span></td><td>Decent token APIs</td><td>Very light</td><td>Shiori has pkg</td><td>Reject (not readers)</td></tr>
+        <tr><td>Omnivore</td><td>Yes</td><td>Yes</td><td>GraphQL only</td><td>Heavy multi-service</td><td>None</td><td>Reject (abandoned)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout note">
+      <div class="callout-title">Why Readeck wins</div>
+      <div>Reading-progress sync and highlights are the two hardest features to bolt on externally. Readeck ships both behind a clean token API, so for saved articles they become a backend concern, not ours. It is also a single Go binary + Postgres — the same operational shape as MiniFlux. <strong>Swap path:</strong> if extraction quality on your real sources (paywalls, Substack, JS-heavy SPAs) proves weak, Wallabag's FiveFilters site-config is stronger; the BFF abstracts the backend so swapping it later changes one adapter, at the cost of building progress-sync for saved articles yourself.</div>
+    </div>
+    <div class="callout info">
+      <div class="callout-title">Built-in synergy</div>
+      <div>MiniFlux has a native "save entry to read-later" integration that pushes directly to Readeck (and Wallabag). So "save this RSS item to read later" can be a one-call backend operation. We prefer routing it through the BFF instead, so our unified tags/location ride along — but MiniFlux's integration is a working fallback.</div>
+    </div>
+
+    <h2 id="feature-mapping">Feature → backend mapping</h2>
+    <p>Where each Readwise capability physically lives. "BFF" = our aggregator's own Postgres + logic.</p>
+    <table class="data">
+      <thead><tr><th>Readwise feature</th><th>Owner</th><th>Implementation</th></tr></thead>
+      <tbody>
+        <tr><td>Library + Feed unified inbox</td><td>BFF</td><td>Normalize MiniFlux entries + Readeck bookmarks into one "card" model with a <code>source</code> discriminator.</td></tr>
+        <tr><td>Triage (Inbox/Later/Archive, Shortlist, Classic)</td><td>BFF</td><td>BFF owns unified <code>location</code>. RSS: mirror archive→MiniFlux <code>read</code>. Saved: map to Readeck <code>read_status</code> (unread/reading/read). Shortlist = tag + saved view.</td></tr>
+        <tr><td>RSS subscribe / OPML / folders / refresh</td><td>MiniFlux</td><td><code>POST /v1/feeds</code>, categories as folders, <code>/v1/import</code>+<code>/v1/export</code>, <code>/v1/feeds/refresh</code>.</td></tr>
+        <tr><td>Save article (URL / extension / share / API)</td><td>Readeck</td><td>BFF <code>/api/save</code> → Readeck create-bookmark; attaches unified tags/location.</td></tr>
+        <tr><td>Save RSS item to read-later</td><td>MiniFlux → Readeck</td><td>BFF re-saves the entry's URL/content to Readeck (fallback: MiniFlux <code>POST /v1/entries/{id}/save</code>).</td></tr>
+        <tr><td>Newsletter email ingestion</td><td>Bridge → MiniFlux</td><td>Per-user newsletter address → Atom feed (Kill-the-Newsletter-style) → MiniFlux feed. Alt: parse app mailbox → Readeck.</td></tr>
+        <tr><td>Parsed readability + original view</td><td>MiniFlux / Readeck</td><td>MiniFlux per-feed <code>crawler</code> full content; Readeck article HTML. Original = open <code>source_url</code>.</td></tr>
+        <tr><td>Reading progress + cross-device sync</td><td>Readeck (saved) / BFF (RSS)</td><td>Readeck <code>read_progress</code>+<code>read_anchor</code> native. RSS items: BFF glue DB (MiniFlux has none). Delta sync to client.</td></tr>
+        <tr><td>Offline reading + full-text search</td><td>Client</td><td>Dexie/IndexedDB content cache + FlexSearch client index; mirrors Readwise's offline search.</td></tr>
+        <tr><td>Highlights + notes</td><td>Readeck (saved) / BFF (RSS)</td><td>Readeck annotations API for saved articles; BFF table for RSS-item highlights.</td></tr>
+        <tr><td>Document tags</td><td>BFF</td><td>Unified tag store; optionally mirror to Readeck labels for saved articles. MiniFlux entry tags are read-mostly (feed-derived).</td></tr>
+        <tr><td>Filtered / saved views + query language</td><td>BFF</td><td>Store view definitions as JSON; compile to backend query params + glue-DB filters.</td></tr>
+        <tr><td>Keyboard shortcuts + command palette</td><td>Client</td><td>Frontend only; config persisted via BFF.</td></tr>
+        <tr><td>Unified Documents REST API</td><td>BFF</td><td>Mirror the Reader API shape (CREATE/LIST/UPDATE/DELETE/TAGS) backed by both sources.</td></tr>
+        <tr><td>TTS</td><td>Client / BFF</td><td>Browser SpeechSynthesis (free/offline-ish); optional self-hosted Piper via BFF.</td></tr>
+        <tr><td>AI summary / chat / auto-tag</td><td>BFF</td><td>Proxy to OpenAI-compatible endpoint or local Ollama; bring-your-own-key.</td></tr>
+        <tr><td>Bulk actions / webhooks</td><td>BFF + MiniFlux</td><td>MiniFlux mark-all-as-read + Readeck batch; MiniFlux <code>new_entries</code> webhook for near-real-time.</td></tr>
+        <tr><td>EPUB (OPDS + KOReader sync)</td><td><span class="badge p3">Phase 4</span></td><td>OPDS client against personal Calibre-Web/Kavita/Komga; run a kosync server for KOReader position sync.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="architecture">System architecture</h2>
+    <p>One aggregator app fronts two independent backends. The PWA is local-first; the BFF is the sync server and the single place that knows about both sources.</p>
+    <pre class="mermaid">graph TD
+  subgraph clients [Clients]
+    PWA["PWA / Web / Android (TWA later)"]
+    EXT["Extension / Bookmarklet"]
+  end
+  subgraph vps [YunoHost VPS - native, no Docker]
+    NGINX["nginx + SSOwat"]
+    BFF["Aggregator BFF (Node/Fastify)"]
+    GDB[("Glue Postgres")]
+    MF["MiniFlux (RSS)"]
+    RD["Readeck (read-later)"]
+    MFDB[("MiniFlux Postgres")]
+    RDDB[("Readeck Postgres")]
+  end
+  NL["Newsletter to RSS bridge"]
+  LLM["LLM: OpenAI / Ollama"]
+
+  PWA --> NGINX
+  EXT --> NGINX
+  NGINX -->|SSO web + token API| BFF
+  BFF --> GDB
+  BFF -->|RSS API| MF
+  BFF -->|read-later API| RD
+  MF --> MFDB
+  RD --> RDDB
+  NL -->|Atom feed| MF
+  BFF -.optional.-> LLM</pre>
+    <h3 id="components">Components</h3>
+    <ul>
+      <li><strong>PWA client</strong> — offline-first reading UI; local IndexedDB cache + client-side search; talks only to the BFF.</li>
+      <li><strong>Aggregator BFF</strong> — normalizes both backends into the unified model, owns cross-source state, runs sync/poll/email jobs, exposes one Reader-style API + a sync delta API.</li>
+      <li><strong>Glue Postgres</strong> — the only new datastore: unified location, unified tags + links, saved views, RSS-item progress + highlights, ingestion log, per-user backend tokens, sync cursors.</li>
+      <li><strong>MiniFlux / Readeck</strong> — unmodified catalog installs; the BFF holds each one's API token and calls them server-side.</li>
+    </ul>
+    <h3 id="source-of-truth">Source-of-truth ownership</h3>
+    <table class="data">
+      <thead><tr><th>State</th><th>Owner</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Feeds, RSS entries, read/unread, starred</td><td>MiniFlux</td><td>Native model; BFF reads + mutates via API.</td></tr>
+        <tr><td>Saved-article content + extraction</td><td>Readeck</td><td>Immutable stored HTML + images.</td></tr>
+        <tr><td>Saved-article progress + highlights</td><td>Readeck</td><td>Native writable API.</td></tr>
+        <tr><td>RSS-item progress + highlights</td><td>BFF</td><td>MiniFlux cannot store these.</td></tr>
+        <tr><td>Unified location / triage</td><td>BFF</td><td>Mirrors to MiniFlux read + Readeck read_status.</td></tr>
+        <tr><td>Unified tags, saved views, palette config</td><td>BFF</td><td>Mirror tags to Readeck labels for saved items.</td></tr>
+        <tr><td>Per-user backend API tokens</td><td>BFF</td><td>App settings + glue DB (masked).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tech-stack">Tech stack</h2>
+    <table class="data">
+      <thead><tr><th>Layer</th><th>Choice</th><th>Why</th><th>Alternative</th></tr></thead>
+      <tbody>
+        <tr><td>Client framework</td><td>SvelteKit</td><td>Lean bundles for mobile/e-ink, first-class service worker, great for keyboard-driven UIs.</td><td>Next.js/React (bigger ecosystem)</td></tr>
+        <tr><td>PWA / offline</td><td>vite-plugin-pwa (Workbox) + Web App Manifest + Web Share Target</td><td>Installable, offline app shell, Android share-sheet save without native code.</td><td>Capacitor (if deep native needed)</td></tr>
+        <tr><td>Local store</td><td>Dexie (IndexedDB)</td><td>Offline content + state cache, simple delta sync.</td><td>RxDB / PowerSync (heavier)</td></tr>
+        <tr><td>Client search</td><td>FlexSearch / MiniSearch</td><td>Offline full-text search over cached docs.</td><td>—</td></tr>
+        <tr><td>Reader rendering</td><td>DOMPurify + CSS-variable typography</td><td>Safe HTML reader, themes/fonts/width controls.</td><td>—</td></tr>
+        <tr><td>BFF runtime</td><td>Node 22 + TypeScript + Fastify</td><td>Shared types with the client, first-class YunoHost Node runtime, mature plugins.</td><td>Go + Hono (smaller binary, no shared types)</td></tr>
+        <tr><td>Contracts / validation</td><td>Zod + generated OpenAPI</td><td>End-to-end typed client/server, mirrors Reader API.</td><td>tRPC</td></tr>
+        <tr><td>DB access</td><td>Drizzle ORM</td><td>Lightweight TS migrations on Postgres.</td><td>Prisma</td></tr>
+        <tr><td>Glue database</td><td>PostgreSQL</td><td>One DB per app via YunoHost resource; shares the system Postgres server with the backends.</td><td>—</td></tr>
+        <tr><td>Background jobs</td><td>pg-boss (Postgres-backed)</td><td>Poll/sync/email jobs with no Redis dependency.</td><td>BullMQ + Redis</td></tr>
+        <tr><td>AI (optional)</td><td>OpenAI-compatible / Ollama</td><td>BYO key or fully local.</td><td>—</td></tr>
+        <tr><td>Packaging</td><td>YunoHost v2 (manifest.toml), native</td><td>Catalog-clean, SSO, automatic backup/restore.</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="callout note">
+      <div class="callout-title">The one swappable decision</div>
+      <div>The client framework is the most replaceable choice — SvelteKit and Next.js/React both deliver an offline-first PWA. Everything else (two Go backends, a TS BFF, Postgres, native YunoHost packaging) is load-bearing and chosen for operational simplicity on a single VPS.</div>
+    </div>
+
+    <h2 id="data-sync">Data model, sync &amp; offline</h2>
+    <p>The unified "card" the client renders, regardless of source:</p>
+    <pre class="code"><span class="lang">jsonc</span><button class="copy">Copy</button><code>{
+  "id": "rd_01HZ...",          // BFF-stable id
+  "source": "readeck",          // "miniflux" | "readeck"
+  "source_id": "abc123",        // id within the backend
+  "category": "article",        // article | rss | email | pdf
+  "location": "later",          // inbox | later | shortlist | archive | feed
+  "title": "…",
+  "author": "…",
+  "site_name": "…",
+  "url": "https://…",           // original source
+  "word_count": 1840,
+  "reading_time": "8 min",
+  "reading_progress": 0.42,     // 0..1  (Readeck native / BFF for RSS)
+  "read_anchor": "#p-37",       // Readeck-rendered articles only
+  "tags": ["ai", "longread"],   // unified (BFF)
+  "highlight_count": 3,
+  "saved_at": "2026-06-03T10:00:00Z",
+  "updated_at": "2026-06-03T12:30:00Z"
+}</code></pre>
+    <h3 id="sync-strategy">Sync &amp; conflict rules</h3>
+    <ul>
+      <li><strong>Pull (server→client):</strong> per-source delta cursors. MiniFlux <code>GET /v1/entries?changed_after=…</code> (+ <code>new_entries</code> webhook for push); Readeck list polling or its sync endpoint. The BFF folds both into one <code>updatedAfter</code> stream for the client.</li>
+      <li><strong>Push (client→server):</strong> client queues mutations (location, progress, tags, highlights) while offline; BFF applies them to the owning backend or glue DB on reconnect.</li>
+      <li><strong>Conflicts:</strong> last-write-wins per field, keyed by <code>updated_at</code>, scoped to the owning store from the source-of-truth table. No field has two writers, so conflicts are rare by construction.</li>
+      <li><strong>Offline:</strong> client precaches article HTML + metadata for Inbox/Later/Shortlist; full-text search runs locally; all reading and triage work offline and replay on reconnect.</li>
+    </ul>
+
+    <h2 id="auth-deploy">Auth &amp; YunoHost deployment</h2>
+    <p>All backends already ship official packaging-v2 YunoHost packages, so we install them as-is and package only the aggregator. Auth uses YunoHost's SSO for the web UI and an app-issued bearer token for the PWA/Android sync API — exactly the pattern MiniFlux/Readeck themselves use for their API paths.</p>
+    <ul>
+      <li><strong>Web UI</strong> behind the <code>main</code> permission (SSO); the BFF trusts the spoof-protected <code>Ynh-User</code> header for identity — no separate login screen.</li>
+      <li><strong>Sync API</strong> behind a separate <code>api</code> permission with <code>auth_header = false</code> and the BFF's own per-user bearer token, so SSO redirects never break mobile clients.</li>
+      <li><strong>Backend calls</strong> are server-side from the BFF using each backend's own API token (stored as masked app settings), never via SSO headers.</li>
+    </ul>
+    <pre class="code"><span class="lang">toml</span><button class="copy">Copy</button><code>packaging_format = 2
+id = "readaggregator"
+name = "Read Aggregator"
+description.en = "Self-hosted reader: RSS + saved articles in one inbox"
+version = "1.0.0~ynh1"
+maintainers = ["you"]
+
+[upstream]
+license = "AGPL-3.0-only"
+code = "https://github.com/you/readaggregator"
+
+[integration]
+yunohost = ">= 12.1.17"
+helpers_version = "2.1"
+architectures = "all"
+multi_instance = false
+ldap = true            # use YunoHost accounts
+sso = true             # auto-login web UI via Ynh-User header
+disk = "200M"
+ram.build = "512M"     # Vite build peak
+ram.runtime = "150M"
+
+[install]
+  [install.domain]
+  type = "domain"
+  [install.path]
+  type = "path"
+  default = "/reader"
+  [install.init_main_permission]
+  type = "group"
+  default = "all_users"
+  [install.admin]
+  type = "user"
+
+[resources]
+  [resources.sources.main]
+  url = "https://github.com/you/readaggregator/archive/refs/tags/v1.0.0.tar.gz"
+  sha256 = "PASTE_RELEASE_TARBALL_SHA256"
+  autoupdate.strategy = "latest_github_release"
+
+  [resources.system_user]
+  [resources.install_dir]
+  [resources.data_dir]
+  [resources.ports]            # internal $port for the systemd service
+
+  [resources.permissions]
+  main.url = "/"               # SSO-gated web UI
+  api.url = "/api"             # PWA/Android sync API
+  api.allowed = "visitors"     # token-authenticated by our app
+  api.auth_header = false      # do NOT inject SSO headers on /api
+  api.show_tile = false
+
+  [resources.apt]
+  packages = "postgresql"
+
+  [resources.database]
+  type = "postgresql"          # one DB+user -> $db_name/$db_user/$db_pwd
+
+  [resources.nodejs]
+  version = "22"               # sets $nodejs_dir / $path_with_nodejs
+
+# MiniFlux + Readeck are SEPARATE installed apps; this app calls their HTTP
+# APIs server-side using tokens stored via ynh_app_setting_set.</code></pre>
+    <div class="callout info">
+      <div class="callout-title">Install order on the VPS</div>
+      <div><code>yunohost app install miniflux</code> → <code>yunohost app install readeck</code> → create an API token in each → <code>yunohost app install https://github.com/you/readaggregator_ynh</code> and supply the two tokens (config panel or install question). The aggregator runs as a hardened systemd unit on an internal port, reverse-proxied by nginx. Start every package from the official <code>example_ynh</code> template; the YunoHost team rejects packages that drift from its conventions.</div>
+    </div>
+
+    <h2 id="roadmap">Phased roadmap</h2>
+    <table class="data">
+      <thead><tr><th>Phase</th><th>Deliverables</th><th>Priority</th></tr></thead>
+      <tbody>
+        <tr><td>0 — Foundation</td><td>Install MiniFlux + Readeck on YunoHost; validate both APIs end-to-end with real tokens; confirm tokens pass through the reverse proxy; sanity-check Readeck extraction on your real sources.</td><td><span class="badge p0">P0</span></td></tr>
+        <tr><td>1 — MVP</td><td>BFF + unified card model + glue DB; SvelteKit PWA; Feed (RSS list, mark-read, full content) + Library (saved via Readeck); save via bookmarklet + Web Share Target; triage Inbox/Later/Archive; reading view (typography, themes, original toggle); reading-progress sync; offline cache + client search; unified tags; basic saved views; keyboard shortcuts. Package as the YunoHost app with SSO.</td><td><span class="badge p1">P1</span></td></tr>
+        <tr><td>2 — Parity</td><td>Highlights + notes (Readeck + BFF for RSS); full saved-view query language; newsletter→RSS bridge; browser extension; bulk actions; OPML import UI; share links; webhook-driven near-real-time sync.</td><td><span class="badge p2">P2</span></td></tr>
+        <tr><td>3 — Enhancements</td><td>Ghostreader-equivalent AI (summaries, chat, auto-tag) via OpenAI/Ollama; TTS (browser + optional Piper); PDF reading + annotation.</td><td><span class="badge p2">P2</span></td></tr>
+        <tr><td>4 — Deferred follow-ups</td><td><strong>EPUB</strong>: OPDS client against your personal Calibre-Web/Kavita/Komga + a KOReader <strong>kosync</strong> server for cross-device position. Native Android wrapper (TWA via Bubblewrap, or Capacitor) for Play Store distribution.</td><td><span class="badge p3">Later</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="risks">Key risks &amp; open decisions</h2>
+    <ul class="checklist">
+      <li><label><input type="checkbox"> <strong>Extraction quality</strong>: validate Readeck's go-readability on your real, paywalled, JS-heavy sources before committing; keep Wallabag as a swap and an "open original" fallback.</label></li>
+      <li><label><input type="checkbox"> <strong>RSS-item state</strong>: confirm the glue-DB design for RSS progress/highlights/tags (MiniFlux stores none of these) holds up at your feed volume.</label></li>
+      <li><label><input type="checkbox"> <strong>Highlight anchoring</strong>: decide whether the reader renders Readeck's article HTML directly (cheapest path to make <code>read_anchor</code> + highlights "just work") or re-renders content (then you own anchor/range mapping).</label></li>
+      <li><label><input type="checkbox"> <strong>Newsletter ingestion</strong>: pick the bridge approach (newsletter→Atom→MiniFlux) vs parsing the app mailbox; the bridge is simpler and offloads parsing.</label></li>
+      <li><label><input type="checkbox"> <strong>Single vs multi-user</strong>: start single-tenant (one set of backend tokens); multi-user needs per-user tokens + provisioning flow.</label></li>
+      <li><label><input type="checkbox"> <strong>License hygiene</strong>: Readeck is AGPL-3.0; talking to it over HTTP keeps your app a separate program, but do not bundle/modify its code without accepting AGPL obligations.</label></li>
+      <li><label><input type="checkbox"> <strong>Python BFF caveat</strong>: if you prefer FastAPI over Node, note YunoHost has no Python-runtime resource — you provision venv via apt + systemd manually (works, but the Node/Go paths are first-class).</label></li>
+    </ul>
+
+    <h2 id="sources">References</h2>
+    <p>Primary sources backing this plan (all verified during research).</p>
+    <details class="section">
+      <summary>Readwise Reader</summary>
+      <ul>
+        <li><a href="https://readwise.io/reader_api">Reader API reference</a> · <a href="https://readwise.io/read">Product page</a> · <a href="https://docs.readwise.io/reader/docs">Docs home</a></li>
+        <li><a href="https://docs.readwise.io/reader/guides/workflows/library-configuration">Library configurations</a> · <a href="https://docs.readwise.io/reader/guides/filtering/syntax-guide">Filter syntax</a> · <a href="https://docs.readwise.io/reader/docs/faqs/highlights-tags-notes">Highlights/tags/notes</a> · <a href="https://docs.readwise.io/reader/docs/faqs/feed">Feed</a> · <a href="https://docs.readwise.io/reader/docs/faqs/email-newsletters">Email newsletters</a></li>
+      </ul>
+    </details>
+    <details class="section">
+      <summary>MiniFlux</summary>
+      <ul>
+        <li><a href="https://miniflux.app/docs/api.html">REST API reference</a> · <a href="https://miniflux.app/features.html">Features/integrations</a> · <a href="https://miniflux.app/docs/rules.html">Scraper/rewrite rules</a> · <a href="https://miniflux.app/docs/webhooks.html">Webhooks</a> · <a href="https://github.com/miniflux/v2">Source (v2)</a></li>
+      </ul>
+    </details>
+    <details class="section">
+      <summary>Read-later backends</summary>
+      <ul>
+        <li>Readeck: <a href="https://readeck.org/en/docs/">docs</a> · <a href="https://codeberg.org/readeck/readeck">source</a> · API spec under <code>docs/api/</code> (bookmark <code>read_progress</code>/<code>read_anchor</code>, highlights, sync)</li>
+        <li>Wallabag: <a href="https://doc.wallabag.org/developer/api/methods/">API methods</a> · <a href="https://doc.wallabag.org/user/articles/annotations/">annotations</a> · Karakeep: <a href="https://docs.karakeep.app/">docs</a></li>
+      </ul>
+    </details>
+    <details class="section">
+      <summary>YunoHost packaging</summary>
+      <ul>
+        <li><a href="https://doc.yunohost.org/en/packaging_manifest/">manifest.toml schema</a> · <a href="https://doc.yunohost.org/en/dev/packaging/resources/">resources reference</a> · <a href="https://doc.yunohost.org/en/dev/packaging/advanced/sso_ldap_integration/">SSO/LDAP integration</a> · <a href="https://github.com/YunoHost/example_ynh">example_ynh template</a></li>
+        <li>Backend packages: <a href="https://github.com/YunoHost-Apps/miniflux_ynh">miniflux_ynh</a> · <a href="https://github.com/YunoHost-Apps/readeck_ynh">readeck_ynh</a> · <a href="https://github.com/YunoHost-Apps/wallabag2_ynh">wallabag2_ynh</a></li>
+      </ul>
+    </details>
+  </main>
+</div>
+
+<div class="modal-overlay" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="reviewTitle">Feedback review</h2>
+      <button class="btn" data-action="closeReview">Close</button>
+    </div>
+    <div class="modal-body">
+      <div id="reviewList"></div>
+      <details class="section" style="margin-top:14px">
+        <summary>Prompt preview</summary>
+        <pre class="preview" id="reviewPreview"></pre>
+      </details>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" data-action="copyPrompt">Copy as Claude prompt</button>
+      <button class="btn" data-action="copyJson">Copy JSON</button>
+      <button class="btn" data-action="clearAll">Clear all</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Theme: cycles auto -> light -> dark -> auto. Persists in localStorage.
+  (function () {
+    const root = document.documentElement;
+    const saved = localStorage.getItem("cc-theme");
+    if (saved) root.dataset.theme = saved;
+    document.querySelector('[data-action="theme"]').addEventListener("click", () => {
+      const order = ["auto", "light", "dark"];
+      const next = order[(order.indexOf(root.dataset.theme) + 1) % order.length];
+      root.dataset.theme = next;
+      localStorage.setItem("cc-theme", next);
+    });
+    document.querySelector('[data-action="print"]').addEventListener("click", () => window.print());
+  })();
+
+  // TOC: build from h2/h3 with ids.
+  (function () {
+    const toc = document.getElementById("toc");
+    if (!toc) return;
+    const headings = document.querySelectorAll("main h2[id], main h3[id]");
+    headings.forEach(h => {
+      const li = document.createElement("li");
+      li.className = h.tagName.toLowerCase();
+      const a = document.createElement("a");
+      a.href = "#" + h.id;
+      a.textContent = h.textContent;
+      li.appendChild(a);
+      toc.appendChild(li);
+    });
+    // Scrollspy
+    const links = new Map();
+    toc.querySelectorAll("a").forEach(a => links.set(a.getAttribute("href").slice(1), a));
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        const a = links.get(e.target.id);
+        if (!a) return;
+        if (e.isIntersecting) {
+          toc.querySelectorAll("a.active").forEach(x => x.classList.remove("active"));
+          a.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-72px 0px -70% 0px" });
+    headings.forEach(h => io.observe(h));
+  })();
+
+  // Copy buttons on code blocks.
+  document.querySelectorAll("pre.code .copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const code = btn.parentElement.querySelector("code");
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Err"; }
+    });
+  });
+
+  // Checklist: toggle .done class on parent <li> for strikethrough.
+  document.querySelectorAll("ul.checklist input[type=checkbox]").forEach(cb => {
+    const sync = () => cb.closest("li").classList.toggle("done", cb.checked);
+    cb.addEventListener("change", sync); sync();
+  });
+
+  // Per-section feedback + review modal.
+  (function () {
+    const main = document.getElementById("content");
+    if (!main) return;
+    const reviewBtn = document.querySelector('[data-action="review"]');
+    const modal = document.getElementById("reviewModal");
+    const reviewList = document.getElementById("reviewList");
+    const preview = document.getElementById("reviewPreview");
+    if (!reviewBtn || !modal) return;
+
+    const keyOf = id => `cc-fb:${location.pathname}:${id}`;
+    const load = id => { try { return JSON.parse(localStorage.getItem(keyOf(id)) || "[]"); } catch { return []; } };
+    const save = (id, items) => localStorage.setItem(keyOf(id), JSON.stringify(items));
+
+    function extractNode(node) {
+      if (!node || node.nodeType !== 1) return "";
+      const cl = node.classList || { contains: () => false };
+      if (cl.contains("feedback-block") || cl.contains("fb-toggle") ||
+          cl.contains("fb-form") || cl.contains("fb-list")) return "";
+
+      const tag = node.tagName;
+      const txt = s => (s || "").replace(/\s+/g, " ").trim();
+
+      if (tag === "H3") return `### ${node.textContent.trim()}`;
+      if (tag === "H4") return `#### ${node.textContent.trim()}`;
+      if (tag === "P")  return node.textContent.trim();
+
+      if (tag === "UL" && cl.contains("checklist")) {
+        return [...node.children].map(li => {
+          const cb = li.querySelector('input[type="checkbox"]');
+          const label = li.querySelector("label");
+          const t = txt(label ? label.textContent : li.textContent);
+          return `- [${cb && cb.checked ? "x" : " "}] ${t}`;
+        }).join("\n");
+      }
+      if (tag === "UL") return [...node.children].map(li => `- ${txt(li.textContent)}`).join("\n");
+      if (tag === "OL") return [...node.children].map((li, i) => `${i + 1}. ${txt(li.textContent)}`).join("\n");
+
+      if (tag === "TABLE" && cl.contains("data")) {
+        const headers = [...node.querySelectorAll("thead th")].map(th => txt(th.textContent));
+        const rows = [...node.querySelectorAll("tbody tr")].map(tr =>
+          [...tr.children].map(td => txt(td.textContent).replace(/\|/g, "\\|")).join(" | ")
+        );
+        if (!headers.length) return rows.join("\n");
+        return [headers.join(" | "), headers.map(() => "---").join(" | "), ...rows].join("\n");
+      }
+
+      if (tag === "PRE" && cl.contains("code")) {
+        const codeEl = node.querySelector("code");
+        if (cl.contains("diff")) {
+          const lines = [...(codeEl ? codeEl.children : [])].map(span => {
+            const sign = span.classList.contains("add") ? "+ "
+                       : span.classList.contains("del") ? "- " : "  ";
+            return sign + (span.textContent || "").replace(/\n+$/, "");
+          });
+          return "```diff\n" + lines.join("\n") + "\n```";
+        }
+        const langEl = node.querySelector(".lang");
+        const lang = langEl ? langEl.textContent.trim() : "";
+        const raw = codeEl ? codeEl.textContent : "";
+        return "```" + lang + "\n" + raw.replace(/\n+$/, "") + "\n```";
+      }
+
+      if (tag === "DIV" && cl.contains("callout")) {
+        const titleEl = node.querySelector(".callout-title");
+        const title = titleEl ? titleEl.textContent.trim() : "";
+        const clone = node.cloneNode(true);
+        const t2 = clone.querySelector(".callout-title");
+        if (t2) t2.remove();
+        const body = txt(clone.textContent);
+        const variant = ["info", "warn", "error", "success", "note"].find(v => cl.contains(v)) || "note";
+        return `> [${variant}${title ? ": " + title : ""}] ${body}`;
+      }
+
+      if (tag === "DETAILS") {
+        const sum = node.querySelector("summary");
+        const sumTxt = sum ? sum.textContent.trim() : "details";
+        if (!node.open) return `> (collapsed: ${sumTxt})`;
+        const inner = [...node.children]
+          .filter(c => c.tagName !== "SUMMARY")
+          .map(extractNode).filter(Boolean).join("\n\n");
+        return `**${sumTxt}**\n${inner}`;
+      }
+
+      return txt(node.textContent);
+    }
+
+    function sectionText(h) {
+      let node = h.nextElementSibling;
+      const parts = [];
+      while (node && node.tagName !== "H2") {
+        const t = extractNode(node);
+        if (t) parts.push(t);
+        node = node.nextElementSibling;
+      }
+      return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    function allFeedback() {
+      return [...main.querySelectorAll("h2[id]")]
+        .map(h => ({ id: h.id, title: h.textContent.trim(), context: sectionText(h), items: load(h.id) }))
+        .filter(s => s.items.length);
+    }
+
+    function updateCount() {
+      const n = allFeedback().reduce((a, s) => a + s.items.length, 0);
+      reviewBtn.dataset.count = String(n);
+      reviewBtn.querySelector(".count").textContent = n;
+    }
+
+    function renderList(block, id) {
+      const items = load(id);
+      const list = block.querySelector(".fb-list");
+      list.innerHTML = "";
+      items.forEach((it, idx) => {
+        const li = document.createElement("li");
+        li.className = "fb-item";
+        const meta = document.createElement("div"); meta.className = "fb-meta";
+        meta.textContent = new Date(it.at).toLocaleString();
+        const body = document.createElement("div"); body.className = "fb-body";
+        body.textContent = it.text;
+        const del = document.createElement("button"); del.className = "fb-del";
+        del.textContent = "×"; del.title = "Delete";
+        del.addEventListener("click", () => {
+          const cur = load(id); cur.splice(idx, 1); save(id, cur);
+          renderList(block, id); updateCount();
+        });
+        li.append(meta, body, del);
+        list.appendChild(li);
+      });
+    }
+
+    function buildPrompt() {
+      const sections = allFeedback();
+      if (!sections.length) return "";
+      const path = decodeURIComponent(location.pathname);
+      const title = (document.querySelector("main h1")?.textContent || document.title).trim();
+      const out = [
+        `Refine the HTML report at: ${path}`,
+        ``,
+        `Title: ${title}`,
+        ``,
+        `Apply the feedback below section-by-section. Edit the file in place. Preserve the template structure (callouts, code/diff blocks, tables, badges, TOC ids). Do not introduce new dependencies.`,
+        ``
+      ];
+      sections.forEach(s => {
+        const ctx = s.context.length > 1500 ? s.context.slice(0, 1500).trimEnd() + " …" : s.context;
+        out.push(`## Section: ${s.title}  (anchor: #${s.id})`);
+        out.push("");
+        out.push("Current content (excerpt):");
+        out.push('"""');
+        out.push(ctx);
+        out.push('"""');
+        out.push("");
+        out.push("Feedback:");
+        s.items.forEach(it => out.push(`- ${it.text}`));
+        out.push("");
+        out.push("---");
+        out.push("");
+      });
+      return out.join("\n");
+    }
+
+    function renderReview() {
+      const sections = allFeedback();
+      reviewList.innerHTML = "";
+      if (!sections.length) {
+        const p = document.createElement("p");
+        p.style.color = "var(--muted)";
+        p.textContent = 'No feedback yet. Use the "+ Feedback" button below any section.';
+        reviewList.appendChild(p);
+      } else {
+        sections.forEach(s => {
+          const g = document.createElement("div"); g.className = "review-group";
+          const h = document.createElement("h3"); h.textContent = s.title;
+          g.appendChild(h);
+          s.items.forEach(it => {
+            const item = document.createElement("div"); item.className = "fb-item";
+            const meta = document.createElement("div"); meta.className = "fb-meta";
+            meta.textContent = new Date(it.at).toLocaleString();
+            const body = document.createElement("div"); body.className = "fb-body";
+            body.textContent = it.text;
+            item.append(meta, body);
+            g.appendChild(item);
+          });
+          reviewList.appendChild(g);
+        });
+      }
+      preview.textContent = buildPrompt() || "(no feedback)";
+    }
+
+    const headings = [...main.querySelectorAll("h2[id]")];
+    headings.forEach((h, i) => {
+      const next = headings[i + 1] || null;
+      const block = document.createElement("div");
+      block.className = "feedback-block";
+      block.dataset.section = h.id;
+
+      const toggle = document.createElement("button");
+      toggle.className = "btn fb-toggle"; toggle.textContent = "+ Feedback";
+
+      const form = document.createElement("div"); form.className = "fb-form"; form.hidden = true;
+      const ta = document.createElement("textarea"); ta.className = "fb-text";
+      ta.placeholder = `Feedback for "${h.textContent.trim()}"...`;
+      const actions = document.createElement("div"); actions.className = "fb-actions";
+      const saveBtn = document.createElement("button"); saveBtn.className = "btn fb-save"; saveBtn.textContent = "Save";
+      const cancelBtn = document.createElement("button"); cancelBtn.className = "btn fb-cancel"; cancelBtn.textContent = "Cancel";
+      const hint = document.createElement("span"); hint.className = "fb-status";
+      hint.textContent = "Stored in this browser. Use Review to export.";
+      actions.append(saveBtn, cancelBtn, hint);
+      form.append(ta, actions);
+
+      const list = document.createElement("ul"); list.className = "fb-list";
+
+      block.append(toggle, form, list);
+      if (next) main.insertBefore(block, next);
+      else main.appendChild(block);
+
+      toggle.addEventListener("click", () => {
+        form.hidden = !form.hidden;
+        if (!form.hidden) ta.focus();
+      });
+      cancelBtn.addEventListener("click", () => { form.hidden = true; ta.value = ""; });
+      saveBtn.addEventListener("click", () => {
+        const text = ta.value.trim(); if (!text) return;
+        const items = load(h.id);
+        items.push({ text, at: new Date().toISOString() });
+        save(h.id, items);
+        ta.value = ""; form.hidden = true;
+        renderList(block, h.id); updateCount();
+      });
+      ta.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+        if (e.key === "Escape") { cancelBtn.click(); }
+      });
+
+      renderList(block, h.id);
+    });
+    updateCount();
+
+    reviewBtn.addEventListener("click", () => { renderReview(); modal.classList.add("open"); });
+    modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("open"); });
+    document.querySelector('[data-action="closeReview"]').addEventListener("click", () => modal.classList.remove("open"));
+    document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
+
+    async function copyAnd(btn, text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = btn.textContent; btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 1200);
+      } catch { btn.textContent = "Copy failed"; }
+    }
+    document.querySelector('[data-action="copyPrompt"]').addEventListener("click", e => {
+      const t = buildPrompt(); if (t) copyAnd(e.currentTarget, t);
+    });
+    document.querySelector('[data-action="copyJson"]').addEventListener("click", e => {
+      copyAnd(e.currentTarget, JSON.stringify(allFeedback(), null, 2));
+    });
+    document.querySelector('[data-action="clearAll"]').addEventListener("click", () => {
+      if (!confirm("Clear all feedback for this report?")) return;
+      [...main.querySelectorAll("h2[id]")].forEach(h => localStorage.removeItem(keyOf(h.id)));
+      main.querySelectorAll(".feedback-block").forEach(b => renderList(b, b.dataset.section));
+      renderReview(); updateCount();
+    });
+
+  })();
+</script>
+</body>
+</html>
