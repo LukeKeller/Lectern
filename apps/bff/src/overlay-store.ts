@@ -18,12 +18,13 @@ import type {
   Location,
   NewHighlight,
   SavedView,
+  SearchResult,
   Source,
   Tag,
   UpdateViewRequest,
 } from "@lectern/shared";
 import type { Db } from "./db/client";
-import { documents, rssHighlights, savedViews } from "./db/schema";
+import { documentContent, documents, rssHighlights, savedViews } from "./db/schema";
 import type { DocumentRow, NewDocumentRow } from "./db/schema";
 import { parseId } from "./ids";
 import {
@@ -204,6 +205,49 @@ export class DrizzleOverlayStore implements OverlayStore {
         .where(inArray(documents.id, missing.slice(i, i + 500)));
     }
     return missing.length;
+  }
+
+  async getContent(id: string): Promise<{ html: string } | null> {
+    const [row] = await this.db
+      .select({ html: documentContent.html })
+      .from(documentContent)
+      .where(eq(documentContent.documentId, id));
+    return row ? { html: row.html } : null;
+  }
+
+  async putContent(id: string, html: string): Promise<void> {
+    if (!html.trim()) return;
+    const charCount = html
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim().length;
+    await this.db
+      .insert(documentContent)
+      .values({ documentId: id, html, charCount })
+      .onConflictDoUpdate({
+        target: documentContent.documentId,
+        set: { html, charCount, fetchedAt: new Date() },
+      });
+  }
+
+  async searchContent(q: string, limit: number): Promise<SearchResult[]> {
+    // websearch_to_tsquery gives users quoted phrases / OR / -negation and never
+    // throws on junk input (returns an empty query -> no rows). Rank blends a
+    // weight-A title vector with the weight-B body. Snippets are tag-stripped and
+    // delimited with «» sentinels (rendered as text, never injected as HTML).
+    const rows = (await this.db.execute(dsql`
+      select d.id as id,
+        ts_headline('english', regexp_replace(left(c.html, 200000), '<[^>]+>', ' ', 'g'), query,
+          'StartSel=«,StopSel=»,MaxFragments=2,MaxWords=18,MinWords=5,FragmentDelimiter= … ') as snippet,
+        ts_rank(setweight(to_tsvector('english', coalesce(d.title, '')), 'A') || setweight(c.body_tsv, 'B'), query) as rank
+      from document_content c
+        join documents d on d.id = c.document_id,
+        websearch_to_tsquery('english', ${q}) query
+      where d.deleted_at is null and c.body_tsv @@ query
+      order by rank desc, d.updated_at desc nulls last
+      limit ${limit}
+    `)) as unknown as Array<{ id: string; snippet: string; rank: number }>;
+    return rows.map((r) => ({ id: r.id, snippet: r.snippet, rank: Number(r.rank) }));
   }
 
   async upsertOverlay(id: string, patch: OverlayPatch): Promise<void> {

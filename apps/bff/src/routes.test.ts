@@ -10,6 +10,7 @@ import {
   type NewHighlight,
   type ReadLaterBackend,
   type RssBackend,
+  type SearchResult,
   type Source,
   type SavedView,
   type Tag,
@@ -243,6 +244,26 @@ class FakeOverlayStore implements OverlayStore {
       }
     }
     return n;
+  }
+
+  contents = new Map<string, string>();
+  async getContent(id: string): Promise<{ html: string } | null> {
+    const html = this.contents.get(id);
+    return html === undefined ? null : { html };
+  }
+  async putContent(id: string, html: string): Promise<void> {
+    if (html.trim()) this.contents.set(id, html);
+  }
+  async searchContent(q: string, limit: number): Promise<SearchResult[]> {
+    const needle = q.toLowerCase();
+    const hits: SearchResult[] = [];
+    for (const [id, html] of this.contents) {
+      if (this.deleted.has(id)) continue;
+      const text = html.replace(/<[^>]+>/g, " ");
+      const at = text.toLowerCase().indexOf(needle);
+      if (at >= 0) hits.push({ id, snippet: text.slice(at, at + 60).trim(), rank: 1 });
+    }
+    return hits.slice(0, limit);
   }
 
   async getOverlays(ids: string[]): Promise<Record<string, Overlay>> {
@@ -494,6 +515,49 @@ describe("documents", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().id).toBe("miniflux:5");
+    await a.close();
+  });
+
+  it("captures article content on first read and serves the owned copy after", async () => {
+    harness.deps.readLater.content.set("b1", "<article>hello world body</article>");
+    const a = app();
+    const first = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(first.json().html).toContain("hello world");
+    // Backend changes; we keep serving the captured copy (ownership / resilience).
+    harness.deps.readLater.content.set("b1", "<article>CHANGED</article>");
+    const second = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(second.json().html).toContain("hello world");
+    expect(second.json().html).not.toContain("CHANGED");
+    await a.close();
+  });
+
+  it("full-text searches owned article bodies", async () => {
+    harness.deps.readLater.content.set("b1", "<article>the quick brown fox jumps</article>");
+    const a = app();
+    // Capture the body via the content endpoint, then search it.
+    await a.inject({ method: "GET", url: "/api/v1/documents/readeck:b1/content", headers: auth });
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/search?q=brown%20fox",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json().results as { id: string }[]).map((r) => r.id)).toContain("readeck:b1");
+    // A miss returns no rows.
+    const miss = await a.inject({
+      method: "GET",
+      url: "/api/v1/search?q=nonexistentzzz",
+      headers: auth,
+    });
+    expect(miss.json().results).toHaveLength(0);
     await a.close();
   });
 

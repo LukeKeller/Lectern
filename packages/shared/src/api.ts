@@ -55,6 +55,19 @@ export type UpdateDocumentRequest = z.infer<typeof UpdateDocumentRequest>;
 export const DocumentContentResponse = z.object({ id: z.string(), html: z.string() });
 export type DocumentContentResponse = z.infer<typeof DocumentContentResponse>;
 
+export const SearchQuery = z.object({
+  q: z.string().min(1),
+  limit: z.number().int().min(1).max(50).default(20),
+});
+export type SearchQuery = z.infer<typeof SearchQuery>;
+
+/** A full-text hit: the document id, a plain-text snippet, and a relevance rank. */
+export const SearchResult = z.object({ id: z.string(), snippet: z.string(), rank: z.number() });
+export type SearchResult = z.infer<typeof SearchResult>;
+
+export const SearchResponse = z.object({ results: z.array(SearchResult) });
+export type SearchResponse = z.infer<typeof SearchResponse>;
+
 export const CreateHighlightRequest = z.object({
   text: z.string(),
   color: HighlightColor.default("yellow"),
@@ -144,6 +157,16 @@ export const endpoints: Endpoint[] = [
     tags: ["documents"],
     query: ListDocumentsQuery,
     response: ListDocumentsResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/search",
+    operationId: "search",
+    summary: "Full-text search over owned article bodies",
+    tags: ["documents"],
+    query: SearchQuery,
+    response: SearchResponse,
     status: 200,
   },
   {

@@ -16,6 +16,8 @@ import {
   ListDocumentsResponse,
   SaveDocumentRequest,
   SavedView,
+  SearchQuery,
+  SearchResponse,
   SubscribeFeedRequest,
   SyncPullQuery,
   SyncPullResponse,
@@ -134,11 +136,26 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get<{ Params: { id: string } }>("/documents/:id/content", async (req) => {
     const { id } = req.params;
     const parsed = requireParsed(id);
+    // DB-first: serve our captured copy if we have it (fast, offline-able,
+    // survives backend loss). On a miss, fetch from the extractor once and own it.
+    const stored = await deps.overlay.getContent(id);
+    if (stored) return DocumentContentResponse.parse({ id, html: stored.html });
     const html =
       parsed.source === "readeck"
         ? await deps.readLater.getContent(parsed.sourceId)
         : await deps.rss.getEntryContent(parsed.sourceId);
+    await deps.overlay.putContent(id, html);
     return DocumentContentResponse.parse({ id, html });
+  });
+
+  app.get("/search", async (req) => {
+    const raw = req.query as Record<string, unknown>;
+    const q = SearchQuery.parse({
+      q: raw.q,
+      limit: raw.limit !== undefined ? Number(raw.limit) : undefined,
+    });
+    const results = await deps.overlay.searchContent(q.q, q.limit);
+    return SearchResponse.parse({ results });
   });
 
   // ---- highlights ---------------------------------------------------------

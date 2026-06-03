@@ -48,6 +48,19 @@ export const documents = pgTable(
   (t) => [unique("documents_source_source_id_key").on(t.source, t.sourceId)],
 );
 
+/**
+ * Owned article full text (one row per captured document). Lives apart from the
+ * `documents` index so list/sync never load bodies. `body_tsv` is a generated
+ * STORED tsvector (see migration 0002) for full-text search; it is not modeled
+ * here because it must never appear in inserts.
+ */
+export const documentContent = pgTable("document_content", {
+  documentId: text("document_id").primaryKey(),
+  html: text("html").notNull(),
+  charCount: integer("char_count").notNull().default(0),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** RSS highlights (BFF-owned; MiniFlux has no highlight API). Mirrors `Highlight`. */
 export const rssHighlights = pgTable("rss_highlights", {
   id: text("id").primaryKey(),
@@ -106,3 +119,5 @@ export type DocumentRow = typeof documents.$inferSelect;
 export type NewDocumentRow = typeof documents.$inferInsert;
 export type RssHighlightRow = typeof rssHighlights.$inferSelect;
 export type NewRssHighlightRow = typeof rssHighlights.$inferInsert;
+export type DocumentContentRow = typeof documentContent.$inferSelect;
+export type NewDocumentContentRow = typeof documentContent.$inferInsert;

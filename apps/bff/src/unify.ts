@@ -10,6 +10,7 @@ import type {
   ReadState,
   RssBackend,
   SavedView,
+  SearchResult,
   Source,
   Tag,
   UpdateViewRequest,
@@ -196,6 +197,14 @@ export interface OverlayStore {
    * `presentIds` — the backend no longer has them. Returns how many were marked.
    */
   softDeleteMissing(source: Source, presentIds: Set<string>): Promise<number>;
+
+  // --- owned article content + full-text search ---
+  /** Stored article HTML for a document, or null if we haven't captured it yet. */
+  getContent(id: string): Promise<{ html: string } | null>;
+  /** Store/refresh the captured article HTML (no-op for empty html). */
+  putContent(id: string, html: string): Promise<void>;
+  /** Full-text search over owned bodies (live docs only), ranked, with snippets. */
+  searchContent(q: string, limit: number): Promise<SearchResult[]>;
 
   // --- overlay writes ---
   upsertOverlay(id: string, patch: OverlayPatch): Promise<void>;

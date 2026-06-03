@@ -21,6 +21,7 @@ const QUEUE = {
   pollReadeck: "poll-readeck",
   reconcile: "orphan-reconcile",
   reconcileDeletions: "reconcile-deletions",
+  backfillContent: "backfill-content",
 } as const;
 
 const POLL_PAGE_SIZE = 100;
@@ -155,6 +156,37 @@ export async function reconcileDeletions(): Promise<number> {
 }
 
 /**
+ * Capture article HTML into our own store for Readeck saves that lack it, so the
+ * library owns full text (offline, fast, survives backend loss) and full-text
+ * search has bodies to match. Bounded per run; only Readeck (the curated saves)
+ * — feed bodies are captured lazily on read, never mass-fetched. Per-item
+ * failures are skipped.
+ */
+export async function backfillReadeckContent(batch = 150): Promise<number> {
+  const { readLater, store } = backends();
+  const rows = (await db.execute(dsql`
+    select d.id as id, d.source_id as source_id
+    from documents d
+    left join document_content c on c.document_id = d.id
+    where d.source = 'readeck' and d.deleted_at is null and c.document_id is null
+    limit ${batch}
+  `)) as unknown as Array<{ id: string; source_id: string }>;
+  let stored = 0;
+  const conc = 4;
+  for (let i = 0; i < rows.length; i += conc) {
+    await Promise.allSettled(
+      rows.slice(i, i + conc).map(async (r) => {
+        const html = await readLater.getContent(r.source_id);
+        await store.putContent(r.id, html);
+        stored += 1;
+      }),
+    );
+  }
+  await logIngestion("readeck", "backfill-content", "ok", `stored ${stored} of ${rows.length}`);
+  return stored;
+}
+
+/**
  * Start the pg-boss instance, register workers, and schedule the poll +
  * reconcile jobs. Idempotent registration via `createQueue`. Returns the boss
  * so callers can inspect/stop it.
@@ -177,11 +209,15 @@ export async function startJobs(): Promise<PgBoss> {
   await instance.work(QUEUE.reconcileDeletions, async () => {
     await reconcileDeletions();
   });
+  await instance.work(QUEUE.backfillContent, async () => {
+    await backfillReadeckContent();
+  });
 
   await instance.schedule(QUEUE.pollMiniflux, "*/5 * * * *");
   await instance.schedule(QUEUE.pollReadeck, "*/5 * * * *");
   await instance.schedule(QUEUE.reconcile, "0 * * * *");
   await instance.schedule(QUEUE.reconcileDeletions, "*/15 * * * *");
+  await instance.schedule(QUEUE.backfillContent, "*/10 * * * *");
 
   boss = instance;
   return instance;

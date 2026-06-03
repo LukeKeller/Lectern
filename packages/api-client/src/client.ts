@@ -17,6 +17,7 @@ import {
   ListDocumentsResponse,
   SavedView,
   SaveDocumentRequest,
+  SearchResponse,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
@@ -108,6 +109,10 @@ export class LecternClient {
   }
   getContent(id: string) {
     return this.request("GET", `/documents/${id}/content`, { schema: DocumentContentResponse });
+  }
+  /** Full-text search over owned article bodies (server-side; online only). */
+  search(q: string, limit = 20) {
+    return this.request("GET", "/search", { query: { q, limit }, schema: SearchResponse });
   }
   listHighlights(id: string) {
     return this.request("GET", `/documents/${id}/highlights`, { schema: HighlightsResponse });
