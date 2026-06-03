@@ -161,11 +161,9 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // ---- highlights ---------------------------------------------------------
   app.get<{ Params: { id: string } }>("/documents/:id/highlights", async (req) => {
     const { id } = req.params;
-    const parsed = requireParsed(id);
-    const highlights =
-      parsed.source === "readeck"
-        ? await deps.readLater.listHighlights(parsed.sourceId)
-        : await deps.overlay.listRssHighlights(id);
+    requireParsed(id);
+    // Glue-owned for all sources (see applyAddHighlight).
+    const highlights = await deps.overlay.listRssHighlights(id);
     return HighlightsResponse.parse({ highlights });
   });
 

@@ -9,7 +9,8 @@
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
-	import type { Location } from '@lectern/shared';
+	import type { Location, Highlight, NewHighlight } from '@lectern/shared';
+	import { serializeRange, renderHighlights } from '$lib/highlight';
 	import { liveCards } from '$lib/live.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { readerCssVars, type FontFamily, type ThemeMode } from '$lib/typography';
@@ -45,6 +46,12 @@
 	let panelOpen = $state(loadBool('lectern.reader.panel', true));
 	let headings = $state<{ id: string; text: string; level: number }[]>([]);
 	let activeHeading = $state('');
+	let highlights = $state<Highlight[]>([]);
+	let panelTab = $state<'info' | 'notebook'>('info');
+	let selRect = $state<{ x: number; y: number } | null>(null);
+	let pendingHighlight: NewHighlight | null = null;
+	let noteDraft = $state('');
+	let noteReady = false;
 	$effect(() => {
 		if (typeof localStorage === 'undefined') return;
 		localStorage.setItem('lectern.reader.toc', tocOpen ? '1' : '0');
@@ -209,6 +216,15 @@
 		} else if (e.key === ']') {
 			panelOpen = !panelOpen;
 			e.preventDefault();
+		} else if ((e.key === 'h' || e.key === 'H') && articleEl && blocks[focusIndex]) {
+			// Highlight the focused paragraph.
+			const r = document.createRange();
+			r.selectNodeContents(blocks[focusIndex]);
+			const nh = serializeRange(articleEl, r);
+			if (nh) {
+				e.preventDefault();
+				void addHighlight(nh);
+			}
 		}
 	}
 
@@ -240,6 +256,68 @@
 		e.preventDefault();
 		document.getElementById(hid)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 	}
+
+	async function addHighlight(nh: NewHighlight) {
+		if (!id || !articleEl) return;
+		try {
+			const created = await getClient().createHighlight(id, nh);
+			highlights = [...highlights, created];
+			renderHighlights(articleEl, highlights);
+		} catch {
+			/* offline / failed: leave the selection so the user can retry */
+		}
+		selRect = null;
+		pendingHighlight = null;
+		window.getSelection()?.removeAllRanges();
+	}
+
+	async function removeHighlight(hid: string) {
+		if (!articleEl) return;
+		try {
+			await getClient().deleteHighlight(hid);
+		} catch {
+			return;
+		}
+		highlights = highlights.filter((h) => h.id !== hid);
+		renderHighlights(articleEl, highlights);
+	}
+
+	/** Capture a text selection inside the article and position the highlight button. */
+	function onMouseUp() {
+		const sel = window.getSelection();
+		if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !articleEl) {
+			selRect = null;
+			pendingHighlight = null;
+			return;
+		}
+		const range = sel.getRangeAt(0);
+		const nh = articleEl.contains(range.commonAncestorContainer)
+			? serializeRange(articleEl, range)
+			: null;
+		if (!nh) {
+			selRect = null;
+			return;
+		}
+		const rect = range.getBoundingClientRect();
+		pendingHighlight = nh;
+		selRect = { x: rect.left + rect.width / 2, y: rect.top };
+	}
+
+	function saveNote() {
+		if (!id) return;
+		const sync = getSync();
+		void sync
+			.enqueue({ type: 'setNote', id, note: noteDraft.trim() || null })
+			.then(() => sync.flush());
+	}
+
+	$effect(() => {
+		// Seed the note editor once the card loads, without clobbering edits.
+		if (card && !noteReady) {
+			noteDraft = card.note ?? '';
+			noteReady = true;
+		}
+	});
 
 	// Keyboard control while reading: j/k (and arrows) scroll, e/l/s/i triage the
 	// current document and return to the list, Esc just goes back. Wired through
@@ -285,8 +363,17 @@
 			window.addEventListener('scroll', onScroll, { passive: true });
 			collectBlocks();
 			buildToc();
+			if (id) {
+				try {
+					highlights = (await getClient().listHighlights(id)).highlights;
+					renderHighlights(articleEl as HTMLElement, highlights);
+				} catch {
+					/* offline: highlights load on the next visit */
+				}
+			}
 			window.addEventListener('keydown', onKey);
 			window.addEventListener('resize', updateBar);
+			document.addEventListener('mouseup', onMouseUp);
 		})();
 		return () => {
 			cancelled = true;
@@ -297,6 +384,7 @@
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('keydown', onKey);
 			window.removeEventListener('resize', updateBar);
+			document.removeEventListener('mouseup', onMouseUp);
 		};
 	});
 </script>
@@ -464,35 +552,32 @@
 		{/if}
 	</div>
 	<aside class="rail panel">
-		<p class="rail-head">Info</p>
-		{#if card}
+		<div class="rail-tabs">
+			<button type="button" class:active={panelTab === 'info'} onclick={() => (panelTab = 'info')}
+				>Info</button
+			>
+			<button
+				type="button"
+				class:active={panelTab === 'notebook'}
+				onclick={() => (panelTab = 'notebook')}
+				>Notebook{#if highlights.length} · {highlights.length}{/if}</button
+			>
+		</div>
+		{#if card && panelTab === 'info'}
 			<dl class="meta">
-				<div>
-					<dt>Source</dt>
-					<dd>{card.siteName ?? new URL(card.url).hostname}</dd>
-				</div>
-				{#if card.author}<div>
-						<dt>Author</dt>
-						<dd>{card.author}</dd>
-					</div>{/if}
-				<div>
-					<dt>Type</dt>
-					<dd>{card.category}</dd>
-				</div>
+				<div><dt>Source</dt><dd>{card.siteName ?? new URL(card.url).hostname}</dd></div>
+				{#if card.author}<div><dt>Author</dt><dd>{card.author}</dd></div>{/if}
+				<div><dt>Type</dt><dd>{card.category}</dd></div>
 				{#if card.wordCount}
 					<div>
 						<dt>Length</dt>
 						<dd>
-							{card.wordCount.toLocaleString()} words{#if card.readingTimeMinutes}
-								· {card.readingTimeMinutes}
+							{card.wordCount.toLocaleString()} words{#if card.readingTimeMinutes} · {card.readingTimeMinutes}
 								min{/if}
 						</dd>
 					</div>
 				{/if}
-				<div>
-					<dt>Progress</dt>
-					<dd>{Math.round(card.readingProgress * 100)}%</dd>
-				</div>
+				<div><dt>Progress</dt><dd>{Math.round(card.readingProgress * 100)}%</dd></div>
 				<div>
 					<dt>Saved</dt>
 					<dd>
@@ -509,8 +594,59 @@
 				>Open original <Icon name="external" size={13} /></a
 			>
 		{/if}
+		{#if panelTab === 'notebook'}
+			<label class="nb-note">
+				<span>Note</span>
+				<textarea
+					bind:value={noteDraft}
+					onblur={saveNote}
+					placeholder="Add a note for this document…"
+					rows="3"
+				></textarea>
+			</label>
+			<p class="rail-head">Highlights</p>
+			{#if highlights.length}
+				<ul class="hl-list">
+					{#each highlights as h (h.id)}
+						<li class="hl-item" data-color={h.color}>
+							<button
+								type="button"
+								class="hl-text"
+								onclick={() =>
+									document
+										.querySelector(`mark[data-hl="${h.id}"]`)
+										?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>{h.text}</button
+							>
+							{#if h.note}<p class="hl-note">{h.note}</p>{/if}
+							<button
+								type="button"
+								class="hl-del"
+								aria-label="Remove highlight"
+								onclick={() => removeHighlight(h.id)}
+							>
+								<Icon name="close" size={13} />
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="rail-empty">Select text or press <kbd>H</kbd> to highlight.</p>
+			{/if}
+		{/if}
 	</aside>
 </div>
+
+{#if selRect}
+	<button
+		type="button"
+		class="hl-popover"
+		style={`--x:${selRect.x}px;--y:${selRect.y}px`}
+		onmousedown={(e) => e.preventDefault()}
+		onclick={() => pendingHighlight && addHighlight(pendingHighlight)}
+	>
+		<Icon name="highlight" size={15} /> Highlight
+	</button>
+{/if}
 
 <style>
 	.progress {
@@ -945,5 +1081,157 @@
 			max-height: calc(100vh - 4.5rem);
 			overflow-y: auto;
 		}
+	}
+	.rail-tabs {
+		display: flex;
+		gap: 0.25rem;
+		margin-bottom: 0.8rem;
+	}
+	.rail-tabs button {
+		flex: 1;
+		padding: 0.3rem 0.5rem;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.rail-tabs button:hover {
+		color: var(--text);
+		background: var(--surface-alt);
+	}
+	.rail-tabs button.active {
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.nb-note {
+		display: block;
+		margin-bottom: 1.2rem;
+	}
+	.nb-note span {
+		display: block;
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		margin-bottom: 0.4rem;
+	}
+	.nb-note textarea {
+		width: 100%;
+		resize: vertical;
+		padding: 0.5rem 0.6rem;
+		font: inherit;
+		font-size: var(--text-sm);
+		color: var(--text);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	.nb-note textarea:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+	.hl-list {
+		list-style: none;
+		margin: 0.5rem 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.hl-item {
+		position: relative;
+		padding: 0.5rem 1.6rem 0.5rem 0.7rem;
+		border-radius: var(--radius);
+		background: var(--surface-alt);
+		border-left: 3px solid var(--hl, var(--accent));
+	}
+	.hl-item[data-color='yellow'] {
+		--hl: #e0b341;
+	}
+	.hl-item[data-color='blue'] {
+		--hl: #4f8edc;
+	}
+	.hl-item[data-color='green'] {
+		--hl: #5fae6a;
+	}
+	.hl-item[data-color='pink'] {
+		--hl: #d97aa6;
+	}
+	.hl-item[data-color='orange'] {
+		--hl: #e08a3c;
+	}
+	.hl-text {
+		display: block;
+		text-align: left;
+		border: 0;
+		background: transparent;
+		padding: 0;
+		font: inherit;
+		font-size: var(--text-sm);
+		line-height: 1.4;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.hl-note {
+		margin: 0.35rem 0 0;
+		font-size: var(--text-2xs);
+		color: var(--text-muted);
+	}
+	.hl-del {
+		position: absolute;
+		top: 0.35rem;
+		right: 0.35rem;
+		display: inline-flex;
+		border: 0;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		padding: 0.15rem;
+		border-radius: var(--radius-sm);
+	}
+	.hl-del:hover {
+		color: var(--error);
+		background: var(--surface);
+	}
+	.hl-popover {
+		position: fixed;
+		left: var(--x);
+		top: var(--y);
+		transform: translate(-50%, calc(-100% - 8px));
+		z-index: 40;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0.7rem;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		color: var(--bg);
+		background: var(--text);
+		border: 0;
+		border-radius: var(--radius-full);
+		box-shadow: var(--shadow);
+		cursor: pointer;
+	}
+	.doc :global(mark.lectern-hl) {
+		background: color-mix(in srgb, var(--hl, #e0b341) 38%, transparent);
+		color: inherit;
+		border-radius: 2px;
+		padding: 0.05em 0;
+	}
+	.doc :global(mark.lectern-hl[data-color='blue']) {
+		--hl: #4f8edc;
+	}
+	.doc :global(mark.lectern-hl[data-color='green']) {
+		--hl: #5fae6a;
+	}
+	.doc :global(mark.lectern-hl[data-color='pink']) {
+		--hl: #d97aa6;
+	}
+	.doc :global(mark.lectern-hl[data-color='orange']) {
+		--hl: #e08a3c;
 	}
 </style>

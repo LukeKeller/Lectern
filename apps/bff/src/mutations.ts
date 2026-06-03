@@ -69,26 +69,24 @@ export async function applyNote(
 
 export async function applyAddHighlight(
   deps: MutationDeps,
-  parsed: ParsedId,
+  _parsed: ParsedId,
   id: string,
   input: NewHighlight,
 ): Promise<Highlight> {
-  return parsed.source === "readeck"
-    ? deps.readLater.addHighlight(parsed.sourceId, input)
-    : deps.overlay.addRssHighlight(id, input);
+  // Highlights are glue-owned for every source: the client computes stable
+  // block-relative anchors and renders them itself, so we don't round-trip
+  // through Readeck's annotation selector format. This also makes highlight
+  // counts consistent under the index-backed read path.
+  return deps.overlay.addRssHighlight(id, input);
 }
 
 export async function applyRemoveHighlight(
   deps: MutationDeps,
-  parsed: ParsedId,
+  _parsed: ParsedId,
   highlightId: string,
 ): Promise<void> {
-  if (parsed.source === "readeck") {
-    await deps.readLater.removeHighlight(parsed.sourceId, highlightId);
-  } else {
-    const ok = await deps.overlay.removeRssHighlight(highlightId);
-    if (!ok) throw new Error(`highlight not found: ${highlightId}`);
-  }
+  const ok = await deps.overlay.removeRssHighlight(highlightId);
+  if (!ok) throw new Error(`highlight not found: ${highlightId}`);
 }
 
 /** Apply a single queued offline mutation to its owning store. */
