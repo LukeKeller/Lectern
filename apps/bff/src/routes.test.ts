@@ -3,6 +3,7 @@ import {
   Card,
   Feed,
   type BackendPage,
+  type BackendListParams,
   type CreateViewRequest,
   type FeedFolder,
   type Highlight,
@@ -95,8 +96,13 @@ class FakeReadLaterBackend implements ReadLaterBackend {
   content = new Map<string, string>();
   private seq = 0;
 
-  async list(): Promise<BackendPage<Card>> {
-    return { items: [...this.bookmarks.values()], nextCursor: null };
+  async list(params: BackendListParams = {}): Promise<BackendPage<Card>> {
+    const all = [...this.bookmarks.values()];
+    const offset = params.cursor ? Number.parseInt(params.cursor, 10) || 0 : 0;
+    const limit = params.pageSize ?? 50;
+    const items = all.slice(offset, offset + limit);
+    const next = offset + items.length;
+    return { items, nextCursor: next < all.length ? String(next) : null };
   }
   async get(sourceId: string): Promise<Card> {
     const card = this.bookmarks.get(sourceId);
@@ -617,6 +623,25 @@ describe("sync", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().cards).toHaveLength(2);
     expect(typeof res.json().cursor).toBe("string");
+    await a.close();
+  });
+
+  it("paginates across pages so a full library lands in one pull", async () => {
+    // 5 read-later bookmarks with a small page size forces multiple pages; the
+    // pull must walk them all and terminate (no infinite loop, no duplicates).
+    for (let i = 0; i < 5; i++) {
+      harness.deps.readLater.bookmarks.set(
+        `b${i}`,
+        makeCard({ id: `readeck:b${i}`, source: "readeck", url: `https://x.test/${i}` }),
+      );
+    }
+    harness.deps.rss.entries.set("1", makeCard({ id: "miniflux:1", source: "miniflux" }));
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/sync?pageSize=2", headers: auth });
+    expect(res.statusCode).toBe(200);
+    const ids = (res.json().cards as { id: string }[]).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicates
+    expect(ids).toHaveLength(6); // 5 read-later + 1 rss
     await a.close();
   });
 

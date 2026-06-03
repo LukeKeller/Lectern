@@ -138,9 +138,9 @@ describe("combined cursor", () => {
     expect(decodeCombinedCursor(undefined)).toEqual({ rss: undefined, readLater: undefined });
   });
 
-  it("survives one backend being exhausted", () => {
+  it("preserves an exhausted backend as null (skip), distinct from a fresh undefined", () => {
     const encoded = encodeCombinedCursor(null, "20");
-    expect(decodeCombinedCursor(encoded ?? undefined)).toEqual({ rss: undefined, readLater: "20" });
+    expect(decodeCombinedCursor(encoded ?? undefined)).toEqual({ rss: null, readLater: "20" });
   });
 });
 
@@ -180,6 +180,37 @@ describe("UnificationService", () => {
     expect(rssResult?.readingProgress).toBe(0.5);
     expect(rssResult?.highlightCount).toBe(2);
     expect(page.nextCursor).toBe(encodeCombinedCursor("50", null));
+  });
+
+  it("skips an exhausted backend instead of restarting it", async () => {
+    const rss = {
+      listEntries: vi.fn(),
+      getEntryContent: vi.fn(),
+      setRead: vi.fn(),
+      setStarred: vi.fn(),
+      refresh: vi.fn(),
+      exportOpml: vi.fn(),
+    } as unknown as RssBackend;
+    const readLater = {
+      list: vi.fn(
+        async (): Promise<BackendPage<Card>> => ({ items: [readeckCard()], nextCursor: "200" }),
+      ),
+    } as unknown as ReadLaterBackend;
+    const store = {
+      getOverlays: vi.fn(async () => ({})),
+      getRssHighlightCounts: vi.fn(async () => ({})),
+    } as unknown as OverlayStore;
+    const service = new UnificationService(rss, readLater, store);
+
+    // rss is exhausted (null); read-later is mid-pagination at offset 100.
+    const cursor = encodeCombinedCursor(null, "100") ?? undefined;
+    const page = await service.list({ pageSize: 100, cursor } satisfies BackendListParams);
+
+    expect(rss.listEntries).not.toHaveBeenCalled();
+    expect(readLater.list).toHaveBeenCalledOnce();
+    expect(page.items).toHaveLength(1);
+    // rss stays exhausted; read-later advances -> not yet terminal.
+    expect(page.nextCursor).toBe(encodeCombinedCursor(null, "200"));
   });
 
   it("returns cards untouched when none are passed to applyOverlays", async () => {

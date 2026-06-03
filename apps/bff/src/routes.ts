@@ -282,9 +282,27 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // ---- sync ---------------------------------------------------------------
   app.get("/sync", async (req) => {
     const q = coerceSyncQuery(req.query as Record<string, unknown>);
-    const page = await deps.unify.list({ updatedAfter: q.since, pageSize: q.pageSize });
+    // Walk every page so a full library lands in one pull. The unified list
+    // pages each backend independently via an opaque combined cursor; we stop
+    // when it is exhausted, when a cursor stops advancing (a degraded backend
+    // that keeps handing back the same cursor), or at a hard page ceiling.
+    const MAX_PAGES = 500;
+    const cards: Card[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const page = await deps.unify.list({
+        updatedAfter: q.since,
+        pageSize: q.pageSize,
+        cursor,
+      });
+      cards.push(...page.items);
+      if (!page.nextCursor || seen.has(page.nextCursor)) break;
+      seen.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
     return SyncPullResponse.parse({
-      cards: page.items,
+      cards,
       deletedIds: [],
       cursor: new Date().toISOString(),
     });

@@ -109,8 +109,8 @@ export function encodeCombinedCursor(rss: string | null, readLater: string | nul
 }
 
 export function decodeCombinedCursor(cursor: string | undefined): {
-  rss: string | undefined;
-  readLater: string | undefined;
+  rss: string | null | undefined;
+  readLater: string | null | undefined;
 } {
   if (!cursor) return { rss: undefined, readLater: undefined };
   try {
@@ -118,7 +118,11 @@ export function decodeCombinedCursor(cursor: string | undefined): {
       m: string | null;
       r: string | null;
     };
-    return { rss: parsed.m ?? undefined, readLater: parsed.r ?? undefined };
+    // Preserve null: a null sub-cursor means that backend is EXHAUSTED (skip it
+    // on the next page), which is distinct from undefined (no cursor yet -> start
+    // from the top). Collapsing the two made a finished backend restart, so a
+    // paginating caller would loop forever and re-emit its first page.
+    return { rss: parsed.m, readLater: parsed.r };
   } catch {
     return { rss: undefined, readLater: undefined };
   }
@@ -208,17 +212,26 @@ export class UnificationService {
    */
   async list(params: BackendListParams): Promise<BackendPage<Card>> {
     const cursors = decodeCombinedCursor(params.cursor);
+    const exhausted: BackendPage<Card> = { items: [], nextCursor: null };
     const [rssResult, readLaterResult] = await Promise.allSettled([
-      this.rss.listEntries({ ...params, cursor: cursors.rss }),
-      this.readLater.list({ ...params, cursor: cursors.readLater }),
+      cursors.rss === null
+        ? Promise.resolve(exhausted)
+        : this.rss.listEntries({ ...params, cursor: cursors.rss }),
+      cursors.readLater === null
+        ? Promise.resolve(exhausted)
+        : this.readLater.list({ ...params, cursor: cursors.readLater }),
     ]);
 
     if (rssResult.status === "rejected" && readLaterResult.status === "rejected") {
       throw rssResult.reason;
     }
 
-    const rssPage = settledPage(rssResult, "rss", cursors.rss);
-    const readLaterPage = settledPage(readLaterResult, "read-later", cursors.readLater);
+    const rssPage = settledPage(rssResult, "rss", cursors.rss ?? undefined);
+    const readLaterPage = settledPage(
+      readLaterResult,
+      "read-later",
+      cursors.readLater ?? undefined,
+    );
 
     const items = await this.applyOverlays([...rssPage.items, ...readLaterPage.items]);
     return {

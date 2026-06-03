@@ -1,8 +1,9 @@
 import { Card, Highlight } from "@lectern/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   annotationToHighlight,
   readeckBookmarkToCard,
+  ReadeckBackend,
   type ReadeckAnnotation,
   type ReadeckBookmark,
 } from "./readeck";
@@ -102,5 +103,41 @@ describe("annotationToHighlight", () => {
 
   it("falls back to yellow for unknown colors", () => {
     expect(annotationToHighlight({ ...annotation, color: "magenta" }, "x").color).toBe("yellow");
+  });
+});
+
+describe("ReadeckBackend.list", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(): () => string {
+    let captured = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        captured = String(url);
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "total-count": "0" }),
+          json: async () => [],
+          text: async () => "",
+        } as unknown as Response;
+      }),
+    );
+    return () => captured;
+  }
+
+  it("clamps the page size to Readeck's max of 100 (limit > 100 -> 404)", async () => {
+    const url = stubFetch();
+    const backend = new ReadeckBackend({ baseUrl: "https://readeck.test", apiToken: "t" });
+    await backend.list({ pageSize: 200 });
+    expect(new URL(url()).searchParams.get("limit")).toBe("100");
+  });
+
+  it("passes a page size at or under the cap through unchanged", async () => {
+    const url = stubFetch();
+    const backend = new ReadeckBackend({ baseUrl: "https://readeck.test", apiToken: "t" });
+    await backend.list({ pageSize: 50 });
+    expect(new URL(url()).searchParams.get("limit")).toBe("50");
   });
 });

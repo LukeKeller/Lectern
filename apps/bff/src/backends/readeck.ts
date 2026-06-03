@@ -61,6 +61,11 @@ export interface ReadeckOptions {
 }
 
 const DEFAULT_PAGE_SIZE = 50;
+// Readeck rejects `limit > 100` outright with a 404, which would fail the whole
+// read-later list (and empty the library). Clamp larger unified page sizes
+// (e.g. the sync default of 200) to Readeck's max; callers fetch the rest via
+// the offset cursor.
+const READECK_MAX_PAGE_SIZE = 100;
 const HIGHLIGHT_COLORS: Record<string, true> = { yellow: true, red: true, blue: true, green: true };
 
 function toHighlightColor(color: string): HighlightColor {
@@ -160,7 +165,7 @@ export class ReadeckBackend implements ReadLaterBackend {
   }
 
   async list(params: BackendListParams): Promise<BackendPage<Card>> {
-    const limit = params.pageSize ?? DEFAULT_PAGE_SIZE;
+    const limit = Math.min(params.pageSize ?? DEFAULT_PAGE_SIZE, READECK_MAX_PAGE_SIZE);
     const offset = params.cursor ? Number.parseInt(params.cursor, 10) || 0 : 0;
     const query = new URLSearchParams({
       limit: String(limit),
