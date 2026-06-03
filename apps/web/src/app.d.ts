@@ -8,6 +8,8 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+	/** Deploy version, injected at build time from the YunoHost manifest (see vite.config.ts). */
+	const __LECTERN_VERSION__: string;
 }
 
 export {};

@@ -6,6 +6,7 @@
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import type { FontFamily, ThemeMode } from '$lib/typography';
 	import { buildBookmarklet } from '$lib/bookmarklet';
+	import { APP_VERSION } from '$lib/version';
 
 	let token = $state('');
 	let saved = $state(false);
@@ -202,6 +203,16 @@
 		<button type="button" class="btn ghost reset" onclick={() => readerSettings.reset()}>
 			Reset to defaults
 		</button>
+	</section>
+
+	<section class="about">
+		<h2>About</h2>
+		<dl class="meta-list">
+			<div>
+				<dt>Deployed version</dt>
+				<dd><code>{APP_VERSION}</code></dd>
+			</div>
+		</dl>
 	</section>
 </div>
 
@@ -409,5 +420,31 @@
 		color: var(--text);
 		text-decoration: none;
 		cursor: grab;
+	}
+	.meta-list {
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.meta-list > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+	}
+	.meta-list dt {
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+	}
+	.meta-list dd {
+		margin: 0;
+	}
+	.about code {
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		background: var(--surface-alt);
+		padding: 0.15rem 0.5rem;
+		border-radius: var(--radius-sm);
 	}
 </style>

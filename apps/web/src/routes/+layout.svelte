@@ -184,6 +184,17 @@
 		void viewsStore.load();
 		const sync = getSync();
 		sync.start();
+		// Make new deploys reach the user: force a service-worker update check on
+		// load, and reload once when a newer worker takes control (the classic
+		// "needs a second refresh" PWA gotcha). Guarded so the first install and
+		// post-reload states don't loop.
+		if ('serviceWorker' in navigator) {
+			const hadController = !!navigator.serviceWorker.controller;
+			navigator.serviceWorker.addEventListener('controllerchange', () => {
+				if (hadController) window.location.reload();
+			});
+			void navigator.serviceWorker.ready.then((reg) => reg.update()).catch(() => {});
+		}
 		window.addEventListener('keydown', onKeydown);
 		return () => {
 			sync.stop();

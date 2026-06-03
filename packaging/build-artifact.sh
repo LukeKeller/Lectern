@@ -12,6 +12,13 @@ DEPLOY="/tmp/lectern-bff-deploy"
 
 cd "$ROOT"
 
+# Bake the deploy version (from the YunoHost manifest) + short commit into the
+# web build so the UI can show exactly what's running (see vite.config.ts).
+MANIFEST_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$PKG/manifest.toml" | head -1)"
+GIT_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+export LECTERN_VERSION="${MANIFEST_VERSION:-dev} (${GIT_SHA})"
+echo "==> Version: $LECTERN_VERSION"
+
 echo "==> Building web (static SPA)"
 pnpm --filter @lectern/web build
 
