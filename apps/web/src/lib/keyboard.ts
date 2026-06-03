@@ -5,23 +5,40 @@ import type { Location } from '@lectern/shared';
  * `resolveKey` function is a pure reducer over them, so the full mapping from a
  * keystroke (plus any pending prefix) to an action is unit-testable without a DOM.
  *
+ * The scheme mirrors Readwise Reader: j/k (and arrows) move the selection,
+ * Enter/o open, Esc goes back, single keys triage the focused document, a `g`
+ * prefix jumps between views, `?` shows the shortcut sheet, and Cmd/Ctrl-K opens
+ * the command palette. (`?` and `Esc`-for-overlays are handled in the layout
+ * since they toggle UI state rather than act on a list.)
+ *
  * Supported chords:
- *   j / k          move selection down / up
- *   o / Enter      open the selected card
- *   e              archive   (setLocation)
- *   l              later     (setLocation)
- *   s              shortlist (setLocation)
+ *   j / ↓          move selection down
+ *   k / ↑          move selection up
+ *   o / Enter      open the focused document
+ *   Esc            go back (reading view -> list)
+ *   e              archive    (setLocation)
+ *   l              later      (setLocation)
+ *   s              shortlist  (setLocation)
+ *   i              inbox      (setLocation)
  *   /              focus search
- *   g then i/f/l   navigate to Inbox / Feed / Library
+ *   g then i/l/s/a/f/b/h   jump to a view
  *   Cmd/Ctrl-K     open the command palette
  */
 
 /** A navigable route handled by the global keyboard layer. */
-export type NavTarget = '/' | '/feed' | '/library' | '/search';
+export type NavTarget =
+	| '/'
+	| '/later'
+	| '/shortlist'
+	| '/archive'
+	| '/feed'
+	| '/library'
+	| '/search';
 
 export type KeyAction =
 	| { type: 'move'; delta: number }
 	| { type: 'open' }
+	| { type: 'back' }
 	| { type: 'setLocation'; location: Location }
 	| { type: 'focusSearch' }
 	| { type: 'navigate'; path: NavTarget }
@@ -46,11 +63,15 @@ export interface KeyResolution {
 export const SINGLE_KEYS: Record<string, KeyAction> = {
 	j: { type: 'move', delta: 1 },
 	k: { type: 'move', delta: -1 },
+	ArrowDown: { type: 'move', delta: 1 },
+	ArrowUp: { type: 'move', delta: -1 },
 	o: { type: 'open' },
 	Enter: { type: 'open' },
+	Escape: { type: 'back' },
 	e: { type: 'setLocation', location: 'archive' },
 	l: { type: 'setLocation', location: 'later' },
 	s: { type: 'setLocation', location: 'shortlist' },
+	i: { type: 'setLocation', location: 'inbox' },
 	'/': { type: 'focusSearch' }
 };
 
@@ -58,8 +79,12 @@ export const SINGLE_KEYS: Record<string, KeyAction> = {
 export const PREFIX_KEYS: Record<string, Record<string, KeyAction>> = {
 	g: {
 		i: { type: 'navigate', path: '/' },
+		h: { type: 'navigate', path: '/' },
+		l: { type: 'navigate', path: '/later' },
+		s: { type: 'navigate', path: '/shortlist' },
+		a: { type: 'navigate', path: '/archive' },
 		f: { type: 'navigate', path: '/feed' },
-		l: { type: 'navigate', path: '/library' }
+		b: { type: 'navigate', path: '/library' }
 	}
 };
 

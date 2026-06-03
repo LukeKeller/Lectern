@@ -11,6 +11,7 @@
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import type { ThemeMode } from '$lib/typography';
 	import type { Card } from '@lectern/shared';
@@ -21,6 +22,7 @@
 
 	let paletteOpen = $state(false);
 	let drawerOpen = $state(false);
+	let helpOpen = $state(false);
 	let pending: string | null = null;
 
 	interface NavItem {
@@ -104,11 +106,25 @@
 			pending = null;
 			return;
 		}
-		if (event.key === 'Escape' && drawerOpen) {
-			drawerOpen = false;
+		// `?` (Shift+/) toggles the shortcut sheet; never while typing or in the palette.
+		if (event.key === '?' && !paletteOpen && !isEditable(event.target)) {
+			event.preventDefault();
+			helpOpen = !helpOpen;
+			pending = null;
 			return;
 		}
-		if (paletteOpen || isEditable(event.target)) {
+		if (event.key === 'Escape') {
+			if (helpOpen) {
+				helpOpen = false;
+				return;
+			}
+			if (drawerOpen) {
+				drawerOpen = false;
+				return;
+			}
+			// otherwise fall through so the reading view can go back
+		}
+		if (paletteOpen || helpOpen || isEditable(event.target)) {
 			pending = null;
 			return;
 		}
@@ -142,6 +158,12 @@
 				if (ctrl) {
 					event.preventDefault();
 					ctrl.triage(action.location);
+				}
+				break;
+			case 'back':
+				if (ctrl?.back) {
+					event.preventDefault();
+					ctrl.back();
 				}
 				break;
 			case 'palette':
@@ -303,6 +325,10 @@
 </main>
 
 <CommandPalette bind:open={paletteOpen} />
+
+{#if helpOpen}
+	<ShortcutsHelp onclose={() => (helpOpen = false)} />
+{/if}
 
 <style>
 	.brand {

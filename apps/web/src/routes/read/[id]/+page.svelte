@@ -4,9 +4,12 @@
 	import DOMPurify from 'dompurify';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { db } from '$lib/db';
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
+	import { activeList, type ListController } from '$lib/list-controller.svelte';
+	import type { Location } from '@lectern/shared';
 	import { liveCards } from '$lib/live.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { readerCssVars, type FontFamily, type ThemeMode } from '$lib/typography';
@@ -113,8 +116,32 @@
 		if (target > 0) window.scrollTo(0, target);
 	}
 
+	/** Send the open document back to the previous list (Readwise's default). */
+	function goBack() {
+		if (history.length > 1) history.back();
+		else void goto(resolve('/'));
+	}
+
+	// Keyboard control while reading: j/k (and arrows) scroll, e/l/s/i triage the
+	// current document and return to the list, Esc just goes back. Wired through
+	// the same global key layer the lists use, so the whole app stays navigable.
+	const controller: ListController = {
+		move(delta) {
+			window.scrollBy({ top: delta * Math.round(window.innerHeight * 0.1), behavior: 'smooth' });
+		},
+		open() {},
+		triage(location: Location) {
+			if (!card) return;
+			const sync = getSync();
+			void sync.enqueue({ type: 'setLocation', id: card.id, location }).then(() => sync.flush());
+			goBack();
+		},
+		back: goBack
+	};
+
 	onMount(() => {
 		let cancelled = false;
+		activeList.set(controller);
 		(async () => {
 			const initial = id ? await db.cards.get(id) : undefined;
 			try {
@@ -137,6 +164,7 @@
 		})();
 		return () => {
 			cancelled = true;
+			activeList.clear(controller);
 			capture();
 			if (timer) clearTimeout(timer);
 			if (raf) cancelAnimationFrame(raf);

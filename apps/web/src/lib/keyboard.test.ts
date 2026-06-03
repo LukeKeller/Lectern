@@ -13,12 +13,18 @@ describe('resolveKey', () => {
 		});
 	});
 
-	it('maps o and Enter to open', () => {
-		expect(resolveKey(null, { key: 'o' }).action).toEqual({ type: 'open' });
-		expect(resolveKey(null, { key: 'Enter' }).action).toEqual({ type: 'open' });
+	it('aliases arrow keys to selection moves', () => {
+		expect(resolveKey(null, { key: 'ArrowDown' }).action).toEqual({ type: 'move', delta: 1 });
+		expect(resolveKey(null, { key: 'ArrowUp' }).action).toEqual({ type: 'move', delta: -1 });
 	});
 
-	it('maps e/l/s to triage locations', () => {
+	it('maps o and Enter to open, Escape to back', () => {
+		expect(resolveKey(null, { key: 'o' }).action).toEqual({ type: 'open' });
+		expect(resolveKey(null, { key: 'Enter' }).action).toEqual({ type: 'open' });
+		expect(resolveKey(null, { key: 'Escape' }).action).toEqual({ type: 'back' });
+	});
+
+	it('maps e/l/s/i to triage locations', () => {
 		expect(resolveKey(null, { key: 'e' }).action).toEqual({
 			type: 'setLocation',
 			location: 'archive'
@@ -30,6 +36,10 @@ describe('resolveKey', () => {
 		expect(resolveKey(null, { key: 's' }).action).toEqual({
 			type: 'setLocation',
 			location: 'shortlist'
+		});
+		expect(resolveKey(null, { key: 'i' }).action).toEqual({
+			type: 'setLocation',
+			location: 'inbox'
 		});
 	});
 
@@ -52,16 +62,22 @@ describe('resolveKey', () => {
 		expect(first).toEqual({ pending: 'g' });
 		expect(resolveKey(first.pending, { key: 'i' }).action).toEqual({ type: 'navigate', path: '/' });
 		expect(resolveKey('g', { key: 'f' }).action).toEqual({ type: 'navigate', path: '/feed' });
-		expect(resolveKey('g', { key: 'l' }).action).toEqual({ type: 'navigate', path: '/library' });
+		expect(resolveKey('g', { key: 'l' }).action).toEqual({ type: 'navigate', path: '/later' });
+		expect(resolveKey('g', { key: 's' }).action).toEqual({
+			type: 'navigate',
+			path: '/shortlist'
+		});
+		expect(resolveKey('g', { key: 'a' }).action).toEqual({ type: 'navigate', path: '/archive' });
+		expect(resolveKey('g', { key: 'b' }).action).toEqual({ type: 'navigate', path: '/library' });
 	});
 
-	it('the g-prefix takes precedence over the single-key l shortcut', () => {
-		// Plain l => later; g then l => library.
+	it('the g-prefix takes precedence over single-key shortcuts', () => {
+		// Plain l => later (triage); g then l => Later view.
 		expect(resolveKey(null, { key: 'l' }).action).toEqual({
 			type: 'setLocation',
 			location: 'later'
 		});
-		expect(resolveKey('g', { key: 'l' }).action).toEqual({ type: 'navigate', path: '/library' });
+		expect(resolveKey('g', { key: 'l' }).action).toEqual({ type: 'navigate', path: '/later' });
 	});
 
 	it('clears the prefix when the follow-up key is not a known chord', () => {

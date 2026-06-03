@@ -11,6 +11,8 @@ export interface ListController {
 	move(delta: number): void;
 	open(): void;
 	triage(location: Location): void;
+	/** Optional "go back" (the reading view returns to its list); lists omit it. */
+	back?(): void;
 }
 
 class ActiveListController {
