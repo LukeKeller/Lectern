@@ -36,6 +36,11 @@
 	let ready = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let raf = 0;
+	let docEl = $state<HTMLElement | null>(null);
+	let focusIndex = $state(-1);
+	let barTop = $state(0);
+	let barH = $state(0);
+	let blocks: HTMLElement[] = [];
 
 	const styleVars = $derived(
 		Object.entries(readerCssVars(readerSettings.current))
@@ -122,12 +127,77 @@
 		else void goto(resolve('/'));
 	}
 
+	// Paragraph focus: an accent bar tracks the "current" block; Space / arrows move
+	// it and auto-scroll it to center, for keyboard-driven reading.
+	const BLOCK_SEL = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, figure';
+
+	function collectBlocks() {
+		blocks = articleEl
+			? Array.from(articleEl.querySelectorAll<HTMLElement>(BLOCK_SEL)).filter(
+					(b) => (b.textContent?.trim().length ?? 0) > 0 || !!b.querySelector('img')
+				)
+			: [];
+	}
+
+	/** Block nearest the top third of the viewport — where focus starts on first move. */
+	function nearestBlock(): number {
+		const probe = window.innerHeight * 0.3;
+		let best = 0;
+		let bestDist = Infinity;
+		for (let i = 0; i < blocks.length; i++) {
+			const d = Math.abs(blocks[i].getBoundingClientRect().top - probe);
+			if (d < bestDist) {
+				bestDist = d;
+				best = i;
+			}
+		}
+		return best;
+	}
+
+	function updateBar() {
+		const block = blocks[focusIndex];
+		if (!block || !docEl) return;
+		const dr = docEl.getBoundingClientRect();
+		const r = block.getBoundingClientRect();
+		// Offset within .doc is scroll-invariant (both rects move together).
+		barTop = r.top - dr.top;
+		barH = r.height;
+	}
+
+	function focusBlock(i: number) {
+		focusIndex = Math.max(0, Math.min(blocks.length - 1, i));
+		updateBar();
+		blocks[focusIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	}
+
+	/** Move the paragraph focus; returns false when there are no blocks yet. */
+	function advance(delta: number): boolean {
+		if (!blocks.length) return false;
+		focusBlock(focusIndex < 0 ? nearestBlock() : focusIndex + delta);
+		return true;
+	}
+
+	function isEditable(t: EventTarget | null): boolean {
+		const el = t as HTMLElement | null;
+		return !!el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName));
+	}
+
+	function onKey(e: KeyboardEvent) {
+		// Space advances a paragraph (Shift+Space goes back); only consume the key
+		// when there's a paragraph to move to, otherwise leave native scrolling.
+		if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
+		if (advance(e.shiftKey ? -1 : 1)) e.preventDefault();
+	}
+
 	// Keyboard control while reading: j/k (and arrows) scroll, e/l/s/i triage the
 	// current document and return to the list, Esc just goes back. Wired through
 	// the same global key layer the lists use, so the whole app stays navigable.
 	const controller: ListController = {
 		move(delta) {
-			window.scrollBy({ top: delta * Math.round(window.innerHeight * 0.1), behavior: 'smooth' });
+			// j/k and arrows move the paragraph focus; fall back to scrolling pre-render.
+			if (!advance(delta)) {
+				window.scrollBy({ top: delta * Math.round(window.innerHeight * 0.1), behavior: 'smooth' });
+			}
 		},
 		open() {},
 		triage(location: Location) {
@@ -161,6 +231,9 @@
 			progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
 			ready = true;
 			window.addEventListener('scroll', onScroll, { passive: true });
+			collectBlocks();
+			window.addEventListener('keydown', onKey);
+			window.addEventListener('resize', updateBar);
 		})();
 		return () => {
 			cancelled = true;
@@ -169,6 +242,8 @@
 			if (timer) clearTimeout(timer);
 			if (raf) cancelAnimationFrame(raf);
 			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('keydown', onKey);
+			window.removeEventListener('resize', updateBar);
 		};
 	});
 </script>
@@ -273,7 +348,10 @@
 	{/if}
 </nav>
 
-<div class="doc" style={styleVars}>
+<div class="doc" style={styleVars} bind:this={docEl}>
+	{#if focusIndex >= 0}
+		<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
+	{/if}
 	{#if card}
 		<h1>{card.title}</h1>
 		<p class="byline">
@@ -438,8 +516,32 @@
 	}
 
 	.doc {
+		position: relative;
 		max-width: var(--reader-width);
 		margin: 0 auto;
+	}
+	.focus-bar {
+		position: absolute;
+		left: -0.9rem;
+		top: var(--top);
+		height: var(--h);
+		width: 3px;
+		border-radius: var(--radius-full);
+		background: var(--accent);
+		transition:
+			top 180ms var(--ease),
+			height 180ms var(--ease);
+		pointer-events: none;
+	}
+	@media (max-width: 760px) {
+		.focus-bar {
+			left: -0.3rem;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.focus-bar {
+			transition: none;
+		}
 	}
 	h1 {
 		font-family: var(--font-serif);
