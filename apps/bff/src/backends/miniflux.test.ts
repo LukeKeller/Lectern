@@ -1,6 +1,7 @@
 import { Card, Feed, FeedFolder } from "@lectern/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MinifluxBackend,
   minifluxCategoryToFolder,
   minifluxEntryToCard,
   minifluxFeedToFeed,
@@ -113,5 +114,29 @@ describe("minifluxCategoryToFolder", () => {
 
   it("defaults unread to 0", () => {
     expect(minifluxCategoryToFolder({ id: 1, title: "All" }).unreadCount).toBe(0);
+  });
+});
+
+describe("MinifluxBackend.listEntries", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("paginates by the unique id for stable, gap-free pages", async () => {
+    let captured = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        captured = String(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ entries: [], total: 0 }),
+        } as unknown as Response;
+      }),
+    );
+    const backend = new MinifluxBackend({ baseUrl: "https://mf.test", apiToken: "t" });
+    await backend.listEntries({ pageSize: 100 });
+    const params = new URL(captured).searchParams;
+    expect(params.get("order")).toBe("id");
+    expect(params.get("direction")).toBe("desc");
   });
 });

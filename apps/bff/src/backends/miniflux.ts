@@ -189,7 +189,10 @@ export class MinifluxBackend implements RssBackend {
     const query = new URLSearchParams({
       limit: String(limit),
       offset: String(offset),
-      order: "changed_at",
+      // Order by the unique, stable `id`: offset pagination over the non-unique
+      // `changed_at` overlaps and skips rows across pages (entries sharing a
+      // changed_at reshuffle), silently dropping ~a third of the library.
+      order: "id",
       direction: "desc",
     });
     if (params.onlyUnread) query.set("status", "unread");
