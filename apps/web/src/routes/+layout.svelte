@@ -418,7 +418,7 @@
 		display: flex;
 		flex-direction: column;
 		padding: 1.15rem 0.7rem 0.9rem;
-		background: var(--bg);
+		background: var(--bg-sunken);
 		border-right: 1px solid var(--border);
 	}
 	.brand-side {
@@ -542,7 +542,6 @@
 
 	main {
 		margin-left: var(--sidebar-w);
-		max-width: 75rem;
 		padding: clamp(1.5rem, 3vw, 3rem) clamp(1.1rem, 4vw, 3rem) 5rem;
 	}
 

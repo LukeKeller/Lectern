@@ -560,24 +560,38 @@
 				type="button"
 				class:active={panelTab === 'notebook'}
 				onclick={() => (panelTab = 'notebook')}
-				>Notebook{#if highlights.length} · {highlights.length}{/if}</button
+				>Notebook{#if highlights.length}
+					· {highlights.length}{/if}</button
 			>
 		</div>
 		{#if card && panelTab === 'info'}
 			<dl class="meta">
-				<div><dt>Source</dt><dd>{card.siteName ?? new URL(card.url).hostname}</dd></div>
-				{#if card.author}<div><dt>Author</dt><dd>{card.author}</dd></div>{/if}
-				<div><dt>Type</dt><dd>{card.category}</dd></div>
+				<div>
+					<dt>Source</dt>
+					<dd>{card.siteName ?? new URL(card.url).hostname}</dd>
+				</div>
+				{#if card.author}<div>
+						<dt>Author</dt>
+						<dd>{card.author}</dd>
+					</div>{/if}
+				<div>
+					<dt>Type</dt>
+					<dd>{card.category}</dd>
+				</div>
 				{#if card.wordCount}
 					<div>
 						<dt>Length</dt>
 						<dd>
-							{card.wordCount.toLocaleString()} words{#if card.readingTimeMinutes} · {card.readingTimeMinutes}
+							{card.wordCount.toLocaleString()} words{#if card.readingTimeMinutes}
+								· {card.readingTimeMinutes}
 								min{/if}
 						</dd>
 					</div>
 				{/if}
-				<div><dt>Progress</dt><dd>{Math.round(card.readingProgress * 100)}%</dd></div>
+				<div>
+					<dt>Progress</dt>
+					<dd>{Math.round(card.readingProgress * 100)}%</dd>
+				</div>
 				<div>
 					<dt>Saved</dt>
 					<dd>
@@ -794,8 +808,9 @@
 
 	.doc {
 		position: relative;
+		flex: 0 1 var(--reader-width);
 		max-width: var(--reader-width);
-		margin: 0 auto;
+		min-width: 0;
 	}
 	.focus-bar {
 		position: absolute;
@@ -977,10 +992,10 @@
 	}
 
 	.reader {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 1.6rem;
-		align-items: start;
+		display: flex;
+		justify-content: center;
+		align-items: flex-start;
+		gap: 2rem;
 	}
 	.rail {
 		display: none;
@@ -1062,15 +1077,6 @@
 		}
 	}
 	@media (min-width: 980px) {
-		.reader.toc-open {
-			grid-template-columns: 13rem minmax(0, 1fr);
-		}
-		.reader.panel-open {
-			grid-template-columns: minmax(0, 1fr) 17rem;
-		}
-		.reader.toc-open.panel-open {
-			grid-template-columns: 13rem minmax(0, 1fr) 17rem;
-		}
 		.reader.toc-open .rail.toc,
 		.reader.panel-open .rail.panel {
 			display: block;
@@ -1080,6 +1086,17 @@
 			top: 3.4rem;
 			max-height: calc(100vh - 4.5rem);
 			overflow-y: auto;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			box-shadow: var(--shadow-md), var(--edge-hi);
+			padding: 1rem 0.9rem;
+		}
+		.rail.toc {
+			flex: 0 0 13rem;
+		}
+		.rail.panel {
+			flex: 0 0 17rem;
 		}
 	}
 	.rail-tabs {

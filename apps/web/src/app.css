@@ -62,6 +62,12 @@
 	--error: #b34a3a;
 	--shadow-sm: 0 1px 2px rgba(31, 28, 22, 0.05);
 	--shadow: 0 14px 36px rgba(31, 28, 22, 0.14), 0 2px 8px rgba(31, 28, 22, 0.08);
+	/* Elevation: a recessed plane for rails/inputs, a mid shadow for floating
+	   panels (between --shadow-sm and the modal --shadow), and a top-edge sheen
+	   that gives raised surfaces material texture. */
+	--bg-sunken: #efece4;
+	--shadow-md: 0 6px 20px rgba(31, 28, 22, 0.1), 0 1px 3px rgba(31, 28, 22, 0.06);
+	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 :root[data-theme='dark'] {
@@ -79,6 +85,9 @@
 	--error: #e0917c;
 	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 	--shadow: 0 16px 42px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
+	--bg-sunken: #141210;
+	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -97,6 +106,9 @@
 		--error: #e0917c;
 		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 		--shadow: 0 16px 42px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
+		--bg-sunken: #141210;
+		--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+		--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 	}
 }
 
@@ -108,6 +120,9 @@
 
 html {
 	-webkit-text-size-adjust: 100%;
+	/* Cover overscroll + PWA safe-area so no white bar shows behind the app. */
+	background: var(--bg);
+	min-height: 100%;
 }
 
 body {
