@@ -1,0 +1,174 @@
+/**
+ * Lectern design tokens + base layer.
+ *
+ * A calm, paper-like, typography-first system: warm tinted neutrals (never pure
+ * black/white), one restrained ink-blue accent, a single type scale and spacing
+ * rhythm, hairline borders and soft shadows, and fast/quiet motion. Theme is
+ * driven by `<html data-theme>` (set by reader-settings) with `auto` deferring to
+ * the OS via `prefers-color-scheme`.
+ */
+
+:root {
+	/* Typography */
+	--font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+	--font-serif: 'Iowan Old Style', Charter, Georgia, 'Times New Roman', serif;
+	--font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+	--text-2xs: 0.6875rem;
+	--text-xs: 0.75rem;
+	--text-sm: 0.8125rem;
+	--text-base: 0.9375rem;
+	--text-md: 1.0625rem;
+	--text-lg: 1.25rem;
+	--text-xl: 1.5rem;
+	--text-2xl: 2rem;
+
+	/* Spacing */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-7: 3rem;
+
+	/* Radius */
+	--radius-sm: 6px;
+	--radius: 9px;
+	--radius-lg: 14px;
+	--radius-full: 999px;
+
+	/* Motion */
+	--dur-fast: 120ms;
+	--dur: 180ms;
+	--ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+	/* Layout */
+	--sidebar-w: 15rem;
+	--topbar-h: 3.25rem;
+
+	/* Color — light (warm paper) */
+	--bg: #f6f4ee;
+	--surface: #fdfcf9;
+	--surface-alt: #ece7dd;
+	--text: #2a2620;
+	--text-muted: #6b6457;
+	--border: #e4ded1;
+	--border-strong: #d6cfbf;
+	--accent: #3a5e8c;
+	--accent-contrast: #ffffff;
+	--accent-soft: #e7edf4;
+	--ok: #3f7d56;
+	--error: #b34a3a;
+	--shadow-sm: 0 1px 2px rgba(31, 28, 22, 0.05);
+	--shadow: 0 14px 36px rgba(31, 28, 22, 0.14), 0 2px 8px rgba(31, 28, 22, 0.08);
+}
+
+:root[data-theme='dark'] {
+	--bg: #1a1815;
+	--surface: #221f1b;
+	--surface-alt: #2c2823;
+	--text: #e8e3d7;
+	--text-muted: #a39c8d;
+	--border: #322e27;
+	--border-strong: #423d34;
+	--accent: #86abd8;
+	--accent-contrast: #15130f;
+	--accent-soft: #232c38;
+	--ok: #7fb98f;
+	--error: #e0917c;
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+	--shadow: 0 16px 42px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme]) {
+		--bg: #1a1815;
+		--surface: #221f1b;
+		--surface-alt: #2c2823;
+		--text: #e8e3d7;
+		--text-muted: #a39c8d;
+		--border: #322e27;
+		--border-strong: #423d34;
+		--accent: #86abd8;
+		--accent-contrast: #15130f;
+		--accent-soft: #232c38;
+		--ok: #7fb98f;
+		--error: #e0917c;
+		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+		--shadow: 0 16px 42px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-ui);
+	font-size: var(--text-base);
+	line-height: 1.55;
+	background: var(--bg);
+	color: var(--text);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	margin: 0;
+	font-weight: 650;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+::selection {
+	background: var(--accent-soft);
+	color: var(--text);
+}
+
+/* Shared centered reading column for non-reader pages. */
+.page {
+	max-width: 44rem;
+	margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

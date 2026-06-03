@@ -16,7 +16,6 @@
 </script>
 
 {#if view}
-	<p class="query">{viewQueryString(view.query)}</p>
 	<ListView
 		title={view.name}
 		predicate={(card: Card) => matchesQuery(card, view.query)}
@@ -24,19 +23,26 @@
 		sortDir={view.sortDir}
 		empty="No cards match this view."
 	/>
+	<p class="query page">{viewQueryString(view.query)}</p>
 {:else if viewsStore.loaded}
-	<h1>View not found</h1>
-	<p class="muted">This saved view no longer exists.</p>
+	<div class="page">
+		<h1>View not found</h1>
+		<p class="muted">This saved view no longer exists.</p>
+	</div>
 {:else}
-	<p class="muted">Loading…</p>
+	<p class="muted page">Loading…</p>
 {/if}
 
 <style>
 	.query {
-		font-family: ui-monospace, monospace;
-		font-size: 0.8rem;
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
 		color: var(--text-muted);
-		margin: 0 0 0.5rem;
+		margin: 1.5rem auto 0;
+	}
+	h1 {
+		font-size: var(--text-2xl);
+		margin-bottom: 0.5rem;
 	}
 	.muted {
 		color: var(--text-muted);

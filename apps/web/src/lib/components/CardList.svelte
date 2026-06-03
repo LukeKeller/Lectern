@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
+	import Icon from './Icon.svelte';
 
 	interface TriageAction {
 		label: string;
@@ -49,109 +50,251 @@
 			savingId = null;
 		}
 	}
+
+	function hostname(url: string): string {
+		try {
+			return new URL(url).hostname.replace(/^www\./, '');
+		} catch {
+			return url;
+		}
+	}
+
+	/** Compact, de-duplicated metadata line: source · author · reading time. */
+	function meta(card: Card): string {
+		const source = card.siteName ?? hostname(card.url);
+		const parts: string[] = [source];
+		if (card.author && card.author !== source) parts.push(card.author);
+		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
+		return parts.join('  ·  ');
+	}
+
+	const finished = (card: Card) => card.readingProgress >= 0.99;
 </script>
 
 {#if !cards}
-	<p class="muted">Loading…</p>
+	<p class="state">Loading…</p>
 {:else if cards.length === 0}
-	<p class="muted">{empty}</p>
+	<p class="state">{empty}</p>
 {:else}
-	<ul>
+	<ul class="cards">
 		{#each cards as card, i (card.id)}
 			<li class:selected={i === selectedIndex}>
-				<a
-					class="title"
-					href={resolve('/read/[id]', { id: card.id })}
-					onmouseenter={() => onselect?.(i)}>{card.title}</a
-				>
-				<div class="meta">
-					{card.siteName ?? card.author ?? new URL(card.url).hostname}
-					· {card.location}
-					{#if card.readingTimeMinutes}· {card.readingTimeMinutes} min{/if}
-					{#if card.readingProgress > 0}· {Math.round(card.readingProgress * 100)}%{/if}
-				</div>
-				{#if card.tags.length}
-					<div class="tags">
-						{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
-					</div>
-				{/if}
-				{#if actions.length || card.source === 'miniflux'}
-					<div class="actions">
-						{#each actions as action (action.location)}
-							<button type="button" onclick={() => triage(card.id, action.location)}>
-								{action.label}
-							</button>
-						{/each}
-						{#if card.source === 'miniflux'}
-							<button
-								type="button"
-								onclick={() => saveToLater(card)}
-								disabled={savingId === card.id}
-							>
-								{savingId === card.id ? 'Saving…' : 'Read later'}
-							</button>
+				<article class="card" onmouseenter={() => onselect?.(i)}>
+					<a class="title" href={resolve('/read/[id]', { id: card.id })}>{card.title}</a>
+					{#if card.note}<p class="dek">{card.note}</p>{/if}
+					<div class="meta">
+						<span class="src">{meta(card)}</span>
+						{#if finished(card)}
+							<span class="done">Read</span>
+						{:else if card.readingProgress > 0}
+							<span class="pct">{Math.round(card.readingProgress * 100)}%</span>
+						{/if}
+						{#if card.highlightCount > 0}
+							<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
 						{/if}
 					</div>
-				{/if}
+					{#if card.tags.length}
+						<div class="tags">
+							{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
+						</div>
+					{/if}
+					{#if actions.length || card.source === 'miniflux'}
+						<div class="actions">
+							{#each actions as action (action.location)}
+								<button type="button" onclick={() => triage(card.id, action.location)}>
+									{action.label}
+								</button>
+							{/each}
+							{#if card.source === 'miniflux'}
+								<button
+									type="button"
+									class="primary"
+									onclick={() => saveToLater(card)}
+									disabled={savingId === card.id}
+								>
+									{savingId === card.id ? 'Saving…' : 'Read later'}
+								</button>
+							{/if}
+						</div>
+					{/if}
+					{#if card.readingProgress > 0 && !finished(card)}
+						<div
+							class="track"
+							aria-hidden="true"
+							style={`--p:${Math.round(card.readingProgress * 100)}%`}
+						></div>
+					{/if}
+				</article>
 			</li>
 		{/each}
 	</ul>
 {/if}
 
 <style>
-	ul {
+	.cards {
 		list-style: none;
-		padding: 0;
 		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
 	}
-	li {
-		padding: 0.75rem;
-		margin: 0 -0.75rem;
-		border-bottom: 1px solid var(--border);
-		border-left: 3px solid transparent;
+	.card {
+		position: relative;
+		padding: 0.95rem 0.85rem 1.05rem;
+		border-radius: var(--radius-lg);
+		transition: background var(--dur-fast) var(--ease);
 	}
-	li.selected {
-		border-left-color: var(--accent);
+	li.selected .card {
 		background: var(--surface-alt);
 	}
+	li.selected .card::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 0.85rem;
+		bottom: 0.85rem;
+		width: 3px;
+		border-radius: var(--radius-full);
+		background: var(--accent);
+	}
+	.card:hover {
+		background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
+	}
+
 	.title {
-		font-weight: 600;
+		display: inline;
+		font-size: var(--text-md);
+		font-weight: 620;
+		line-height: 1.32;
 		color: var(--text);
-		text-decoration: none;
+		letter-spacing: -0.01em;
+		transition: color var(--dur-fast) var(--ease);
+	}
+	.card:hover .title,
+	li.selected .title {
+		color: var(--accent);
+	}
+	.dek {
+		margin: 0.3rem 0 0;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		overflow: hidden;
+		display: -webkit-box;
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+		-webkit-box-orient: vertical;
 	}
 	.meta {
-		font-size: 0.85rem;
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		margin-top: 0.4rem;
+		font-size: var(--text-sm);
 		color: var(--text-muted);
-		margin-top: 0.2rem;
+	}
+	.src {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.pct,
+	.done {
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+	}
+	.done {
+		color: var(--ok);
+	}
+	.hl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
 	}
 	.tags {
-		margin-top: 0.3rem;
+		margin-top: 0.5rem;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.3rem;
+		gap: 0.35rem;
 	}
 	.tag {
-		font-size: 0.72rem;
-		padding: 0.05rem 0.4rem;
-		border-radius: 999px;
+		font-size: var(--text-2xs);
+		letter-spacing: 0.02em;
+		padding: 0.12rem 0.5rem;
+		border-radius: var(--radius-full);
 		background: var(--surface-alt);
 		color: var(--text-muted);
 	}
+
 	.actions {
-		margin-top: 0.4rem;
+		margin-top: 0.7rem;
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.4rem;
+		opacity: 0;
+		transition: opacity var(--dur-fast) var(--ease);
 	}
-	button {
-		font-size: 0.8rem;
-		padding: 0.2rem 0.5rem;
+	.card:hover .actions,
+	li.selected .actions,
+	.card:focus-within .actions {
+		opacity: 1;
+	}
+	@media (hover: none) {
+		.actions {
+			opacity: 1;
+		}
+	}
+	.actions button {
+		font-size: var(--text-sm);
+		font-weight: 500;
+		padding: 0.25rem 0.65rem;
 		border: 1px solid var(--border);
-		border-radius: 4px;
-		background: var(--surface-alt);
-		color: var(--text);
-		cursor: pointer;
-	}
-	.muted {
+		border-radius: var(--radius-full);
+		background: var(--surface);
 		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.actions button:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+	.actions button.primary:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.actions button:disabled {
+		opacity: 0.55;
+		cursor: default;
+	}
+
+	.track {
+		position: absolute;
+		left: 0.85rem;
+		right: 0.85rem;
+		bottom: 0.45rem;
+		height: 2px;
+		border-radius: var(--radius-full);
+		background: var(--border);
+		overflow: hidden;
+	}
+	.track::after {
+		content: '';
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: var(--p);
+		background: var(--accent);
+		border-radius: var(--radius-full);
+	}
+
+	.state {
+		color: var(--text-muted);
+		padding: 1.5rem 0.85rem;
 	}
 </style>

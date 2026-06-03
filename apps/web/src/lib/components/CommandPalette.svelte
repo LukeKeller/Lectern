@@ -12,6 +12,7 @@
 	interface Command {
 		id: string;
 		label: string;
+		group: string;
 		run: () => void;
 	}
 
@@ -21,45 +22,83 @@
 
 	const commands = $derived.by<Command[]>(() => {
 		const list: Command[] = [
-			{ id: 'go-inbox', label: 'Go to Inbox', run: () => void goto(resolve('/')) },
-			{ id: 'go-feed', label: 'Go to Feed', run: () => void goto(resolve('/feed')) },
-			{ id: 'go-library', label: 'Go to Library', run: () => void goto(resolve('/library')) },
-			{ id: 'go-search', label: 'Go to Search', run: () => void goto(resolve('/search')) },
-			{ id: 'go-settings', label: 'Go to Settings', run: () => void goto(resolve('/settings')) },
-			{ id: 'go-views', label: 'Go to Views', run: () => void goto(resolve('/views')) },
+			{ id: 'go-inbox', label: 'Inbox', group: 'Go to', run: () => void goto(resolve('/')) },
+			{ id: 'go-later', label: 'Later', group: 'Go to', run: () => void goto(resolve('/later')) },
+			{
+				id: 'go-shortlist',
+				label: 'Shortlist',
+				group: 'Go to',
+				run: () => void goto(resolve('/shortlist'))
+			},
+			{
+				id: 'go-archive',
+				label: 'Archive',
+				group: 'Go to',
+				run: () => void goto(resolve('/archive'))
+			},
+			{ id: 'go-feed', label: 'Feed', group: 'Go to', run: () => void goto(resolve('/feed')) },
+			{
+				id: 'go-library',
+				label: 'Library',
+				group: 'Go to',
+				run: () => void goto(resolve('/library'))
+			},
+			{
+				id: 'go-search',
+				label: 'Search',
+				group: 'Go to',
+				run: () => void goto(resolve('/search'))
+			},
+			{ id: 'go-feeds', label: 'Feeds', group: 'Go to', run: () => void goto(resolve('/feeds')) },
+			{ id: 'go-views', label: 'Views', group: 'Go to', run: () => void goto(resolve('/views')) },
+			{
+				id: 'go-settings',
+				label: 'Settings',
+				group: 'Go to',
+				run: () => void goto(resolve('/settings'))
+			},
 			{
 				id: 'theme-light',
-				label: 'Theme: Light',
+				label: 'Light',
+				group: 'Theme',
 				run: () => readerSettings.update({ theme: 'light' })
 			},
 			{
 				id: 'theme-dark',
-				label: 'Theme: Dark',
+				label: 'Dark',
+				group: 'Theme',
 				run: () => readerSettings.update({ theme: 'dark' })
 			},
 			{
 				id: 'theme-auto',
-				label: 'Theme: Auto',
+				label: 'Auto',
+				group: 'Theme',
 				run: () => readerSettings.update({ theme: 'auto' })
 			}
 		];
 		for (const v of viewsStore.pinned) {
 			list.push({
 				id: `view-${v.id}`,
-				label: `View: ${v.name}`,
+				label: v.name,
+				group: 'Pinned view',
 				run: () => void goto(resolve('/views/[id]', { id: v.id }))
 			});
 		}
 		const ctrl = activeList.current;
 		if (ctrl) {
-			list.push({ id: 'open', label: 'Open selected', run: () => ctrl.open() });
+			list.push({ id: 'open', label: 'Open selected', group: 'Selection', run: () => ctrl.open() });
 			const triage: [string, Location][] = [
 				['Archive selected', 'archive'],
 				['Save selected for later', 'later'],
 				['Shortlist selected', 'shortlist']
 			];
 			for (const [label, location] of triage) {
-				list.push({ id: `triage-${location}`, label, run: () => ctrl.triage(location) });
+				list.push({
+					id: `triage-${location}`,
+					label,
+					group: 'Selection',
+					run: () => ctrl.triage(location)
+				});
 			}
 		}
 		return list;
@@ -114,14 +153,16 @@
 		onkeydown={(e) => e.key === 'Enter' && (open = false)}
 	></div>
 	<div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
-		<input
-			bind:this={input}
-			bind:value={query}
-			{onkeydown}
-			type="text"
-			placeholder="Type a command…"
-			autocomplete="off"
-		/>
+		<div class="search">
+			<input
+				bind:this={input}
+				bind:value={query}
+				{onkeydown}
+				type="text"
+				placeholder="Search commands…"
+				autocomplete="off"
+			/>
+		</div>
 		<ul>
 			{#each filtered as cmd, i (cmd.id)}
 				<li>
@@ -131,13 +172,19 @@
 						onmouseenter={() => (cursor = i)}
 						onclick={() => run(cmd)}
 					>
-						{cmd.label}
+						<span class="grp">{cmd.group}</span>
+						<span class="lbl">{cmd.label}</span>
 					</button>
 				</li>
 			{:else}
 				<li class="empty">No matching commands</li>
 			{/each}
 		</ul>
+		<div class="hints">
+			<span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+			<span><kbd>↵</kbd> run</span>
+			<span><kbd>esc</kbd> close</span>
+		</div>
 	</div>
 {/if}
 
@@ -145,63 +192,121 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.35);
+		background: rgba(20, 16, 10, 0.34);
 		border: 0;
-		z-index: 40;
+		z-index: 60;
+		animation: fade var(--dur-fast) var(--ease);
 	}
 	.palette {
 		position: fixed;
-		top: 12vh;
+		top: 13vh;
 		left: 50%;
 		transform: translateX(-50%);
-		width: min(540px, 92vw);
+		width: min(560px, 92vw);
 		background: var(--surface);
 		color: var(--text);
 		border: 1px solid var(--border);
-		border-radius: 10px;
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-		z-index: 41;
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow);
+		z-index: 61;
 		overflow: hidden;
+		animation: pop var(--dur) var(--ease);
+	}
+	.search {
+		border-bottom: 1px solid var(--border);
 	}
 	input {
 		width: 100%;
 		box-sizing: border-box;
-		padding: 0.8rem 1rem;
+		padding: 0.9rem 1.1rem;
 		border: 0;
-		border-bottom: 1px solid var(--border);
-		font-size: 1rem;
-		background: var(--surface);
+		font-size: var(--text-md);
+		background: transparent;
 		color: var(--text);
 		outline: none;
+	}
+	input::placeholder {
+		color: var(--text-muted);
 	}
 	ul {
 		list-style: none;
 		margin: 0;
-		padding: 0.3rem;
-		max-height: 50vh;
+		padding: 0.35rem;
+		max-height: 52vh;
 		overflow-y: auto;
 	}
 	li {
 		margin: 0;
 	}
 	button {
-		display: block;
+		display: flex;
+		align-items: baseline;
+		gap: 0.7rem;
 		width: 100%;
 		text-align: left;
-		padding: 0.5rem 0.7rem;
+		padding: 0.55rem 0.7rem;
 		border: 0;
-		border-radius: 6px;
+		border-radius: var(--radius);
 		background: transparent;
 		color: var(--text);
-		font-size: 0.92rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	button.active {
-		background: var(--surface-alt);
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.grp {
+		flex-shrink: 0;
+		min-width: 5.5rem;
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	button.active .grp {
+		color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+	}
+	.lbl {
+		font-weight: 500;
 	}
 	.empty {
-		padding: 0.6rem 0.7rem;
+		padding: 0.7rem;
 		color: var(--text-muted);
-		font-size: 0.9rem;
+		font-size: var(--text-base);
+	}
+	.hints {
+		display: flex;
+		gap: 1rem;
+		padding: 0.5rem 0.85rem;
+		border-top: 1px solid var(--border);
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	.hints span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	kbd {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.25rem;
+		padding: 0.05rem 0.3rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface-alt);
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+	}
+	@keyframes fade {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes pop {
+		from {
+			opacity: 0;
+			transform: translateX(-50%) translateY(-6px) scale(0.98);
+		}
 	}
 </style>

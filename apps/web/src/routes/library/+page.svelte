@@ -3,8 +3,14 @@
 	import ListView from '$lib/components/ListView.svelte';
 	import { locationQuery, orQueries } from '$lib/views';
 
-	const library = (card: Card) => card.location === 'shortlist' || card.location === 'archive';
-	const baseQuery = orQueries(locationQuery('shortlist'), locationQuery('archive'));
+	// The full saved collection: everything that isn't a transient feed item.
+	const library = (card: Card) => card.location !== 'feed';
+	const baseQuery = orQueries(
+		locationQuery('inbox'),
+		locationQuery('later'),
+		locationQuery('shortlist'),
+		locationQuery('archive')
+	);
 </script>
 
 <ListView
@@ -13,7 +19,8 @@
 	{baseQuery}
 	empty="Your library is empty."
 	actions={[
-		{ label: 'Inbox', location: 'inbox' },
+		{ label: 'Later', location: 'later' },
+		{ label: 'Shortlist', location: 'shortlist' },
 		{ label: 'Archive', location: 'archive' }
 	]}
 />

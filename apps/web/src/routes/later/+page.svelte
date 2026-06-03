@@ -3,17 +3,16 @@
 	import ListView from '$lib/components/ListView.svelte';
 	import { locationQuery } from '$lib/views';
 
-	const inbox = (card: Card) => card.location === 'inbox';
-	const baseQuery = locationQuery('inbox');
+	const later = (card: Card) => card.location === 'later';
+	const baseQuery = locationQuery('later');
 </script>
 
 <ListView
-	title="Inbox"
-	predicate={inbox}
+	title="Later"
+	predicate={later}
 	{baseQuery}
-	empty="Inbox zero. Nothing new to triage."
+	empty="Nothing saved for later yet."
 	actions={[
-		{ label: 'Later', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' },
 		{ label: 'Archive', location: 'archive' }
 	]}

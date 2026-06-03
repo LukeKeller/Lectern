@@ -11,6 +11,7 @@
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import CardList from './CardList.svelte';
+	import Icon from './Icon.svelte';
 
 	interface TriageAction {
 		label: string;
@@ -110,121 +111,166 @@
 	}
 </script>
 
-<header>
-	<h1>{title}</h1>
-	<div class="controls">
-		<label>
-			Sort
-			<select bind:value={sortBy}>
-				{#each Object.entries(SORT_LABELS) as [value, label] (value)}
-					<option {value}>{label}</option>
-				{/each}
-			</select>
-		</label>
-		<button
-			type="button"
-			class="dir"
-			onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')}
-			aria-label="Toggle sort direction"
-		>
-			{sortDir === 'asc' ? '↑' : '↓'}
-		</button>
-		{#if tags.length}
-			<label>
-				Tag
-				<select bind:value={tagFilter}>
-					<option value={null}>All</option>
-					{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
+<section class="list page">
+	<header class="head">
+		<h1>
+			{title}
+			{#if cards.length}<span class="count">{cards.length}</span>{/if}
+		</h1>
+		<div class="tools">
+			<div class="select">
+				<select bind:value={sortBy} aria-label="Sort by">
+					{#each Object.entries(SORT_LABELS) as [value, label] (value)}
+						<option {value}>{label}</option>
+					{/each}
 				</select>
-			</label>
-		{/if}
-		{#if baseQuery}
-			{#if saving}
-				<form class="save" onsubmit={saveView}>
-					<input bind:value={viewName} type="text" placeholder="View name" autocomplete="off" />
-					<button type="submit">Save</button>
-					<button type="button" onclick={() => (saving = false)}>Cancel</button>
-				</form>
-			{:else}
-				<button type="button" class="dir" onclick={() => (saving = true)}>Save view</button>
+			</div>
+			<button
+				type="button"
+				class="icon"
+				onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')}
+				aria-label={`Sort ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+			>
+				{sortDir === 'asc' ? '↑' : '↓'}
+			</button>
+			{#if tags.length}
+				<div class="select">
+					<select bind:value={tagFilter} aria-label="Filter by tag">
+						<option value={null}>All tags</option>
+						{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
+					</select>
+				</div>
 			{/if}
-		{/if}
-	</div>
-</header>
+			{#if baseQuery}
+				{#if saving}
+					<form class="save" onsubmit={saveView}>
+						<input bind:value={viewName} type="text" placeholder="View name" autocomplete="off" />
+						<button type="submit" class="text">Save</button>
+						<button type="button" class="text" onclick={() => (saving = false)}>Cancel</button>
+					</form>
+				{:else}
+					<button
+						type="button"
+						class="icon save-btn"
+						onclick={() => (saving = true)}
+						title="Save as view"
+					>
+						<Icon name="bookmark" size={16} />
+					</button>
+				{/if}
+			{/if}
+		</div>
+	</header>
 
-{#if saveError}<p class="error">{saveError}</p>{/if}
+	{#if saveError}<p class="error">{saveError}</p>{/if}
 
-<CardList
-	{cards}
-	{actions}
-	{empty}
-	{selectedIndex}
-	ontriage={triageById}
-	onselect={(i) => (selectedIndex = i)}
-/>
+	<CardList
+		{cards}
+		{actions}
+		{empty}
+		{selectedIndex}
+		ontriage={triageById}
+		onselect={(i) => (selectedIndex = i)}
+	/>
+</section>
 
 <style>
-	header {
+	.head {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: baseline;
+		align-items: center;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: 0.75rem;
+		margin-bottom: 1.1rem;
 	}
 	h1 {
-		margin: 0;
-	}
-	.controls {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.82rem;
+		align-items: baseline;
+		gap: 0.55rem;
+		font-size: var(--text-2xl);
+	}
+	.count {
+		font-size: var(--text-md);
+		font-weight: 500;
 		color: var(--text-muted);
+		letter-spacing: 0;
 	}
-	label {
+	.tools {
 		display: flex;
 		align-items: center;
-		gap: 0.3rem;
+		gap: 0.4rem;
+	}
+	.select {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+	.select::after {
+		content: '';
+		position: absolute;
+		right: 0.6rem;
+		width: 0.4rem;
+		height: 0.4rem;
+		border-right: 1.5px solid var(--text-muted);
+		border-bottom: 1.5px solid var(--text-muted);
+		transform: translateY(-2px) rotate(45deg);
+		pointer-events: none;
 	}
 	select {
-		font-size: 0.82rem;
-		padding: 0.15rem 0.3rem;
+		appearance: none;
+		font-size: var(--text-sm);
+		padding: 0.32rem 1.6rem 0.32rem 0.6rem;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius);
 		background: var(--surface);
 		color: var(--text);
-	}
-	.dir {
-		padding: 0.1rem 0.4rem;
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		background: var(--surface-alt);
-		color: var(--text);
 		cursor: pointer;
+	}
+	.icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 2rem;
+		height: 2rem;
+		padding: 0 0.45rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.icon:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
 	}
 	.save {
 		display: flex;
+		align-items: center;
 		gap: 0.3rem;
 	}
 	.save input {
-		font-size: 0.82rem;
-		padding: 0.15rem 0.4rem;
+		font-size: var(--text-sm);
+		padding: 0.32rem 0.55rem;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius);
 		background: var(--surface);
 		color: var(--text);
 	}
-	.save button {
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		background: var(--surface-alt);
-		color: var(--text);
+	.text {
+		border: 0;
+		background: transparent;
+		color: var(--accent);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		padding: 0.32rem 0.4rem;
 		cursor: pointer;
-		font-size: 0.82rem;
-		padding: 0.1rem 0.4rem;
 	}
 	.error {
 		color: var(--error);
-		font-size: 0.85rem;
+		font-size: var(--text-sm);
+		margin: 0 0 0.75rem;
 	}
 </style>

@@ -49,27 +49,45 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-		font-size: 0.78rem;
-		padding: 0.1rem 0.5rem;
-		border-radius: 999px;
+		font-size: var(--text-xs);
+		padding: 0.15rem 0.2rem 0.15rem 0.55rem;
+		border-radius: var(--radius-full);
 		background: var(--surface-alt);
 		color: var(--text-muted);
 	}
 	.tag button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.05rem;
+		height: 1.05rem;
 		border: 0;
+		border-radius: var(--radius-full);
 		background: transparent;
 		color: var(--text-muted);
 		cursor: pointer;
-		font-size: 0.9rem;
+		font-size: 0.95rem;
 		line-height: 1;
-		padding: 0;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.tag button:hover {
+		background: var(--border-strong);
+		color: var(--text);
 	}
 	input {
-		font-size: 0.82rem;
-		padding: 0.15rem 0.4rem;
+		font-size: var(--text-sm);
+		padding: 0.2rem 0.6rem;
 		border: 1px solid var(--border);
-		border-radius: 999px;
+		border-radius: var(--radius-full);
 		background: var(--surface);
 		color: var(--text);
+		width: 7rem;
+		transition: border-color var(--dur-fast) var(--ease);
+	}
+	input:focus {
+		border-color: var(--accent);
+		outline: none;
 	}
 </style>
