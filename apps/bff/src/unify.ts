@@ -175,6 +175,22 @@ export interface OverlayStore {
   removeRssHighlight(highlightId: string): Promise<boolean>;
 }
 
+/**
+ * Resolve one backend's settled list result. A fulfilled result passes through;
+ * a rejection degrades to an empty page that retains the backend's incoming
+ * cursor, so the offline/faulting backend is retried on the next pull without
+ * sinking the sibling backend's results. The failure is logged for operators.
+ */
+function settledPage(
+  result: PromiseSettledResult<BackendPage<Card>>,
+  label: string,
+  fallbackCursor: string | undefined,
+): BackendPage<Card> {
+  if (result.status === "fulfilled") return result.value;
+  console.warn(`[unify] ${label} backend list failed; serving partial results:`, result.reason);
+  return { items: [], nextCursor: fallbackCursor ?? null };
+}
+
 export class UnificationService {
   constructor(
     private readonly rss: RssBackend,
@@ -182,13 +198,28 @@ export class UnificationService {
     private readonly overlays: OverlayStore,
   ) {}
 
-  /** List from both backends in parallel, then overlay glue state. */
+  /**
+   * List from both backends in parallel, then overlay glue state. The two
+   * backends are independent: if one is unreachable or faulting (e.g. MiniFlux
+   * returns 404), we still serve the other's items rather than failing the whole
+   * pull — otherwise a single broken backend would empty the entire library and
+   * feed. A failed backend keeps its incoming cursor so the next pull retries it.
+   * Only when BOTH backends fail do we surface the error (a real outage).
+   */
   async list(params: BackendListParams): Promise<BackendPage<Card>> {
     const cursors = decodeCombinedCursor(params.cursor);
-    const [rssPage, readLaterPage] = await Promise.all([
+    const [rssResult, readLaterResult] = await Promise.allSettled([
       this.rss.listEntries({ ...params, cursor: cursors.rss }),
       this.readLater.list({ ...params, cursor: cursors.readLater }),
     ]);
+
+    if (rssResult.status === "rejected" && readLaterResult.status === "rejected") {
+      throw rssResult.reason;
+    }
+
+    const rssPage = settledPage(rssResult, "rss", cursors.rss);
+    const readLaterPage = settledPage(readLaterResult, "read-later", cursors.readLater);
+
     const items = await this.applyOverlays([...rssPage.items, ...readLaterPage.items]);
     return {
       items,

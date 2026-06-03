@@ -186,4 +186,68 @@ describe("UnificationService", () => {
     const service = new UnificationService({} as RssBackend, {} as ReadLaterBackend, overlayStore);
     expect(await service.applyOverlays([])).toEqual([]);
   });
+
+  it("still serves read-later items when the rss backend fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rss: RssBackend = {
+      listEntries: vi.fn(async () => {
+        throw new Error("MiniFlux GET /v1/entries -> 404");
+      }),
+    } as unknown as RssBackend;
+    const readLater: ReadLaterBackend = {
+      list: vi.fn(
+        async (): Promise<BackendPage<Card>> => ({ items: [readeckCard()], nextCursor: null }),
+      ),
+    } as unknown as ReadLaterBackend;
+
+    const service = new UnificationService(rss, readLater, overlayStore);
+    const page = await service.list({ pageSize: 50 } satisfies BackendListParams);
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.source).toBe("readeck");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("still serves rss items when the read-later backend fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rss: RssBackend = {
+      listEntries: vi.fn(
+        async (): Promise<BackendPage<Card>> => ({ items: [rssCard()], nextCursor: null }),
+      ),
+    } as unknown as RssBackend;
+    const readLater: ReadLaterBackend = {
+      list: vi.fn(async () => {
+        throw new Error("Readeck GET /api/bookmarks -> 404");
+      }),
+    } as unknown as ReadLaterBackend;
+
+    const service = new UnificationService(rss, readLater, overlayStore);
+    const page = await service.list({ pageSize: 50 } satisfies BackendListParams);
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.source).toBe("miniflux");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("throws when both backends fail (a real outage is not masked)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rss: RssBackend = {
+      listEntries: vi.fn(async () => {
+        throw new Error("MiniFlux down");
+      }),
+    } as unknown as RssBackend;
+    const readLater: ReadLaterBackend = {
+      list: vi.fn(async () => {
+        throw new Error("Readeck down");
+      }),
+    } as unknown as ReadLaterBackend;
+
+    const service = new UnificationService(rss, readLater, overlayStore);
+    await expect(service.list({ pageSize: 50 } satisfies BackendListParams)).rejects.toThrow(
+      "MiniFlux down",
+    );
+    warn.mockRestore();
+  });
 });
