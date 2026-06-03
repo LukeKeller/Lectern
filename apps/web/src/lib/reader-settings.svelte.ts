@@ -38,18 +38,27 @@ class ReaderSettingsStore {
 	/**
 	 * Keep the PWA status-bar colour (`<meta name="theme-color">`) in lockstep
 	 * with the active background so full-screen chrome reads as one surface
-	 * instead of a two-tone top/bottom. Colours mirror `--bg` in app.css.
+	 * instead of a two-tone top/bottom. Two media-scoped tags (set in app.html)
+	 * track the OS scheme natively for `auto`; a forced light/dark theme overrides
+	 * both tags so whichever one the OS matches shows the forced colour. Colours
+	 * mirror `--bg` in app.css.
 	 */
 	private syncThemeColor(): void {
 		if (!browser) return;
-		const dark =
-			this.current.theme === 'dark' ||
-			(this.current.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-		const color = dark ? '#1a1815' : '#f6f4ee';
-		document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+		const LIGHT = '#f6f4ee';
+		const DARK = '#1a1815';
+		const t = this.current.theme;
+		for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+			const natural = meta.media.includes('dark') ? DARK : LIGHT;
+			meta.content = t === 'light' ? LIGHT : t === 'dark' ? DARK : natural;
+		}
 	}
 
-	/** While theme is `auto`, the status-bar colour must track OS scheme changes. */
+	/**
+	 * While theme is `auto` the media-scoped tags follow the OS natively, but a
+	 * forced theme pins both tags — so re-sync on scheme changes to keep the
+	 * (now OS-matched) tag showing the forced colour.
+	 */
 	private ensureSchemeListener(): void {
 		if (!browser || this.schemeListenerBound) return;
 		this.schemeListenerBound = true;
