@@ -5,7 +5,7 @@ id = "lectern"
 name = "Lectern"
 description.en = "Self-hosted RSS + read-later reader (unifies MiniFlux + Readeck)"
 
-version = "0.1.2~ynh1"
+version = "0.1.3~ynh1"
 maintainers = ["lukekeller"]
 
 [upstream]
