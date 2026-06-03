@@ -44,6 +44,7 @@
 	let blocks: HTMLElement[] = [];
 	let tocOpen = $state(loadBool('lectern.reader.toc', false));
 	let panelOpen = $state(loadBool('lectern.reader.panel', false));
+	let focusMode = $state(loadBool('lectern.reader.focus', false));
 	let headings = $state<{ id: string; text: string; level: number }[]>([]);
 	let activeHeading = $state('');
 	let highlights = $state<Highlight[]>([]);
@@ -62,6 +63,7 @@
 		if (typeof localStorage === 'undefined') return;
 		localStorage.setItem('lectern.reader.toc', tocOpen ? '1' : '0');
 		localStorage.setItem('lectern.reader.panel', panelOpen ? '1' : '0');
+		localStorage.setItem('lectern.reader.focus', focusMode ? '1' : '0');
 	});
 
 	const styleVars = $derived(
@@ -196,7 +198,25 @@
 	function focusBlock(i: number) {
 		focusIndex = Math.max(0, Math.min(blocks.length - 1, i));
 		updateBar();
+		applyFocusClass();
 		blocks[focusIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	}
+
+	// Focus mode dims every block but the focused one; the class drives the CSS.
+	function applyFocusClass() {
+		for (let i = 0; i < blocks.length; i++)
+			blocks[i].classList.toggle('lectern-focus', focusMode && i === focusIndex);
+	}
+
+	function toggleFocusMode() {
+		focusMode = !focusMode;
+		// Anchor focus to the block nearest the top so dimming has a subject, but
+		// don't scroll — keep the reader where they are.
+		if (focusMode && focusIndex < 0 && blocks.length) {
+			focusIndex = nearestBlock();
+			updateBar();
+		}
+		applyFocusClass();
 	}
 
 	/** Move the paragraph focus; returns false when there are no blocks yet. */
@@ -231,6 +251,9 @@
 				e.preventDefault();
 				void addHighlight(nh);
 			}
+		} else if (e.key === 'f' || e.key === 'F') {
+			toggleFocusMode();
+			e.preventDefault();
 		}
 	}
 
@@ -536,6 +559,17 @@
 		>
 			<Icon name="info" size={16} />
 		</button>
+		<button
+			type="button"
+			class="rail-btn"
+			class:on={focusMode}
+			aria-pressed={focusMode}
+			onclick={toggleFocusMode}
+			title="Focus mode ( f )"
+			aria-label="Toggle focus mode"
+		>
+			<Icon name="book" size={16} />
+		</button>
 		{#if card}
 			<!-- card.url is an external absolute URL, not an internal route -->
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
@@ -672,7 +706,12 @@
 			<p class="rail-empty">No headings.</p>
 		{/if}
 	</aside>
-	<div class="doc" style={styleVars} bind:this={docEl}>
+	<div
+		class="doc"
+		class:focus-on={focusMode && focusIndex >= 0}
+		style={styleVars}
+		bind:this={docEl}
+	>
 		{#if focusIndex >= 0}
 			<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
 		{/if}
@@ -869,6 +908,16 @@
 		display: flex;
 		align-items: center;
 		gap: 0.3rem;
+	}
+
+	/* Focus mode: spotlight the focused block by fading the rest of the prose.
+	   Uses colour (not opacity) so nested blocks never double-dim. */
+	.doc.focus-on article {
+		color: color-mix(in srgb, var(--text) 30%, var(--bg));
+		transition: color var(--dur) var(--ease);
+	}
+	.doc.focus-on article :global(.lectern-focus) {
+		color: var(--text);
 	}
 
 	.display-scrim {
