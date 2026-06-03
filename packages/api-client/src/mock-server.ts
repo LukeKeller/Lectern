@@ -138,6 +138,7 @@ function sampleCards(): Card[] {
       id: `card_${i + 1}`,
       sourceId: `${b.source}_${i + 1}`,
       url: `https://${b.siteName.includes(".") ? b.siteName : "example.com"}/post-${i + 1}`,
+      tags: [...b.tags],
     }),
   );
 }
