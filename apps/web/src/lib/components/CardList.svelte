@@ -183,13 +183,17 @@
 		gap: 0.85rem;
 		padding: 0.8rem 0.85rem;
 		border-radius: var(--radius-lg);
-		transition: background var(--dur-fast) var(--ease);
+		transition:
+			background var(--dur-fast) var(--ease),
+			box-shadow var(--dur-fast) var(--ease);
 	}
 	.card:hover {
 		background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
+		box-shadow: var(--shadow-sm);
 	}
 	li.selected .card {
-		background: var(--surface-alt);
+		background: var(--accent-soft);
+		box-shadow: var(--shadow-sm);
 	}
 	li.selected .card::before {
 		content: '';
@@ -350,7 +354,8 @@
 		stroke-width: 3.2;
 	}
 	.ring-bg {
-		stroke: var(--border);
+		stroke: var(--border-strong);
+		opacity: 0.6;
 	}
 	.ring-fg {
 		stroke: var(--accent);
