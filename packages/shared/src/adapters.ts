@@ -1,3 +1,4 @@
+import type { Feed, FeedFolder } from "./feeds";
 import type { Card, Highlight } from "./model";
 
 /**
@@ -29,6 +30,13 @@ export interface RssBackend {
   /** Trigger a feed refresh (all feeds). */
   refresh(): Promise<void>;
   exportOpml(): Promise<string>;
+  // Feed + folder management.
+  listFeeds(): Promise<{ feeds: Feed[]; folders: FeedFolder[] }>;
+  subscribe(input: { feedUrl: string; folderId?: string }): Promise<Feed>;
+  updateFeed(id: string, patch: { folderId?: string | null; title?: string }): Promise<Feed>;
+  deleteFeed(id: string): Promise<void>;
+  /** Import an OPML document; returns a status message. */
+  importOpml(opml: string): Promise<string>;
 }
 
 export type NewHighlight = Omit<Highlight, "id" | "documentId" | "createdAt">;

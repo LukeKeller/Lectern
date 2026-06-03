@@ -3,10 +3,19 @@
 	import { getApiUrl, getToken, setToken } from '$lib/config';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import type { FontFamily } from '$lib/typography';
+	import { buildBookmarklet } from '$lib/bookmarklet';
 
 	let token = $state('');
 	let saved = $state(false);
+	let copied = $state(false);
 	const apiUrl = getApiUrl();
+
+	const bookmarklet = $derived(buildBookmarklet(apiUrl, token.trim()));
+
+	async function copyBookmarklet() {
+		await navigator.clipboard.writeText(bookmarklet);
+		copied = true;
+	}
 
 	const FONTS: { value: FontFamily; label: string }[] = [
 		{ value: 'serif', label: 'Serif' },
@@ -46,6 +55,23 @@
 		<button type="submit">Save token</button>
 		{#if saved}<span class="ok">Saved.</span>{/if}
 	</form>
+</section>
+
+<section>
+	<h2>Save bookmarklet</h2>
+	<p class="hint">
+		Drag this link to your bookmarks bar to save the current page to Lectern from any browser. It
+		embeds your personal token, so keep it private.
+	</p>
+	<div class="bookmarklet">
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+		<a class="bm-link" href={bookmarklet} draggable="true" onclick={(e) => e.preventDefault()}>
+			Save to Lectern
+		</a>
+		<button type="button" onclick={copyBookmarklet}>Copy</button>
+		{#if copied}<span class="ok">Copied.</span>{/if}
+	</div>
+	{#if !token.trim()}<p class="hint">Save a bearer token above first.</p>{/if}
 </section>
 
 <section>
@@ -157,5 +183,24 @@
 	.ok {
 		color: var(--ok);
 		font-size: 0.85rem;
+	}
+	.hint {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		max-width: 420px;
+	}
+	.bookmarklet {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.bm-link {
+		padding: 0.4rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-alt);
+		color: var(--text);
+		text-decoration: none;
+		cursor: grab;
 	}
 </style>

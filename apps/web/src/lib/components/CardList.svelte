@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Card, Location } from '@lectern/shared';
 	import { resolve } from '$app/paths';
+	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
 
 	interface TriageAction {
@@ -34,6 +35,20 @@
 		if (ontriage) ontriage(id, location);
 		else void defaultTriage(id, location);
 	}
+
+	let savingId = $state<string | null>(null);
+
+	// Pull a MiniFlux entry into the library as a saved "read later" document,
+	// then refresh the local mirror so it appears immediately.
+	async function saveToLater(card: Card) {
+		savingId = card.id;
+		try {
+			await getClient().saveDocument({ url: card.url, tags: [], location: 'later' });
+			await getSync().pull();
+		} finally {
+			savingId = null;
+		}
+	}
 </script>
 
 {#if !cards}
@@ -60,13 +75,22 @@
 						{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
 					</div>
 				{/if}
-				{#if actions.length}
+				{#if actions.length || card.source === 'miniflux'}
 					<div class="actions">
 						{#each actions as action (action.location)}
 							<button type="button" onclick={() => triage(card.id, action.location)}>
 								{action.label}
 							</button>
 						{/each}
+						{#if card.source === 'miniflux'}
+							<button
+								type="button"
+								onclick={() => saveToLater(card)}
+								disabled={savingId === card.id}
+							>
+								{savingId === card.id ? 'Saving…' : 'Read later'}
+							</button>
+						{/if}
 					</div>
 				{/if}
 			</li>

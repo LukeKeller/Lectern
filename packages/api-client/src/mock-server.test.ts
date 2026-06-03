@@ -47,4 +47,14 @@ describe("mock server serves the contract", () => {
   it("deleteDocument resolves on 204", async () => {
     await expect(client.deleteDocument("card_1")).resolves.toBeUndefined();
   });
+
+  it("listFeeds returns feeds + folders", async () => {
+    const r = await client.listFeeds();
+    expect(r.feeds[0]!.feedUrl).toBe("https://example.com/rss");
+    expect(r.folders).toHaveLength(1);
+  });
+
+  it("refreshFeeds resolves on an empty-body 202", async () => {
+    await expect(client.refreshFeeds()).resolves.toBeUndefined();
+  });
 });

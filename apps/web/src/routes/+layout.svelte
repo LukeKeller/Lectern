@@ -19,6 +19,7 @@
 	const nav = [
 		{ id: '/', label: 'Inbox' },
 		{ id: '/feed', label: 'Feed' },
+		{ id: '/feeds', label: 'Feeds' },
 		{ id: '/library', label: 'Library' },
 		{ id: '/views', label: 'Views' },
 		{ id: '/search', label: 'Search' },
@@ -26,7 +27,9 @@
 	] as const;
 
 	function isActive(href: string): boolean {
-		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+		if (href === '/') return page.url.pathname === '/';
+		const path = page.url.pathname;
+		return path === href || path.startsWith(`${href}/`);
 	}
 
 	function isEditable(target: EventTarget | null): boolean {

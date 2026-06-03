@@ -4,18 +4,24 @@ import {
   CreateHighlightRequest,
   CreateViewRequest,
   DocumentContentResponse,
+  Feed,
+  FeedsResponse,
   Highlight,
   HighlightsResponse,
+  ImportOpmlRequest,
+  ImportOpmlResponse,
   ListDocumentsQuery,
   ListDocumentsResponse,
   SaveDocumentRequest,
   SavedView,
+  SubscribeFeedRequest,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
   SyncPushResponse,
   TagsResponse,
   UpdateDocumentRequest,
+  UpdateFeedRequest,
   UpdateViewRequest,
   ViewsResponse,
   type SyncConflict,
@@ -197,6 +203,44 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const ok = await deps.overlay.deleteView(req.params.id);
     if (!ok) throw new NotFoundError(`view not found: ${req.params.id}`);
     return reply.code(204).send();
+  });
+
+  // ---- feeds --------------------------------------------------------------
+  app.get("/feeds", async () => {
+    const { feeds, folders } = await deps.rss.listFeeds();
+    return FeedsResponse.parse({ feeds, folders });
+  });
+
+  app.post<{ Body: unknown }>("/feeds", async (req, reply) => {
+    const body = SubscribeFeedRequest.parse(req.body);
+    const feed = await deps.rss.subscribe({ feedUrl: body.feedUrl, folderId: body.folderId });
+    reply.code(201);
+    return Feed.parse(feed);
+  });
+
+  app.patch<{ Params: { id: string }; Body: unknown }>("/feeds/:id", async (req) => {
+    const body = UpdateFeedRequest.parse(req.body);
+    const feed = await deps.rss.updateFeed(req.params.id, {
+      folderId: body.folderId,
+      title: body.title,
+    });
+    return Feed.parse(feed);
+  });
+
+  app.delete<{ Params: { id: string } }>("/feeds/:id", async (req, reply) => {
+    await deps.rss.deleteFeed(req.params.id);
+    return reply.code(204).send();
+  });
+
+  app.post("/feeds/refresh", async (_req, reply) => {
+    await deps.rss.refresh();
+    return reply.code(202).send();
+  });
+
+  app.post<{ Body: unknown }>("/feeds/import", async (req) => {
+    const body = ImportOpmlRequest.parse(req.body);
+    const message = await deps.rss.importOpml(body.opml);
+    return ImportOpmlResponse.parse({ message });
   });
 
   // ---- sync ---------------------------------------------------------------

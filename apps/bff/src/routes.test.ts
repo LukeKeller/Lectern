@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   Card,
+  Feed,
   type BackendPage,
   type CreateViewRequest,
+  type FeedFolder,
   type Highlight,
   type NewHighlight,
   type ReadLaterBackend,
@@ -39,6 +41,10 @@ function makeCard(over: Partial<Card> & { id: string; source: Card["source"] }):
 class FakeRssBackend implements RssBackend {
   entries = new Map<string, Card>();
   content = new Map<string, string>();
+  feeds: Feed[] = [];
+  folders: FeedFolder[] = [];
+  refreshed = 0;
+  imported: string[] = [];
 
   async listEntries(): Promise<BackendPage<Card>> {
     return { items: [...this.entries.values()], nextCursor: null };
@@ -48,9 +54,38 @@ class FakeRssBackend implements RssBackend {
   }
   async setRead(): Promise<void> {}
   async setStarred(): Promise<void> {}
-  async refresh(): Promise<void> {}
+  async refresh(): Promise<void> {
+    this.refreshed++;
+  }
   async exportOpml(): Promise<string> {
     return "<opml/>";
+  }
+  async listFeeds(): Promise<{ feeds: Feed[]; folders: FeedFolder[] }> {
+    return { feeds: this.feeds, folders: this.folders };
+  }
+  async subscribe(input: { feedUrl: string; folderId?: string }): Promise<Feed> {
+    const feed = Feed.parse({
+      id: String(this.feeds.length + 1),
+      title: "New feed",
+      feedUrl: input.feedUrl,
+      folderId: input.folderId ?? null,
+    });
+    this.feeds.push(feed);
+    return feed;
+  }
+  async updateFeed(id: string, patch: { folderId?: string | null; title?: string }): Promise<Feed> {
+    const feed = this.feeds.find((f) => f.id === id);
+    if (!feed) throw new Error(`no feed ${id}`);
+    if (patch.title !== undefined) feed.title = patch.title;
+    if (patch.folderId !== undefined) feed.folderId = patch.folderId;
+    return feed;
+  }
+  async deleteFeed(id: string): Promise<void> {
+    this.feeds = this.feeds.filter((f) => f.id !== id);
+  }
+  async importOpml(opml: string): Promise<string> {
+    this.imported.push(opml);
+    return "Feeds imported";
   }
 }
 
@@ -598,6 +633,115 @@ describe("sync", () => {
       payload: { mutations: [{ type: "bogus", id: "x" }] },
     });
     expect(res.statusCode).toBe(400);
+    await a.close();
+  });
+});
+
+describe("feeds", () => {
+  it("lists feeds and folders", async () => {
+    harness.deps.rss.feeds = [
+      Feed.parse({
+        id: "1",
+        title: "Simon Willison's Weblog",
+        feedUrl: "https://simonwillison.net/atom/everything/",
+        siteUrl: "http://simonwillison.net/",
+        folderId: "2",
+        folderTitle: "Lectern Spike",
+        unreadCount: 29,
+      }),
+    ];
+    harness.deps.rss.folders = [{ id: "2", title: "Lectern Spike", unreadCount: 29 }];
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/feeds", headers: auth });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.feeds).toHaveLength(1);
+    expect(body.feeds[0].id).toBe("1");
+    expect(body.folders).toEqual([{ id: "2", title: "Lectern Spike", unreadCount: 29 }]);
+    await a.close();
+  });
+
+  it("rejects /feeds without a bearer token (401)", async () => {
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/feeds" });
+    expect(res.statusCode).toBe(401);
+    await a.close();
+  });
+
+  it("subscribes to a feed (201) and returns the created feed", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/feeds",
+      headers: auth,
+      payload: { feedUrl: "https://example.com/feed.xml", folderId: "2" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().feedUrl).toBe("https://example.com/feed.xml");
+    expect(res.json().folderId).toBe("2");
+    expect(harness.deps.rss.feeds).toHaveLength(1);
+    await a.close();
+  });
+
+  it("rejects a non-url feedUrl (400)", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/feeds",
+      headers: auth,
+      payload: { feedUrl: "not-a-url" },
+    });
+    expect(res.statusCode).toBe(400);
+    await a.close();
+  });
+
+  it("renames / moves a feed via PATCH (200)", async () => {
+    harness.deps.rss.feeds = [
+      Feed.parse({ id: "1", title: "Old", feedUrl: "https://example.com/feed.xml" }),
+    ];
+    const a = app();
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/feeds/1",
+      headers: auth,
+      payload: { title: "New", folderId: "3" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().title).toBe("New");
+    expect(res.json().folderId).toBe("3");
+    await a.close();
+  });
+
+  it("unsubscribes via DELETE (204)", async () => {
+    harness.deps.rss.feeds = [
+      Feed.parse({ id: "1", title: "Old", feedUrl: "https://example.com/feed.xml" }),
+    ];
+    const a = app();
+    const res = await a.inject({ method: "DELETE", url: "/api/v1/feeds/1", headers: auth });
+    expect(res.statusCode).toBe(204);
+    expect(harness.deps.rss.feeds).toHaveLength(0);
+    await a.close();
+  });
+
+  it("refreshes all feeds (202)", async () => {
+    const a = app();
+    const res = await a.inject({ method: "POST", url: "/api/v1/feeds/refresh", headers: auth });
+    expect(res.statusCode).toBe(202);
+    expect(harness.deps.rss.refreshed).toBe(1);
+    await a.close();
+  });
+
+  it("imports OPML (200) and returns a status message", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/feeds/import",
+      headers: auth,
+      payload: { opml: "<opml/>" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().message).toBe("Feeds imported");
+    expect(harness.deps.rss.imported).toEqual(["<opml/>"]);
     await a.close();
   });
 });

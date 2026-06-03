@@ -1,5 +1,11 @@
 import {
   Card,
+  Feed,
+  FeedsResponse,
+  ImportOpmlRequest,
+  ImportOpmlResponse,
+  SubscribeFeedRequest,
+  UpdateFeedRequest,
   CreateHighlightRequest,
   CreateViewRequest,
   DocumentContentResponse,
@@ -76,7 +82,10 @@ export class LecternClient {
     });
     if (!res.ok) throw new LecternApiError(res.status, `${method} ${path} -> ${res.status}`);
     if (res.status === 204) return undefined as T;
-    const json = await res.json();
+    // Tolerate any empty-body 2xx (e.g. 202 from /feeds/refresh) as a void result.
+    const text = await res.text();
+    if (!text) return undefined as T;
+    const json = JSON.parse(text);
     return opts.schema ? opts.schema.parse(json) : (json as T);
   }
 
@@ -127,5 +136,23 @@ export class LecternClient {
   }
   syncPush(body: SyncPushRequest) {
     return this.request("POST", "/sync", { body, schema: SyncPushResponse });
+  }
+  listFeeds() {
+    return this.request("GET", "/feeds", { schema: FeedsResponse });
+  }
+  subscribeFeed(body: SubscribeFeedRequest) {
+    return this.request("POST", "/feeds", { body, schema: Feed });
+  }
+  updateFeed(id: string, body: UpdateFeedRequest) {
+    return this.request("PATCH", `/feeds/${id}`, { body, schema: Feed });
+  }
+  deleteFeed(id: string) {
+    return this.request<void>("DELETE", `/feeds/${id}`);
+  }
+  refreshFeeds() {
+    return this.request<void>("POST", "/feeds/refresh");
+  }
+  importOpml(body: ImportOpmlRequest) {
+    return this.request("POST", "/feeds/import", { body, schema: ImportOpmlResponse });
   }
 }

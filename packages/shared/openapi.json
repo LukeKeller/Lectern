@@ -461,6 +461,72 @@
             ]
           }
         }
+      },
+      "Feed": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "feedUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "siteUrl": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "folderId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "folderTitle": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unreadCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "feedUrl",
+          "siteUrl",
+          "folderId",
+          "folderTitle",
+          "unreadCount"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -3376,6 +3442,447 @@
                 },
                 "required": [
                   "mutations"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feeds": {
+      "get": {
+        "operationId": "listFeeds",
+        "summary": "List feeds and folders",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List feeds and folders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "feeds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "feedUrl": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "siteUrl": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "folderId": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "folderTitle": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unreadCount": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "feedUrl",
+                          "siteUrl",
+                          "folderId",
+                          "folderTitle",
+                          "unreadCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "folders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "unreadCount": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "unreadCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "feeds",
+                    "folders"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "subscribeFeed",
+        "summary": "Subscribe to a feed",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Subscribe to a feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "feedUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "siteUrl": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "folderId": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "folderTitle": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "feedUrl",
+                    "siteUrl",
+                    "folderId",
+                    "folderTitle",
+                    "unreadCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "feedUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "folderId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "feedUrl"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feeds/{id}": {
+      "patch": {
+        "operationId": "updateFeed",
+        "summary": "Update a feed (rename / move folder)",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Update a feed (rename / move folder)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "feedUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "siteUrl": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "folderId": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "folderTitle": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "feedUrl",
+                    "siteUrl",
+                    "folderId",
+                    "folderTitle",
+                    "unreadCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "folderId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteFeed",
+        "summary": "Unsubscribe from a feed",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unsubscribe from a feed"
+          }
+        }
+      }
+    },
+    "/feeds/refresh": {
+      "post": {
+        "operationId": "refreshFeeds",
+        "summary": "Refresh all feeds",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": "Refresh all feeds"
+          }
+        }
+      }
+    },
+    "/feeds/import": {
+      "post": {
+        "operationId": "importOpml",
+        "summary": "Import feeds from OPML",
+        "tags": [
+          "feeds"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Import feeds from OPML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "opml": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "opml"
                 ],
                 "additionalProperties": false
               }

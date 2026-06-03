@@ -1,6 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   Card,
+  Feed,
+  FeedsResponse,
+  ImportOpmlRequest,
+  ImportOpmlResponse,
+  SubscribeFeedRequest,
+  UpdateFeedRequest,
   CreateHighlightRequest,
   CreateViewRequest,
   DocumentContentResponse,
@@ -137,6 +143,44 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       SyncPushResponse.parse({ applied: input.mutations.length, conflicts: [] }),
     );
   }
+  if (path === "/feeds" && method === "GET") {
+    return send(
+      res,
+      200,
+      FeedsResponse.parse({
+        feeds: [
+          {
+            id: "feed_1",
+            title: "Example Feed",
+            feedUrl: "https://example.com/rss",
+            siteUrl: "https://example.com",
+            folderId: "folder_1",
+            folderTitle: "Tech",
+            unreadCount: 3,
+          },
+        ],
+        folders: [{ id: "folder_1", title: "Tech", unreadCount: 3 }],
+      }),
+    );
+  }
+  if (path === "/feeds" && method === "POST") {
+    const input = SubscribeFeedRequest.parse(body);
+    return send(
+      res,
+      201,
+      Feed.parse({
+        id: "feed_new",
+        title: "New Feed",
+        feedUrl: input.feedUrl,
+        folderId: input.folderId ?? null,
+      }),
+    );
+  }
+  if (path === "/feeds/refresh" && method === "POST") return send(res, 202);
+  if (path === "/feeds/import" && method === "POST") {
+    ImportOpmlRequest.parse(body);
+    return send(res, 200, ImportOpmlResponse.parse({ message: "Feeds imported." }));
+  }
 
   const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights)?$/);
   if (doc) {
@@ -179,6 +223,24 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
           createdAt: NOW,
           updatedAt: NOW,
           ...patch,
+        }),
+      );
+    }
+    if (method === "DELETE") return send(res, 204);
+  }
+  const feed = path.match(/^\/feeds\/([^/]+)$/);
+  if (feed) {
+    const id = feed[1]!;
+    if (method === "PATCH") {
+      const patch = UpdateFeedRequest.parse(body);
+      return send(
+        res,
+        200,
+        Feed.parse({
+          id,
+          title: patch.title ?? "Example Feed",
+          feedUrl: "https://example.com/rss",
+          folderId: patch.folderId ?? null,
         }),
       );
     }

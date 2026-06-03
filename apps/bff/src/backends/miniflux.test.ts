@@ -1,6 +1,13 @@
-import { Card } from "@lectern/shared";
+import { Card, Feed, FeedFolder } from "@lectern/shared";
 import { describe, expect, it } from "vitest";
-import { minifluxEntryToCard, minifluxReadState, type MinifluxEntry } from "./miniflux";
+import {
+  minifluxCategoryToFolder,
+  minifluxEntryToCard,
+  minifluxFeedToFeed,
+  minifluxReadState,
+  type MinifluxEntry,
+  type MinifluxFeed,
+} from "./miniflux";
 
 const baseEntry: MinifluxEntry = {
   id: 42,
@@ -61,5 +68,50 @@ describe("minifluxReadState", () => {
   it("maps the binary read flag", () => {
     expect(minifluxReadState(true)).toBe("finished");
     expect(minifluxReadState(false)).toBe("unopened");
+  });
+});
+
+const baseFeed: MinifluxFeed = {
+  id: 1,
+  title: "Simon Willison's Weblog",
+  site_url: "http://simonwillison.net/",
+  feed_url: "https://simonwillison.net/atom/everything/",
+  category: { id: 2, title: "Lectern Spike" },
+};
+
+describe("minifluxFeedToFeed", () => {
+  it("normalizes a feed into a Feed with stringified ids and folder fields", () => {
+    const feed = minifluxFeedToFeed(baseFeed, 29);
+    expect(feed).toEqual({
+      id: "1",
+      title: "Simon Willison's Weblog",
+      feedUrl: "https://simonwillison.net/atom/everything/",
+      siteUrl: "http://simonwillison.net/",
+      folderId: "2",
+      folderTitle: "Lectern Spike",
+      unreadCount: 29,
+    });
+    expect(() => Feed.parse(feed)).not.toThrow();
+  });
+
+  it("defaults unread to 0 and collapses a blank site_url / missing category to null", () => {
+    const feed = minifluxFeedToFeed({ ...baseFeed, site_url: "", category: undefined });
+    expect(feed.unreadCount).toBe(0);
+    expect(feed.siteUrl).toBeNull();
+    expect(feed.folderId).toBeNull();
+    expect(feed.folderTitle).toBeNull();
+    expect(() => Feed.parse(feed)).not.toThrow();
+  });
+});
+
+describe("minifluxCategoryToFolder", () => {
+  it("normalizes a category into a FeedFolder", () => {
+    const folder = minifluxCategoryToFolder({ id: 2, title: "Lectern Spike" }, 29);
+    expect(folder).toEqual({ id: "2", title: "Lectern Spike", unreadCount: 29 });
+    expect(() => FeedFolder.parse(folder)).not.toThrow();
+  });
+
+  it("defaults unread to 0", () => {
+    expect(minifluxCategoryToFolder({ id: 1, title: "All" }).unreadCount).toBe(0);
   });
 });

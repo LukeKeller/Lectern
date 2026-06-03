@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Card, Category, Highlight, HighlightColor, Location, Source, Tag } from "./model";
+import { Feed, FeedFolder } from "./feeds";
 import { SyncPullResponse, SyncPushRequest, SyncPushResponse } from "./sync";
 import { SavedView } from "./views";
 
@@ -85,6 +86,27 @@ export const SyncPullQuery = z.object({
   pageSize: z.number().int().positive().max(500).default(200),
 });
 export type SyncPullQuery = z.infer<typeof SyncPullQuery>;
+
+export const FeedsResponse = z.object({ feeds: z.array(Feed), folders: z.array(FeedFolder) });
+export type FeedsResponse = z.infer<typeof FeedsResponse>;
+
+export const SubscribeFeedRequest = z.object({
+  feedUrl: z.url(),
+  folderId: z.string().optional(),
+});
+export type SubscribeFeedRequest = z.infer<typeof SubscribeFeedRequest>;
+
+export const UpdateFeedRequest = z.object({
+  folderId: z.string().nullable().optional(),
+  title: z.string().optional(),
+});
+export type UpdateFeedRequest = z.infer<typeof UpdateFeedRequest>;
+
+export const ImportOpmlRequest = z.object({ opml: z.string() });
+export type ImportOpmlRequest = z.infer<typeof ImportOpmlRequest>;
+
+export const ImportOpmlResponse = z.object({ message: z.string() });
+export type ImportOpmlResponse = z.infer<typeof ImportOpmlResponse>;
 
 // ---- Endpoint registry ------------------------------------------------------
 
@@ -253,6 +275,61 @@ export const endpoints: Endpoint[] = [
     response: SyncPushResponse,
     status: 200,
   },
+  {
+    method: "GET",
+    path: "/feeds",
+    operationId: "listFeeds",
+    summary: "List feeds and folders",
+    tags: ["feeds"],
+    response: FeedsResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/feeds",
+    operationId: "subscribeFeed",
+    summary: "Subscribe to a feed",
+    tags: ["feeds"],
+    body: SubscribeFeedRequest,
+    response: Feed,
+    status: 201,
+  },
+  {
+    method: "PATCH",
+    path: "/feeds/:id",
+    operationId: "updateFeed",
+    summary: "Update a feed (rename / move folder)",
+    tags: ["feeds"],
+    body: UpdateFeedRequest,
+    response: Feed,
+    status: 200,
+  },
+  {
+    method: "DELETE",
+    path: "/feeds/:id",
+    operationId: "deleteFeed",
+    summary: "Unsubscribe from a feed",
+    tags: ["feeds"],
+    status: 204,
+  },
+  {
+    method: "POST",
+    path: "/feeds/refresh",
+    operationId: "refreshFeeds",
+    summary: "Refresh all feeds",
+    tags: ["feeds"],
+    status: 202,
+  },
+  {
+    method: "POST",
+    path: "/feeds/import",
+    operationId: "importOpml",
+    summary: "Import feeds from OPML",
+    tags: ["feeds"],
+    body: ImportOpmlRequest,
+    response: ImportOpmlResponse,
+    status: 200,
+  },
 ];
 
 // ---- OpenAPI 3.1 document ----------------------------------------------------
@@ -294,6 +371,7 @@ const NAMED_SCHEMAS: Record<string, z.ZodType> = {
   Highlight,
   Tag,
   SavedView,
+  Feed,
 };
 
 export function buildOpenApiDocument(): JsonSchema {

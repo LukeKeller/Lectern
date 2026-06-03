@@ -1,4 +1,12 @@
-import type { BackendListParams, BackendPage, Card, ReadState, RssBackend } from "@lectern/shared";
+import type {
+  BackendListParams,
+  BackendPage,
+  Card,
+  Feed,
+  FeedFolder,
+  ReadState,
+  RssBackend,
+} from "@lectern/shared";
 import { BackendHttpError } from "../errors";
 
 /**
@@ -8,12 +16,26 @@ import { BackendHttpError } from "../errors";
  * feed-derived tags, and `reading_time` (already in minutes).
  */
 
-/** Raw MiniFlux entry shape (subset we consume). See docs/spikes/D1-findings.md. */
+/** Raw MiniFlux category shape (subset we consume). A category groups feeds. */
+export interface MinifluxCategory {
+  id: number;
+  title: string;
+}
+
+/** Raw MiniFlux feed shape (subset we consume). See docs/spikes/D1-findings.md. */
 export interface MinifluxFeed {
   id: number;
   title: string;
   site_url: string;
   feed_url: string;
+  /** Present on the feeds-list and single-feed endpoints, absent on entry.feed. */
+  category?: MinifluxCategory;
+}
+
+/** `GET /v1/feeds/counters` payload: per-feed read/unread tallies keyed by feed id. */
+export interface MinifluxFeedCounters {
+  reads: Record<string, number>;
+  unreads: Record<string, number>;
 }
 
 export interface MinifluxEntry {
@@ -81,6 +103,32 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
   };
 }
 
+/**
+ * Normalize a MiniFlux feed into the unified `Feed`. Numeric ids are stringified;
+ * an empty `site_url` collapses to `null`; folder fields are derived from the
+ * embedded category. `unreadCount` comes from the separate counters endpoint.
+ */
+export function minifluxFeedToFeed(feed: MinifluxFeed, unreadCount = 0): Feed {
+  return {
+    id: String(feed.id),
+    title: feed.title,
+    feedUrl: feed.feed_url,
+    siteUrl: feed.site_url || null,
+    folderId: feed.category ? String(feed.category.id) : null,
+    folderTitle: feed.category?.title ?? null,
+    unreadCount,
+  };
+}
+
+/** Normalize a MiniFlux category into the unified `FeedFolder`. */
+export function minifluxCategoryToFolder(category: MinifluxCategory, unreadCount = 0): FeedFolder {
+  return {
+    id: String(category.id),
+    title: category.title,
+    unreadCount,
+  };
+}
+
 /** Convert an ISO-8601 instant to MiniFlux's unix-seconds `changed_after`. */
 function toUnixSeconds(iso: string): number {
   return Math.floor(Date.parse(iso) / 1000);
@@ -111,13 +159,16 @@ export class MinifluxBackend implements RssBackend {
 
   private async request(
     path: string,
-    init?: { method?: string; body?: unknown },
+    init?: { method?: string; body?: unknown; opml?: string },
   ): Promise<Response> {
-    const hasBody = init?.body !== undefined;
+    const hasJson = init?.body !== undefined;
+    const hasOpml = init?.opml !== undefined;
+    const headers = this.headers(hasJson);
+    if (hasOpml) headers["content-type"] = "text/xml";
     const res = await fetch(this.baseUrl + path, {
       method: init?.method ?? "GET",
-      headers: this.headers(hasBody),
-      body: hasBody ? JSON.stringify(init?.body) : undefined,
+      headers,
+      body: hasOpml ? init.opml : hasJson ? JSON.stringify(init?.body) : undefined,
     });
     if (!res.ok) {
       throw new BackendHttpError(
@@ -180,6 +231,82 @@ export class MinifluxBackend implements RssBackend {
   async exportOpml(): Promise<string> {
     const res = await this.request("/v1/export");
     return res.text();
+  }
+
+  async listFeeds(): Promise<{ feeds: Feed[]; folders: FeedFolder[] }> {
+    const [feedsRes, catsRes, countersRes] = await Promise.all([
+      this.request("/v1/feeds"),
+      this.request("/v1/categories"),
+      this.request("/v1/feeds/counters"),
+    ]);
+    const rawFeeds = (await feedsRes.json()) as MinifluxFeed[];
+    const rawCats = (await catsRes.json()) as MinifluxCategory[];
+    const counters = (await countersRes.json()) as MinifluxFeedCounters;
+    const unreadByFeed = counters.unreads ?? {};
+
+    const feeds = rawFeeds.map((f) => minifluxFeedToFeed(f, unreadByFeed[String(f.id)] ?? 0));
+    // Folder unread is the sum of its feeds' unread tallies.
+    const unreadByFolder: Record<string, number> = {};
+    for (const f of feeds) {
+      if (f.folderId)
+        unreadByFolder[f.folderId] = (unreadByFolder[f.folderId] ?? 0) + f.unreadCount;
+    }
+    const folders = rawCats.map((c) =>
+      minifluxCategoryToFolder(c, unreadByFolder[String(c.id)] ?? 0),
+    );
+    return { feeds, folders };
+  }
+
+  async subscribe(input: { feedUrl: string; folderId?: string }): Promise<Feed> {
+    // MiniFlux requires a category; fall back to the first existing one.
+    let categoryId: number;
+    if (input.folderId !== undefined) {
+      categoryId = Number(input.folderId);
+    } else {
+      const catsRes = await this.request("/v1/categories");
+      const cats = (await catsRes.json()) as MinifluxCategory[];
+      const first = cats[0];
+      if (!first) throw new Error("MinifluxBackend.subscribe: no category available");
+      categoryId = first.id;
+    }
+    const res = await this.request("/v1/feeds", {
+      method: "POST",
+      body: { feed_url: input.feedUrl, category_id: categoryId },
+    });
+    const created = (await res.json()) as { feed_id: number };
+    return this.getFeed(created.feed_id);
+  }
+
+  async updateFeed(id: string, patch: { folderId?: string | null; title?: string }): Promise<Feed> {
+    const body: { category_id?: number; title?: string } = {};
+    // MiniFlux feeds always belong to a category, so a null folderId is a no-op.
+    if (patch.folderId !== undefined && patch.folderId !== null) {
+      body.category_id = Number(patch.folderId);
+    }
+    if (patch.title !== undefined) body.title = patch.title;
+    await this.request(`/v1/feeds/${id}`, { method: "PUT", body });
+    return this.getFeed(Number(id));
+  }
+
+  async deleteFeed(id: string): Promise<void> {
+    await this.request(`/v1/feeds/${id}`, { method: "DELETE" });
+  }
+
+  async importOpml(opml: string): Promise<string> {
+    const res = await this.request("/v1/import", { method: "POST", opml });
+    const body = (await res.json()) as { message?: string };
+    return body.message ?? "";
+  }
+
+  /** Fetch a single feed and decorate it with its current unread count. */
+  private async getFeed(id: number): Promise<Feed> {
+    const [feedRes, countersRes] = await Promise.all([
+      this.request(`/v1/feeds/${id}`),
+      this.request("/v1/feeds/counters"),
+    ]);
+    const raw = (await feedRes.json()) as MinifluxFeed;
+    const counters = (await countersRes.json()) as MinifluxFeedCounters;
+    return minifluxFeedToFeed(raw, counters.unreads?.[String(id)] ?? 0);
   }
 }
 
