@@ -39,6 +39,12 @@ export function filterByTag(cards: Card[], tag: string | null | undefined): Card
 	return cards.filter((c) => c.tags.includes(tag));
 }
 
+/** Drop read (finished) items when `hideRead`; otherwise pass through unchanged. */
+export function filterRead(cards: Card[], hideRead: boolean): Card[] {
+	if (!hideRead) return cards;
+	return cards.filter((c) => c.readState !== 'finished');
+}
+
 /** Every distinct tag across the cards, sorted alphabetically. */
 export function collectTags(cards: Card[]): string[] {
 	const seen: Record<string, true> = {};

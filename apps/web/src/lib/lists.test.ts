@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Card, type QueryNode } from '@lectern/shared';
-import { collectTags, filterByTag, matchesQuery, sortCards } from './lists';
+import { collectTags, filterByTag, filterRead, matchesQuery, sortCards } from './lists';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
 	return Card.parse({
@@ -92,6 +92,22 @@ describe('filterByTag / collectTags', () => {
 
 	it('collects distinct sorted tags', () => {
 		expect(collectTags(cards)).toEqual(['news', 'tech']);
+	});
+});
+
+describe('filterRead', () => {
+	const cards = [
+		makeCard({ id: 'unopened', readState: 'unopened' }),
+		makeCard({ id: 'reading', readState: 'reading' }),
+		makeCard({ id: 'finished', readState: 'finished' })
+	];
+
+	it('drops finished (read) items when hiding read', () => {
+		expect(filterRead(cards, true).map((c) => c.id)).toEqual(['unopened', 'reading']);
+	});
+
+	it('passes everything through when not hiding read', () => {
+		expect(filterRead(cards, false)).toHaveLength(3);
 	});
 });
 

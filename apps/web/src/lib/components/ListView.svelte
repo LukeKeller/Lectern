@@ -1,12 +1,12 @@
 <script lang="ts">
 	import type { Card, Location, QueryNode, SortDir, ViewSortBy } from '@lectern/shared';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
 	import { getSync } from '$lib/sync';
 	import { liveCards } from '$lib/live.svelte';
-	import { collectTags, filterByTag, sortCards } from '$lib/lists';
+	import { collectTags, filterByTag, filterRead, sortCards } from '$lib/lists';
 	import { andQueries, tagQuery } from '$lib/views';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
@@ -24,6 +24,7 @@
 		actions = [],
 		empty = 'Nothing here.',
 		emptyIcon = 'inbox',
+		hideReadKey = undefined,
 		baseQuery,
 		sortBy = $bindable<ViewSortBy>('updatedAt'),
 		sortDir = $bindable<SortDir>('desc')
@@ -33,6 +34,8 @@
 		actions?: TriageAction[];
 		empty?: string;
 		emptyIcon?: IconName;
+		/** When set, show a "hide read" toggle (persisted per key, on by default). */
+		hideReadKey?: string;
 		/** The query AST this list represents, enabling "save as view". */
 		baseQuery?: QueryNode;
 		sortBy?: ViewSortBy;
@@ -44,9 +47,27 @@
 	let tagFilter = $state<string | null>(null);
 	let selectedIndex = $state(0);
 
+	// Optional "hide read" filter (the RSS feed enables it). Persisted per key and
+	// ON by default so the feed shows unread items first.
+	const hideReadStorage = $derived(hideReadKey ? `lectern.hideRead.${hideReadKey}` : null);
+	let hideRead = $state(
+		untrack(() =>
+			hideReadKey && typeof localStorage !== 'undefined'
+				? localStorage.getItem(`lectern.hideRead.${hideReadKey}`) !== '0'
+				: true
+		)
+	);
+	$effect(() => {
+		if (hideReadStorage && typeof localStorage !== 'undefined') {
+			localStorage.setItem(hideReadStorage, hideRead ? '1' : '0');
+		}
+	});
+
 	const matched = $derived((all.value ?? []).filter(predicate));
-	const tags = $derived(collectTags(matched));
-	const cards = $derived(sortCards(filterByTag(matched, tagFilter), sortBy, sortDir));
+	// Hide read (finished) items when the option is enabled and toggled on.
+	const afterRead = $derived(filterRead(matched, Boolean(hideReadKey) && hideRead));
+	const tags = $derived(collectTags(afterRead));
+	const cards = $derived(sortCards(filterByTag(afterRead, tagFilter), sortBy, sortDir));
 
 	// Keep the selection inside the (reactively changing) list bounds.
 	$effect(() => {
@@ -135,6 +156,18 @@
 			>
 				{sortDir === 'asc' ? '↑' : '↓'}
 			</button>
+			{#if hideReadKey}
+				<button
+					type="button"
+					class="chip"
+					class:active={hideRead}
+					aria-pressed={hideRead}
+					onclick={() => (hideRead = !hideRead)}
+					title={hideRead ? 'Read items hidden — click to show all' : 'Showing all items'}
+				>
+					Hide read
+				</button>
+			{/if}
 			{#if tags.length}
 				<div class="select">
 					<select bind:value={tagFilter} aria-label="Filter by tag">
@@ -248,6 +281,31 @@
 	.icon:hover {
 		border-color: var(--border-strong);
 		color: var(--text);
+	}
+	.chip {
+		height: 2rem;
+		padding: 0 0.7rem;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		white-space: nowrap;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.chip:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+	.chip.active {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent);
 	}
 	.save {
 		display: flex;

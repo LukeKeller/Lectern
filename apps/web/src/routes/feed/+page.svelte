@@ -13,6 +13,7 @@
 	{baseQuery}
 	empty="No feed items."
 	emptyIcon="rss"
+	hideReadKey="feed"
 	actions={[
 		{ label: 'Save', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' }
