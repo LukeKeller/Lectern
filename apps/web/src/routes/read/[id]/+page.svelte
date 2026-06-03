@@ -52,6 +52,12 @@
 	let pendingHighlight: NewHighlight | null = null;
 	let noteDraft = $state('');
 	let noteReady = false;
+	let findOpen = $state(false);
+	let findQuery = $state('');
+	let findHits = $state<HTMLElement[]>([]);
+	let findIndex = $state(0);
+	let findTimer: ReturnType<typeof setTimeout> | undefined;
+	let findInputEl = $state<HTMLInputElement | null>(null);
 	$effect(() => {
 		if (typeof localStorage === 'undefined') return;
 		localStorage.setItem('lectern.reader.toc', tocOpen ? '1' : '0');
@@ -228,6 +234,113 @@
 		}
 	}
 
+	// In-document find (Cmd/Ctrl+F). Matches are wrapped in <mark.find-hit> by
+	// walking the article's text nodes; clearFind() fully unwraps them so the
+	// article (and the existing mark.lectern-hl highlights) are never corrupted.
+	function onFindKey(e: KeyboardEvent) {
+		if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !isEditable(e.target)) {
+			e.preventDefault();
+			void openFind();
+		}
+	}
+
+	async function openFind() {
+		findOpen = true;
+		await tick();
+		findInputEl?.focus();
+		findInputEl?.select();
+	}
+
+	function closeFind() {
+		findOpen = false;
+		findQuery = '';
+		clearFind();
+		findHits = [];
+		findIndex = 0;
+	}
+
+	/** Unwrap every find mark, restoring the original text + node structure. */
+	function clearFind() {
+		if (!articleEl) return;
+		for (const m of Array.from(articleEl.querySelectorAll('mark.find-hit'))) {
+			const parent = m.parentNode;
+			if (!parent) continue;
+			while (m.firstChild) parent.insertBefore(m.firstChild, m);
+			parent.removeChild(m);
+			parent.normalize();
+		}
+	}
+
+	function onFindInput() {
+		if (findTimer) clearTimeout(findTimer);
+		findTimer = setTimeout(runFind, 120);
+	}
+
+	function onFindKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeFind();
+		} else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+			e.preventDefault();
+			findStep(e.key === 'Enter' && e.shiftKey ? -1 : 1);
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			findStep(-1);
+		}
+	}
+
+	/** Wrap every case-insensitive occurrence of `q` in one text node. */
+	function wrapMatches(node: Text, q: string): HTMLElement[] {
+		const lower = node.data.toLowerCase();
+		const offsets: number[] = [];
+		for (let i = lower.indexOf(q); i >= 0; i = lower.indexOf(q, i + q.length)) offsets.push(i);
+		const marks: HTMLElement[] = [];
+		// Split from the last match back so earlier offsets stay valid.
+		for (let i = offsets.length - 1; i >= 0; i--) {
+			const after = node.splitText(offsets[i]);
+			after.splitText(q.length);
+			const mark = document.createElement('mark');
+			mark.className = 'find-hit';
+			after.parentNode?.insertBefore(mark, after);
+			mark.appendChild(after);
+			marks.unshift(mark);
+		}
+		return marks;
+	}
+
+	function runFind() {
+		clearFind();
+		findIndex = 0;
+		const q = findQuery.trim().toLowerCase();
+		if (!articleEl || !q) {
+			findHits = [];
+			return;
+		}
+		const walker = document.createTreeWalker(articleEl, NodeFilter.SHOW_TEXT, {
+			acceptNode: (n) =>
+				n.nodeValue && n.nodeValue.trim() && !n.parentElement?.closest('mark.lectern-hl')
+					? NodeFilter.FILTER_ACCEPT
+					: NodeFilter.FILTER_REJECT
+		});
+		const nodes: Text[] = [];
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
+		const hits: HTMLElement[] = [];
+		for (const node of nodes) hits.push(...wrapMatches(node, q));
+		findHits = hits;
+		markCurrent(true);
+	}
+
+	function markCurrent(scroll: boolean) {
+		findHits.forEach((m, i) => m.classList.toggle('current', i === findIndex));
+		if (scroll) findHits[findIndex]?.scrollIntoView({ block: 'center' });
+	}
+
+	function findStep(delta: number) {
+		if (!findHits.length) return;
+		findIndex = (findIndex + delta + findHits.length) % findHits.length;
+		markCurrent(true);
+	}
+
 	function loadBool(key: string, dflt: boolean): boolean {
 		if (typeof localStorage === 'undefined') return dflt;
 		const v = localStorage.getItem(key);
@@ -342,6 +455,7 @@
 	onMount(() => {
 		let cancelled = false;
 		activeList.set(controller);
+		window.addEventListener('keydown', onFindKey);
 		(async () => {
 			const initial = id ? await db.cards.get(id) : undefined;
 			try {
@@ -385,6 +499,9 @@
 			window.removeEventListener('keydown', onKey);
 			window.removeEventListener('resize', updateBar);
 			document.removeEventListener('mouseup', onMouseUp);
+			window.removeEventListener('keydown', onFindKey);
+			if (findTimer) clearTimeout(findTimer);
+			clearFind();
 		};
 	});
 </script>
@@ -511,6 +628,32 @@
 	{/if}
 </nav>
 
+{#if findOpen}
+	<div class="findbar" role="search">
+		<Icon name="search" size={15} />
+		<input
+			bind:this={findInputEl}
+			class="find-input"
+			type="text"
+			placeholder="Find in document"
+			bind:value={findQuery}
+			oninput={onFindInput}
+			onkeydown={onFindKeydown}
+			aria-label="Find in document"
+		/>
+		<span class="find-count">{findHits.length ? findIndex + 1 : 0} / {findHits.length}</span>
+		<button type="button" class="find-nav" aria-label="Previous match" onclick={() => findStep(-1)}>
+			<Icon name="back" size={15} />
+		</button>
+		<button type="button" class="find-nav flip" aria-label="Next match" onclick={() => findStep(1)}>
+			<Icon name="back" size={15} />
+		</button>
+		<button type="button" class="find-nav" aria-label="Close find" onclick={closeFind}>
+			<Icon name="close" size={15} />
+		</button>
+	</div>
+{/if}
+
 <div class="reader" class:toc-open={tocOpen} class:panel-open={panelOpen}>
 	<aside class="rail toc">
 		<p class="rail-head">Contents</p>
@@ -590,7 +733,10 @@
 				{/if}
 				<div>
 					<dt>Progress</dt>
-					<dd>{Math.round(card.readingProgress * 100)}%</dd>
+					<dd>
+						{Math.round(progress * 100)}%{#if card.readingTimeMinutes}
+							· ~{Math.max(0, Math.ceil(card.readingTimeMinutes * (1 - progress)))} min left{/if}
+					</dd>
 				</div>
 				<div>
 					<dt>Saved</dt>
@@ -1245,5 +1391,66 @@
 	}
 	.doc :global(mark.lectern-hl[data-color='orange']) {
 		--hl: #e08a3c;
+	}
+	.findbar {
+		position: fixed;
+		top: 3.4rem;
+		right: 1.25rem;
+		z-index: 30;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.45rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow);
+		color: var(--text-muted);
+	}
+	.find-input {
+		width: 12rem;
+		padding: 0.2rem 0.25rem;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		outline: none;
+	}
+	.find-count {
+		min-width: 3.2rem;
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		text-align: center;
+	}
+	.find-nav {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.find-nav:hover {
+		color: var(--text);
+		background: var(--surface-alt);
+	}
+	.find-nav.flip {
+		transform: scaleX(-1);
+	}
+	.doc :global(mark.find-hit) {
+		background: color-mix(in srgb, var(--accent) 22%, transparent);
+		border-radius: 2px;
+	}
+	.doc :global(mark.find-hit.current) {
+		background: var(--accent);
+		color: var(--accent-contrast);
 	}
 </style>
