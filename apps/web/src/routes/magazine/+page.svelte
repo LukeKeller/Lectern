@@ -26,10 +26,55 @@
 		return parts.join(' · ');
 	}
 
+	// A stable two-digit issue number per publication, so each cover wears a
+	// consistent "No." the way a real magazine masthead would.
+	function issueNo(tag: string): number {
+		let h = 7;
+		for (let i = 0; i < tag.length; i++) h = (h * 17 + tag.charCodeAt(i)) % 90;
+		return h + 9;
+	}
+	function pad(n: number): string {
+		return String(n).padStart(2, '0');
+	}
+	function plural(n: number, word: string): string {
+		return `${n} ${word}${n === 1 ? '' : 's'}`;
+	}
+	// The first few titles double as cover lines / teaser blurbs.
+	function coverLines(list: Card[]): Card[] {
+		return list.slice(0, 3);
+	}
+	// Synthetic folios: front matter fills the opening leaves, then each article
+	// spans a couple of pages, giving the contents real ascending page numbers.
+	function folios(list: Card[]): number[] {
+		const out: number[] = [];
+		let page = 11;
+		for (const c of list) {
+			out.push(page);
+			const span = c.readingTimeMinutes ?? Math.max(1, Math.round((c.wordCount ?? 700) / 220));
+			page += Math.max(2, Math.ceil(span / 3) * 2);
+		}
+		return out;
+	}
+
 	onMount(() => {
 		void getSync().pull();
 	});
 </script>
+
+{#snippet tocEntry(card: Card, num: number, folio: number)}
+	<li>
+		<a class="entry" href={resolve('/read/[id]', { id: card.id })}>
+			<span class="num">{pad(num)}</span>
+			<span class="entry-main">
+				<span class="entry-row">
+					<span class="entry-title">{card.title}</span>
+					<span class="folio">{folio}</span>
+				</span>
+				{#if meta(card)}<span class="entry-by">{meta(card)}</span>{/if}
+			</span>
+		</a>
+	</li>
+{/snippet}
 
 <section class="page">
 	<header class="head">
@@ -46,30 +91,81 @@
 			<p>No magazines yet — tag a few saved articles with the same topic to bind an issue.</p>
 		</div>
 	{:else}
-		<div class="shelf">
-			{#each issues as issue (issue.tag)}
-				<article class="zine" style={`--hue:${hue(issue.tag)}`}>
-					<div class="cover">
-						<span class="brand">Lectern</span>
-						<h2>{issue.tag}</h2>
-						<span class="count">
-							{issue.cards.length}
-							{issue.cards.length === 1 ? 'article' : 'articles'}
-						</span>
-					</div>
-					<ul>
-						{#each issue.cards as card (card.id)}
-							<li>
-								<a href={resolve('/read/[id]', { id: card.id })}>
-									<SourceAvatar url={card.url} siteName={card.siteName} size={26} />
-									<span class="body">
-										<span class="title">{card.title}</span>
-										{#if meta(card)}<span class="sub">{meta(card)}</span>{/if}
-									</span>
-								</a>
-							</li>
+		{@const featured = issues[0]}
+		{@const lead = featured.cards[0]}
+		{@const featFolios = folios(featured.cards)}
+		{@const rest = issues.slice(1)}
+
+		<section class="hero" style={`--hue:${hue(featured.tag)}`}>
+			<div class="cover hero-cover">
+				<span class="masthead">Lectern</span>
+				<h2 class="cover-title">{featured.tag}</h2>
+				<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
+				<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
+				<ul class="cover-lines" aria-hidden="true">
+					{#each coverLines(featured.cards) as card (card.id)}
+						<li>{card.title}</li>
+					{/each}
+				</ul>
+				<div class="cover-foot">
+					<span class="foil"></span>
+					<span class="cover-foot-row">
+						<span>Lectern Press</span>
+						<span>Self-hosted</span>
+					</span>
+				</div>
+			</div>
+
+			<div class="spread">
+				<p class="kicker">In this issue</p>
+				<a class="feature" href={resolve('/read/[id]', { id: lead.id })}>
+					<span class="feature-kicker">Lead story</span>
+					<h3 class="feature-title">{lead.title}</h3>
+					<span class="feature-by">
+						<SourceAvatar url={lead.url} siteName={lead.siteName} size={22} />
+						{#if meta(lead)}<span>{meta(lead)}</span>{/if}
+					</span>
+				</a>
+				{#if featured.cards.length > 1}
+					<p class="kicker also">Also inside</p>
+					<ol class="toc">
+						{#each featured.cards.slice(1) as card, i (card.id)}
+							{@render tocEntry(card, i + 1, featFolios[i + 1])}
 						{/each}
-					</ul>
+					</ol>
+				{/if}
+			</div>
+		</section>
+
+		<div class="shelf">
+			{#each rest as issue (issue.tag)}
+				{@const issueFolios = folios(issue.cards)}
+				<article class="zine" style={`--hue:${hue(issue.tag)}`}>
+					<details class="issue">
+						<summary class="cover">
+							<span class="masthead">Lectern</span>
+							<h2 class="cover-title">{issue.tag}</h2>
+							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
+							<p class="cover-count">{plural(issue.cards.length, 'article')}</p>
+							<ul class="cover-lines" aria-hidden="true">
+								{#each coverLines(issue.cards) as card (card.id)}
+									<li>{card.title}</li>
+								{/each}
+							</ul>
+							<div class="cover-foot">
+								<span class="foil"></span>
+								<span class="cover-foot-row">
+									<span class="open-hint">Contents</span>
+									<span>Lectern</span>
+								</span>
+							</div>
+						</summary>
+						<ol class="toc cover-toc">
+							{#each issue.cards as card, i (card.id)}
+								{@render tocEntry(card, i + 1, issueFolios[i])}
+							{/each}
+						</ol>
+					</details>
 				</article>
 			{/each}
 		</div>
@@ -82,7 +178,7 @@
 		margin: 0 auto;
 	}
 	.head {
-		margin-bottom: 1.6rem;
+		margin-bottom: 1.8rem;
 	}
 	h1 {
 		font-size: var(--text-2xl);
@@ -95,98 +191,350 @@
 		margin: 0;
 	}
 
-	.shelf {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-		gap: 1.4rem;
-	}
-	.zine {
-		display: flex;
-		flex-direction: column;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-	}
-	.cover {
-		position: relative;
-		padding: 1.1rem 1.1rem 1rem;
-		color: #fff;
-		background: linear-gradient(
-			135deg,
-			hsl(var(--hue) 48% 38%),
-			hsl(calc(var(--hue) + 28) 52% 30%)
-		);
-	}
-	.brand {
+	.kicker {
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
+		font-weight: 600;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
-		opacity: 0.85;
+		color: var(--text-muted);
+		margin: 0 0 0.85rem;
 	}
-	.cover h2 {
+	.kicker.also {
+		margin-top: 1.4rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
+	}
+
+	/* ---- featured hero spread ---- */
+	.hero {
+		display: grid;
+		grid-template-columns: minmax(0, 22rem) 1fr;
+		gap: clamp(1.4rem, 3.5vw, 3rem);
+		align-items: start;
+		margin-bottom: clamp(2rem, 5vw, 3.5rem);
+	}
+
+	/* ---- covers (the hero cover and the grid covers share .cover) ---- */
+	.cover {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		aspect-ratio: 3 / 4;
+		padding: clamp(1rem, 2.2vw, 1.5rem);
+		border-radius: var(--radius-lg);
+		overflow: hidden;
+		color: color-mix(in srgb, white 94%, transparent);
+		background: linear-gradient(
+			158deg,
+			hsl(var(--hue) 58% 40%),
+			hsl(calc(var(--hue) + 32) 60% 24%)
+		);
+		box-shadow: var(--shadow-md);
+	}
+	.cover::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background:
+			radial-gradient(125% 80% at 12% -5%, rgba(255, 255, 255, 0.22), transparent 55%),
+			linear-gradient(180deg, transparent 52%, rgba(0, 0, 0, 0.34));
+		pointer-events: none;
+	}
+	.cover > * {
+		position: relative;
+	}
+	.masthead {
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		font-weight: 700;
+		letter-spacing: 0.34em;
+		text-transform: uppercase;
+		color: color-mix(in srgb, white 92%, transparent);
+	}
+	.cover-title {
 		font-family: var(--font-serif);
-		font-size: var(--text-xl);
 		font-weight: 800;
-		line-height: 1.1;
-		letter-spacing: -0.01em;
-		margin: 0.35rem 0 0.55rem;
+		line-height: 1.02;
+		letter-spacing: -0.015em;
 		text-transform: capitalize;
 		word-break: break-word;
+		margin: 0.4rem 0 0.55rem;
+		text-shadow: 0 1px 18px rgba(0, 0, 0, 0.28);
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
-	.count {
+	.cover-no {
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
-		letter-spacing: 0.08em;
+		letter-spacing: 0.16em;
 		text-transform: uppercase;
-		opacity: 0.9;
-	}
-	.zine ul {
-		list-style: none;
 		margin: 0;
-		padding: 0.4rem;
-		flex: 1;
+		color: color-mix(in srgb, white 80%, hsl(var(--hue) 45% 30%));
 	}
-	.zine li {
-		border-radius: var(--radius);
+	.cover-count {
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		margin: 0.22rem 0 0;
+		color: color-mix(in srgb, white 70%, hsl(var(--hue) 45% 30%));
 	}
-	.zine li:hover {
-		background: var(--surface-alt);
-	}
-	.zine a {
+	.cover-lines {
+		list-style: none;
+		margin: auto 0 0;
+		padding: 0;
 		display: flex;
-		gap: 0.65rem;
-		align-items: center;
-		padding: 0.55rem 0.5rem;
+		flex-direction: column;
+		gap: 0.5rem;
 	}
-	.body {
-		min-width: 0;
-	}
-	.title {
+	.cover-lines li {
+		font-family: var(--font-serif);
+		font-size: clamp(0.95rem, 1.4vw, 1.1rem);
+		line-height: 1.22;
+		padding-left: 0.6rem;
+		border-left: 2px solid color-mix(in srgb, white 55%, transparent);
+		color: color-mix(in srgb, white 88%, hsl(var(--hue) 50% 28%));
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-		font-size: var(--text-sm);
-		font-weight: 600;
-		line-height: 1.3;
-		color: var(--text);
-		transition: color var(--dur-fast) var(--ease);
 	}
-	.zine a:hover .title {
-		color: var(--accent);
+	.zine .cover-lines li {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+		font-size: clamp(0.9rem, 1.3vw, 1rem);
 	}
-	.sub {
+	.cover-foot {
+		margin-top: 0.9rem;
+	}
+	.foil {
 		display: block;
-		margin-top: 0.15rem;
+		height: 2px;
+		border-radius: var(--radius-full);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in srgb, white 78%, transparent),
+			color-mix(in srgb, white 30%, transparent),
+			transparent
+		);
+	}
+	.cover-foot-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-top: 0.55rem;
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
-		color: var(--text-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: color-mix(in srgb, white 74%, transparent);
+	}
+	.hero-cover .cover-title {
+		font-size: clamp(2rem, 4.5vw, 3rem);
+	}
+	.zine .cover-title {
+		font-size: clamp(1.45rem, 4vw, 1.95rem);
 	}
 
+	/* ---- featured "in this issue" column ---- */
+	.spread {
+		min-width: 0;
+	}
+	.feature {
+		display: block;
+	}
+	.feature-kicker {
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	.feature-title {
+		font-family: var(--font-serif);
+		font-weight: 800;
+		font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+		line-height: 1.08;
+		letter-spacing: -0.02em;
+		color: var(--text);
+		margin: 0.4rem 0 0.65rem;
+		transition: color var(--dur-fast) var(--ease);
+	}
+	.feature:hover .feature-title {
+		color: var(--accent);
+	}
+	.feature-by {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-family: var(--font-ui);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+
+	/* ---- table of contents ---- */
+	.toc {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.entry {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.75rem;
+		align-items: baseline;
+		padding: 0.5rem 0.45rem;
+		border-radius: var(--radius);
+		transition: background var(--dur-fast) var(--ease);
+	}
+	.entry:hover {
+		background: var(--surface-alt);
+	}
+	.num {
+		font-family: var(--font-ui);
+		font-size: var(--text-xs);
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
+	}
+	.entry-main {
+		min-width: 0;
+	}
+	.entry-row {
+		display: flex;
+		align-items: baseline;
+	}
+	.entry-title {
+		order: 0;
+		flex: 0 1 auto;
+		font-family: var(--font-serif);
+		font-size: var(--text-md);
+		line-height: 1.3;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		transition: color var(--dur-fast) var(--ease);
+	}
+	.entry:hover .entry-title {
+		color: var(--accent);
+	}
+	.entry-row::after {
+		content: '';
+		order: 1;
+		flex: 1 1 0.75rem;
+		min-width: 0.75rem;
+		margin: 0 0.5rem;
+		border-bottom: 1px dotted var(--border-strong);
+		transform: translateY(-0.28em);
+	}
+	.folio {
+		order: 2;
+		flex: none;
+		font-family: var(--font-ui);
+		font-size: var(--text-xs);
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+	}
+	.entry-by {
+		display: block;
+		margin-top: 0.12rem;
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* ---- shelf grid of covers ---- */
+	.shelf {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+		gap: clamp(1.2rem, 2.5vw, 1.8rem);
+		align-items: start;
+	}
+	.zine {
+		min-width: 0;
+	}
+	.issue {
+		min-width: 0;
+	}
+	.issue > summary {
+		cursor: pointer;
+		list-style: none;
+		transition:
+			transform var(--dur) var(--ease),
+			box-shadow var(--dur) var(--ease);
+	}
+	.issue > summary::-webkit-details-marker {
+		display: none;
+	}
+	.issue > summary:hover {
+		transform: translateY(-3px);
+		box-shadow: var(--shadow);
+	}
+	.issue > summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
+	}
+	.open-hint {
+		display: inline-flex;
+		align-items: center;
+	}
+	.open-hint::after {
+		content: '▸';
+		margin-left: 0.4rem;
+		transition: transform var(--dur) var(--ease);
+	}
+	.issue[open] > summary .open-hint::after {
+		transform: rotate(90deg);
+	}
+	.cover-toc {
+		margin-top: 0.7rem;
+		padding: 0.3rem 0.15rem 0.2rem;
+		animation: toc-in var(--dur) var(--ease);
+	}
+	/* Narrow shelf columns: let titles wrap to two lines and drop the dotted
+	   leader, which only reads well across the wide hero contents. */
+	.cover-toc .entry-row {
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.cover-toc .entry-row::after {
+		display: none;
+	}
+	.cover-toc .entry-title {
+		flex: 1 1 auto;
+		white-space: normal;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		font-size: var(--text-base);
+	}
+	.cover-toc .folio {
+		align-self: flex-start;
+	}
+	@keyframes toc-in {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	/* ---- empty state ---- */
 	.empty {
 		display: flex;
 		flex-direction: column;
@@ -209,5 +557,14 @@
 		margin: 0;
 		max-width: 28rem;
 		font-size: var(--text-base);
+	}
+
+	@media (max-width: 820px) {
+		.hero {
+			grid-template-columns: 1fr;
+		}
+		.hero-cover {
+			max-width: 24rem;
+		}
 	}
 </style>

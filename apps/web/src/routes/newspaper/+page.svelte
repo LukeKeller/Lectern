@@ -35,6 +35,16 @@
 	);
 	const atToday = $derived(issueKey >= todayKey());
 
+	// Folio numerals, derived deterministically from the issue date so a given day
+	// always prints the same volume and number, like a real paper of record.
+	const issueDate = $derived(parseDateKey(issueKey));
+	const volume = $derived(toRoman(issueDate.getFullYear() - 2024));
+	const issueNo = $derived(dayOfYear(issueDate));
+	const editionLabel = $derived(editionName(issueDate));
+	const weekdayLabel = $derived(
+		new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(issueDate)
+	);
+
 	function step(days: number) {
 		picked = shiftDateKey(issueKey, days);
 	}
@@ -65,6 +75,47 @@
 		return parts.join(' · ');
 	}
 
+	// Roman numerals for the masthead volume — small and pure.
+	function toRoman(n: number): string {
+		const table: [number, string][] = [
+			[1000, 'M'],
+			[900, 'CM'],
+			[500, 'D'],
+			[400, 'CD'],
+			[100, 'C'],
+			[90, 'XC'],
+			[50, 'L'],
+			[40, 'XL'],
+			[10, 'X'],
+			[9, 'IX'],
+			[5, 'V'],
+			[4, 'IV'],
+			[1, 'I']
+		];
+		let out = '';
+		let rem = n;
+		for (const [value, sym] of table) {
+			while (rem >= value) {
+				out += sym;
+				rem -= value;
+			}
+		}
+		return out || 'I';
+	}
+
+	// 1-based day of the year — a stable per-date issue counter.
+	function dayOfYear(d: Date): number {
+		const start = Date.UTC(d.getFullYear(), 0, 1);
+		const here = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+		return Math.round((here - start) / 86400000) + 1;
+	}
+
+	// A touch of flavour: weekends get their own edition name.
+	function editionName(d: Date): string {
+		const wd = d.getDay();
+		return wd === 0 || wd === 6 ? 'Weekend Edition' : 'Late Edition';
+	}
+
 	onMount(() => {
 		void getSync().pull();
 	});
@@ -72,40 +123,50 @@
 
 <section class="paper">
 	<header class="masthead">
-		<p class="kicker">Lectern Daily · your unread feed, set in print</p>
-		<h1>The Daily Lectern</h1>
-		<div class="dateline">
-			<button type="button" class="nav" onclick={() => step(-1)} aria-label="Previous day">
-				<Icon name="back" size={16} />
-			</button>
-			<span class="date">{dateLabel}</span>
-			<button
-				type="button"
-				class="nav"
-				onclick={() => step(1)}
-				disabled={atToday}
-				aria-label="Next day"
-			>
-				<span class="flip"><Icon name="back" size={16} /></span>
-			</button>
+		<h1 class="nameplate">The Daily Lectern</h1>
+
+		<div class="folio">
+			<span class="folio-left">{editionLabel} · {weekdayLabel}</span>
+			<span class="folio-motto">“All the feeds fit to read”</span>
+			<span class="folio-right">Vol. {volume} · No. {issueNo}</span>
 		</div>
-		<p class="edition">
-			{#if edition.total > 0}
-				{edition.total}
-				{edition.total === 1 ? 'story' : 'stories'} across {edition.sections.length +
-					(edition.lead ? 1 : 0)}
-				{edition.sections.length + (edition.lead ? 1 : 0) === 1 ? 'section' : 'sections'}
-			{:else}
-				No edition
-			{/if}
-		</p>
-		{#if edition.total > 0}
-			<div class="tools">
-				<button type="button" class="ghost" onclick={markIssueRead}>
-					<Icon name="check" size={15} /> Mark issue read
+
+		<div class="controls">
+			<p class="count">
+				{#if edition.total > 0}
+					{edition.total}
+					{edition.total === 1 ? 'story' : 'stories'} · {edition.sections.length +
+						(edition.lead ? 1 : 0)}
+					{edition.sections.length + (edition.lead ? 1 : 0) === 1 ? 'section' : 'sections'}
+				{:else}
+					No edition
+				{/if}
+			</p>
+			<div class="dateline">
+				<button type="button" class="nav" onclick={() => step(-1)} aria-label="Previous day">
+					<Icon name="back" size={16} />
+				</button>
+				<span class="date">{dateLabel}</span>
+				<button
+					type="button"
+					class="nav"
+					onclick={() => step(1)}
+					disabled={atToday}
+					aria-label="Next day"
+				>
+					<span class="flip"><Icon name="back" size={16} /></span>
 				</button>
 			</div>
-		{/if}
+			{#if edition.total > 0}
+				<div class="tools">
+					<button type="button" class="ghost" onclick={markIssueRead}>
+						<Icon name="check" size={15} /> Mark issue read
+					</button>
+				</div>
+			{:else}
+				<span class="tools-spacer" aria-hidden="true"></span>
+			{/if}
+		</div>
 	</header>
 
 	{#if edition.total === 0}
@@ -129,14 +190,15 @@
 				<section class="col">
 					<h3 class="section-head">
 						<SourceAvatar url={section.cards[0]?.url ?? ''} siteName={section.name} size={18} />
-						<span>{section.name}</span>
+						<span class="name">{section.name}</span>
 						<span class="ct">{section.cards.length}</span>
 					</h3>
 					<ul>
-						{#each section.cards as card (card.id)}
-							<li>
+						{#each section.cards as card, i (card.id)}
+							<li class:sublead={i === 0}>
 								<a href={resolve('/read/[id]', { id: card.id })}>
 									<span class="hl">{card.title}</span>
+									{#if i === 0 && card.note}<span class="deck">{card.note}</span>{/if}
 									{#if dek(card)}<span class="meta">{dek(card)}</span>{/if}
 								</a>
 							</li>
@@ -154,41 +216,90 @@
 		margin: 0 auto;
 	}
 
-	/* Masthead — the only place we lean fully into the print metaphor. */
+	/* Masthead — a hairline over the nameplate, a heavy double rule under it, then
+	   the folio line and the reader's date controls. */
 	.masthead {
-		text-align: center;
-		padding-bottom: 1.1rem;
-		border-bottom: 3px double var(--border-strong);
-		margin-bottom: 1.6rem;
+		margin-bottom: 1.8rem;
 	}
-	.kicker {
+	.nameplate {
+		font-family: var(--font-serif);
+		font-size: clamp(2.2rem, 9vw, 4.5rem);
+		font-weight: 900;
+		font-stretch: condensed;
+		letter-spacing: -0.02em;
+		line-height: 0.95;
+		text-align: center;
+		color: var(--text);
+		margin: 0;
+		padding: 0.45rem 0 0.55rem;
+		border-top: 1px solid var(--border-strong);
+		border-bottom: 4px double var(--text);
+	}
+
+	/* Folio — edition (left), motto (centre), volume/number (right). */
+	.folio {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: baseline;
+		gap: 0.4rem 1.2rem;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid var(--border-strong);
+	}
+	.folio-left,
+	.folio-right {
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
-		letter-spacing: 0.16em;
+		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-muted);
-		margin: 0 0 0.5rem;
+		font-variant-numeric: tabular-nums;
 	}
-	h1 {
+	.folio-left {
+		justify-self: start;
+	}
+	.folio-right {
+		justify-self: end;
+		text-align: right;
+	}
+	.folio-motto {
+		justify-self: center;
 		font-family: var(--font-serif);
-		font-size: clamp(2.4rem, 6vw, 3.6rem);
-		font-weight: 800;
-		letter-spacing: -0.02em;
-		line-height: 1;
+		font-style: italic;
+		font-size: var(--text-base);
+		color: var(--text);
+	}
+
+	.controls {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: 0.7rem 1rem;
+		margin-top: 0.9rem;
+	}
+	.count {
+		justify-self: start;
 		margin: 0;
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.dateline {
+		justify-self: center;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		gap: 0.8rem;
-		margin: 0.7rem 0 0.2rem;
 	}
 	.date {
 		font-family: var(--font-serif);
 		font-size: var(--text-base);
 		font-style: italic;
 		color: var(--text-muted);
-		min-width: 16rem;
+		text-align: center;
+		min-width: 14rem;
 	}
 	.nav {
 		display: inline-flex;
@@ -217,15 +328,11 @@
 		display: inline-flex;
 		transform: scaleX(-1);
 	}
-	.edition {
-		font-size: var(--text-xs);
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		margin: 0.3rem 0 0;
-	}
 	.tools {
-		margin-top: 0.7rem;
+		justify-self: end;
+	}
+	.tools-spacer {
+		display: block;
 	}
 	.ghost {
 		display: inline-flex;
@@ -236,6 +343,7 @@
 		border-radius: var(--radius-full);
 		background: var(--surface);
 		color: var(--text-muted);
+		font-family: var(--font-ui);
 		font-size: var(--text-sm);
 		font-weight: 500;
 		cursor: pointer;
@@ -248,30 +356,30 @@
 		color: var(--text);
 	}
 
-	/* Lead story — the front-page splash. */
+	/* Lead story — the front-page splash, centred above a parting rule. */
 	.lead {
 		display: block;
-		padding: 0 0 1.6rem;
-		margin-bottom: 1.6rem;
-		border-bottom: 1px solid var(--border);
+		max-width: 48rem;
+		margin: 1.8rem auto;
+		padding-bottom: 1.7rem;
+		border-bottom: 3px double var(--border-strong);
 		text-align: center;
-		max-width: 46rem;
-		margin-inline: auto;
 	}
 	.section-tag {
 		font-size: var(--text-2xs);
-		letter-spacing: 0.14em;
+		letter-spacing: 0.16em;
 		text-transform: uppercase;
 		color: var(--accent);
 		font-weight: 700;
 	}
 	.lead h2 {
 		font-family: var(--font-serif);
-		font-size: clamp(1.8rem, 4vw, 2.7rem);
+		font-size: clamp(1.9rem, 5vw, 3.4rem);
 		font-weight: 800;
-		line-height: 1.08;
+		line-height: 1.04;
 		letter-spacing: -0.02em;
-		margin: 0.4rem 0 0;
+		text-wrap: balance;
+		margin: 0.5rem 0 0;
 		color: var(--text);
 		transition: color var(--dur-fast) var(--ease);
 	}
@@ -281,40 +389,44 @@
 	.standfirst {
 		font-family: var(--font-serif);
 		font-size: var(--text-md);
-		line-height: 1.5;
+		line-height: 1.45;
 		color: var(--text-muted);
-		margin: 0.6rem auto 0;
-		max-width: 34rem;
+		margin: 0.7rem auto 0;
+		max-width: 36rem;
+		hyphens: auto;
 	}
 	.byline {
 		font-size: var(--text-xs);
-		letter-spacing: 0.06em;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-muted);
 		margin: 0.7rem 0 0;
 	}
 
-	/* Sections — newspaper columns that reflow with the viewport. */
+	/* Sections — ruled newspaper columns that reflow with the viewport. */
 	.sections {
-		columns: 3 16rem;
-		column-gap: 2.2rem;
+		columns: 3 15rem;
+		column-gap: 2.4rem;
+		column-rule: 1px solid var(--border-strong);
 	}
 	.col {
 		break-inside: avoid;
-		margin-bottom: 1.6rem;
+		margin-bottom: 1.8rem;
 	}
 	.section-head {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		margin: 0 0 0.6rem;
-		padding-bottom: 0.4rem;
+		gap: 0.45rem;
+		margin: 0 0 0.7rem;
+		padding-bottom: 0.35rem;
 		border-bottom: 2px solid var(--text);
-		font-family: var(--font-serif);
-		font-size: var(--text-md);
-		font-weight: 700;
 	}
-	.section-head span:first-of-type {
+	.section-head .name {
+		font-family: var(--font-ui);
+		font-size: var(--text-sm);
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -333,7 +445,7 @@
 		padding: 0;
 	}
 	.col li {
-		padding: 0.55rem 0;
+		padding: 0.6rem 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.col li:last-child {
@@ -347,16 +459,33 @@
 		font-family: var(--font-serif);
 		font-size: var(--text-base);
 		font-weight: 600;
-		line-height: 1.32;
+		line-height: 1.28;
 		color: var(--text);
+		text-wrap: pretty;
 		transition: color var(--dur-fast) var(--ease);
+	}
+	.sublead .hl {
+		font-size: var(--text-lg);
+		font-weight: 700;
+		line-height: 1.16;
 	}
 	.col a:hover .hl {
 		color: var(--accent);
 	}
+	.deck {
+		display: block;
+		margin-top: 0.35rem;
+		font-family: var(--font-serif);
+		font-size: var(--text-sm);
+		line-height: 1.42;
+		color: var(--text-muted);
+		text-align: justify;
+		hyphens: auto;
+	}
 	.meta {
 		display: block;
-		margin-top: 0.2rem;
+		margin-top: 0.25rem;
+		font-family: var(--font-ui);
 		font-size: var(--text-xs);
 		color: var(--text-muted);
 	}
@@ -390,5 +519,32 @@
 		font-size: var(--text-base);
 		font-weight: 600;
 		cursor: pointer;
+	}
+
+	@media (max-width: 820px) {
+		.sections {
+			columns: 1;
+			column-rule: 0;
+		}
+		.folio,
+		.controls {
+			grid-template-columns: 1fr;
+			justify-items: center;
+			text-align: center;
+			gap: 0.6rem;
+		}
+		.folio-left,
+		.folio-right,
+		.count,
+		.dateline,
+		.tools {
+			justify-self: center;
+		}
+		.folio-right {
+			text-align: center;
+		}
+		.tools-spacer {
+			display: none;
+		}
 	}
 </style>

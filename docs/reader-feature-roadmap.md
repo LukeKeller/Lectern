@@ -63,6 +63,15 @@ transcript, **PDF** annotate/zoom/snapshot, **EPUB**/paged scroll, Kindle,
 public **share bundles**/links + highlight-as-image, e-ink mode, browser
 extension, native mobile apps, Daily Digest.
 
+## Captured ideas (logged, not scheduled)
+- **"Listen" — per-article read-aloud (TTS).** A Listen action in the reader view
+  (alongside `H` highlight) that reads the current article aloud, ideally with
+  play/pause + paragraph follow. Candidate engine: **ElevenLabs** — the owner has
+  an account + API key ready to try. Revisits the MVP-deferred TTS line above with
+  a concrete provider; route audio through the BFF (keep the key server-side, never
+  ship it to the SPA) and consider caching synthesized audio per document. Not
+  started — picking up later.
+
 ## Proposed build order
 1. **Reading view overhaul (P0):** 3-pane shell (TOC | article | Info/Notebook) +
    `[`/`]` toggles → paragraph focus + `Space`/arrow advance + auto-scroll →
