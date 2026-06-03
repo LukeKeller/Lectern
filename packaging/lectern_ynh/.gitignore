@@ -1,0 +1,6 @@
+# Built artifact assembled by packaging/build-artifact.sh (not committed).
+sources/
+
+# conf/.env is a package TEMPLATE (placeholders like __PORT__), not a secret.
+# Re-include it past the repo-root .gitignore's ".env" rule.
+!conf/.env

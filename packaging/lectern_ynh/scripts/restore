@@ -1,0 +1,17 @@
+#!/bin/bash
+
+source /usr/share/yunohost/helpers
+
+ynh_print_info "Restoring Lectern..."
+
+# Restore the application files, nginx + systemd config, and logs.
+ynh_restore_everything
+
+# Restore the glue database from the dump taken at backup time.
+ynh_psql_db_shell <"db.sql"
+
+ynh_config_add_systemd
+systemctl daemon-reload
+yunohost service add "$app" --description="Lectern reader" --log="/var/log/$app/$app.log"
+
+ynh_systemctl --service="$app" --action="start" --wait_until="Lectern BFF listening" --log_path="systemd"

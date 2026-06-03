@@ -1,0 +1,85 @@
+#:schema https://raw.githubusercontent.com/YunoHost/apps/master/schemas/manifest.v2.schema.json
+packaging_format = 2
+
+id = "lectern"
+name = "Lectern"
+description.en = "Self-hosted RSS + read-later reader (unifies MiniFlux + Readeck)"
+
+version = "0.1.0~ynh1"
+maintainers = ["lukekeller"]
+
+[upstream]
+license = "AGPL-3.0-only"
+code = "https://github.com/LukeKeller/Lectern"
+
+[integration]
+yunohost = ">= 12.1.39"
+helpers_version = "2.1"
+architectures = "all"
+multi_instance = false
+ldap = true
+sso = true
+disk = "300M"
+ram.build = "50M"
+ram.runtime = "250M"
+
+[install]
+    [install.domain]
+    type = "domain"
+
+    [install.path]
+    type = "path"
+    default = "/"
+
+    [install.init_main_permission]
+    type = "group"
+    default = "all_users"
+
+    [install.miniflux_url]
+    ask.en = "MiniFlux base URL (no trailing slash)"
+    type = "string"
+    example = "https://read.p10.club/miniflux"
+
+    [install.miniflux_token]
+    ask.en = "MiniFlux API token (Settings -> API Keys)"
+    type = "password"
+
+    [install.readeck_url]
+    ask.en = "Readeck base URL (no trailing slash)"
+    type = "string"
+    example = "https://readeck.p10.club"
+
+    [install.readeck_token]
+    ask.en = "Readeck API token (Profile -> API Tokens)"
+    type = "password"
+
+[resources]
+    [resources.system_user]
+
+    [resources.install_dir]
+
+    [resources.data_dir]
+
+    [resources.permissions]
+    main.url = "/"
+    # The PWA/Android client authenticates to /api with the app's own bearer
+    # token (not SSOwat). auth_header=false stops SSOwat from 302-ing those
+    # requests to the login portal; the nginx public regex (conf/nginx.conf)
+    # preserves the Authorization header. Keep both in sync.
+    api.url = "/api"
+    api.allowed = "visitors"
+    api.auth_header = false
+    api.show_tile = false
+    api.protected = true
+
+    [resources.ports]
+    main.default = 8787
+
+    [resources.apt]
+    packages = "postgresql"
+
+    [resources.database]
+    type = "postgresql"
+
+    [resources.nodejs]
+    version = "22"
