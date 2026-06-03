@@ -43,7 +43,7 @@
 	let barH = $state(0);
 	let blocks: HTMLElement[] = [];
 	let tocOpen = $state(loadBool('lectern.reader.toc', false));
-	let panelOpen = $state(loadBool('lectern.reader.panel', true));
+	let panelOpen = $state(loadBool('lectern.reader.panel', false));
 	let headings = $state<{ id: string; text: string; level: number }[]>([]);
 	let activeHeading = $state('');
 	let highlights = $state<Highlight[]>([]);
@@ -1083,14 +1083,9 @@
 		}
 		.rail {
 			position: sticky;
-			top: 3.4rem;
-			max-height: calc(100vh - 4.5rem);
+			top: 3.6rem;
+			max-height: calc(100vh - 5rem);
 			overflow-y: auto;
-			background: var(--surface);
-			border: 1px solid var(--border);
-			border-radius: var(--radius-lg);
-			box-shadow: var(--shadow-md), var(--edge-hi);
-			padding: 1rem 0.9rem;
 		}
 		.rail.toc {
 			flex: 0 0 13rem;
