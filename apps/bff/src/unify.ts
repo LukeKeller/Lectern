@@ -2,10 +2,16 @@ import type {
   BackendListParams,
   BackendPage,
   Card,
+  CreateViewRequest,
+  Highlight,
   Location,
+  NewHighlight,
   ReadLaterBackend,
   ReadState,
   RssBackend,
+  SavedView,
+  Tag,
+  UpdateViewRequest,
 } from "@lectern/shared";
 
 /**
@@ -120,13 +126,53 @@ export function decodeCombinedCursor(cursor: string | undefined): {
 
 // ---- Service ----------------------------------------------------------------
 
+/** Partial overlay write for a single unified document (glue `documents` row). */
+export interface OverlayPatch {
+  location?: Location;
+  tags?: string[];
+  note?: string | null;
+  readProgress?: number;
+  readAnchor?: string | null;
+  title?: string;
+}
+
 /**
- * Source of glue-DB overlays. Abstracted so the service is unit-testable without
- * a live Postgres; the production implementation is backed by drizzle.
+ * The BFF-owned glue store. `UnificationService` only consumes the two read
+ * methods at the top; the API routes use the full surface. Abstracted so routes
+ * are unit-testable without a live Postgres (the production impl is drizzle, the
+ * tests inject an in-memory fake).
  */
 export interface OverlayStore {
+  // --- consumed by UnificationService ---
   getOverlays(ids: string[]): Promise<Record<string, Overlay>>;
   getRssHighlightCounts(ids: string[]): Promise<Record<string, number>>;
+
+  // --- unified document index (denormalized, populated by backend polling) ---
+  /** Reconstruct a fully-overlaid `Card` from the glue index, or null if absent. */
+  getIndexedCard(id: string): Promise<Card | null>;
+  /** Index a card writing BOTH backend-truth and overlay columns (new saves). */
+  upsertIndex(card: Card): Promise<void>;
+  /** Index from a backend poll: refresh backend-truth columns, PRESERVE overlay. */
+  indexFromBackend(card: Card): Promise<void>;
+  /** Drop the glue index + overlay (and RSS highlights) for a document. */
+  deleteDocument(id: string): Promise<void>;
+
+  // --- overlay writes ---
+  upsertOverlay(id: string, patch: OverlayPatch): Promise<void>;
+
+  // --- tags ---
+  listTags(): Promise<Tag[]>;
+
+  // --- saved views ---
+  listViews(): Promise<SavedView[]>;
+  createView(input: CreateViewRequest): Promise<SavedView>;
+  updateView(id: string, patch: UpdateViewRequest): Promise<SavedView | null>;
+  deleteView(id: string): Promise<boolean>;
+
+  // --- RSS highlights (BFF-owned; MiniFlux has no highlight API) ---
+  listRssHighlights(documentId: string): Promise<Highlight[]>;
+  addRssHighlight(documentId: string, input: NewHighlight): Promise<Highlight>;
+  removeRssHighlight(highlightId: string): Promise<boolean>;
 }
 
 export class UnificationService {

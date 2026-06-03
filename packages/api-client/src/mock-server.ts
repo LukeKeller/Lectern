@@ -68,13 +68,24 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   return raw ? JSON.parse(raw) : undefined;
 }
 
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+  "access-control-allow-headers": "authorization,content-type",
+} as const;
+
 function send(res: ServerResponse, status: number, body?: unknown): void {
-  res.writeHead(status, { "content-type": "application/json" });
+  res.writeHead(status, { "content-type": "application/json", ...CORS_HEADERS });
   res.end(body === undefined ? "" : JSON.stringify(body));
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
+  if (method === "OPTIONS") {
+    res.writeHead(204, CORS_HEADERS);
+    res.end();
+    return;
+  }
   const path =
     (new URL(req.url ?? "/", "http://localhost").pathname.replace(/^\/api\/v1/, "") || "/").replace(
       /\/$/,

@@ -56,7 +56,11 @@ export class LecternClient {
   }
 
   private async request<T>(method: string, path: string, opts: RequestOptions<T> = {}): Promise<T> {
-    const url = new URL(this.baseUrl + path);
+    // Support an absolute baseUrl, or a relative one (e.g. "/reader/api/v1") resolved
+    // against the current origin when running in a browser (same-origin production).
+    const origin = (globalThis as { location?: { origin?: string } }).location?.origin;
+    const base = /^https?:\/\//.test(this.baseUrl) ? undefined : origin;
+    const url = new URL(this.baseUrl + path, base);
     if (opts.query) {
       for (const [k, v] of Object.entries(opts.query)) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v));

@@ -145,14 +145,14 @@ describe("combined cursor", () => {
 });
 
 describe("UnificationService", () => {
-  const overlayStore: OverlayStore = {
+  const overlayStore = {
     getOverlays: vi.fn(
       async (): Promise<Record<string, Overlay>> => ({
         "miniflux:1": { location: "shortlist", readProgress: 0.5 },
       }),
     ),
     getRssHighlightCounts: vi.fn(async () => ({ "miniflux:1": 2 })),
-  };
+  } as unknown as OverlayStore;
 
   it("merges both backends, overlays glue state, and combines cursors", async () => {
     const rss: RssBackend = {

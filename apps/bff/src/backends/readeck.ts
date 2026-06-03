@@ -7,6 +7,7 @@ import type {
   NewHighlight,
   ReadLaterBackend,
 } from "@lectern/shared";
+import { BackendHttpError } from "../errors";
 import {
   deriveReadeckReadState,
   progressFromReadeck,
@@ -142,7 +143,10 @@ export class ReadeckBackend implements ReadLaterBackend {
       body: hasBody ? JSON.stringify(init?.body) : undefined,
     });
     if (!res.ok) {
-      throw new Error(
+      throw new BackendHttpError(
+        "Readeck",
+        res.status,
+        res.headers.get("retry-after"),
         `Readeck ${init?.method ?? "GET"} ${path} -> ${res.status}: ${await res.text()}`,
       );
     }

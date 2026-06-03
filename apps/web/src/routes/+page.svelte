@@ -1,23 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { db } from '$lib/db';
-	import { getSync } from '$lib/sync';
-	import { liveCards } from '$lib/live.svelte';
-	import CardList from '$lib/components/CardList.svelte';
+	import type { Card } from '@lectern/shared';
+	import ListView from '$lib/components/ListView.svelte';
+	import { locationQuery, orQueries } from '$lib/views';
 
-	const cards = liveCards(async () => {
-		const list = await db.cards.where('location').anyOf('inbox', 'later').sortBy('updatedAt');
-		return list.reverse();
-	});
-
-	onMount(() => {
-		void getSync().pull();
-	});
+	const inbox = (card: Card) => card.location === 'inbox' || card.location === 'later';
+	const baseQuery = orQueries(locationQuery('inbox'), locationQuery('later'));
 </script>
 
-<h1>Inbox</h1>
-<CardList
-	cards={cards.value}
+<ListView
+	title="Inbox"
+	predicate={inbox}
+	{baseQuery}
 	empty="Inbox zero."
 	actions={[
 		{ label: 'Later', location: 'later' },

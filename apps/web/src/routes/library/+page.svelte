@@ -1,23 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { db } from '$lib/db';
-	import { getSync } from '$lib/sync';
-	import { liveCards } from '$lib/live.svelte';
-	import CardList from '$lib/components/CardList.svelte';
+	import type { Card } from '@lectern/shared';
+	import ListView from '$lib/components/ListView.svelte';
+	import { locationQuery, orQueries } from '$lib/views';
 
-	const cards = liveCards(async () => {
-		const list = await db.cards.where('location').anyOf('shortlist', 'archive').sortBy('updatedAt');
-		return list.reverse();
-	});
-
-	onMount(() => {
-		void getSync().pull();
-	});
+	const library = (card: Card) => card.location === 'shortlist' || card.location === 'archive';
+	const baseQuery = orQueries(locationQuery('shortlist'), locationQuery('archive'));
 </script>
 
-<h1>Library</h1>
-<CardList
-	cards={cards.value}
+<ListView
+	title="Library"
+	predicate={library}
+	{baseQuery}
 	empty="Your library is empty."
 	actions={[
 		{ label: 'Inbox', location: 'inbox' },

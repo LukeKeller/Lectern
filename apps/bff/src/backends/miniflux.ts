@@ -1,4 +1,5 @@
 import type { BackendListParams, BackendPage, Card, ReadState, RssBackend } from "@lectern/shared";
+import { BackendHttpError } from "../errors";
 
 /**
  * MiniFlux RSS adapter. Talks to `/v1/*`, normalizing entries into `Card`s.
@@ -119,7 +120,10 @@ export class MinifluxBackend implements RssBackend {
       body: hasBody ? JSON.stringify(init?.body) : undefined,
     });
     if (!res.ok) {
-      throw new Error(
+      throw new BackendHttpError(
+        "MiniFlux",
+        res.status,
+        res.headers.get("retry-after"),
         `MiniFlux ${init?.method ?? "GET"} ${path} -> ${res.status}: ${await res.text()}`,
       );
     }
