@@ -15,6 +15,7 @@
 	} from '$lib/newspaper';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
+	import FlipReader from '$lib/components/FlipReader.svelte';
 
 	const all = liveCards(() => db.cards.toArray());
 	const cards = $derived((all.value ?? []) as Card[]);
@@ -24,6 +25,21 @@
 	let picked = $state<string | null>(null);
 	const issueKey = $derived(picked ?? latestIssueKey(cards, yesterdayKey()));
 	const edition = $derived(buildEdition(cards, issueKey));
+
+	// Reading order for the flip-through reader: the lead first, then each section
+	// in the order it prints (matches markIssueRead's ordering).
+	const reading = $derived(
+		[edition.lead, ...edition.sections.flatMap((s) => s.cards)].filter(Boolean) as Card[]
+	);
+	let flipStart = $state<number | null>(null);
+
+	// Plain left-click flips through the edition; modified clicks fall through to
+	// the href so the full reader still opens in a new tab.
+	function openFlip(e: MouseEvent, card: Card | undefined) {
+		if (!card || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+		e.preventDefault();
+		flipStart = reading.findIndex((c) => c.id === card.id);
+	}
 
 	const dateLabel = $derived(
 		new Intl.DateTimeFormat(undefined, {
@@ -159,6 +175,9 @@
 			</div>
 			{#if edition.total > 0}
 				<div class="tools">
+					<button type="button" class="ghost" onclick={() => (flipStart = 0)}>
+						<Icon name="book" size={15} /> Read edition
+					</button>
 					<button type="button" class="ghost" onclick={markIssueRead}>
 						<Icon name="check" size={15} /> Mark issue read
 					</button>
@@ -177,7 +196,11 @@
 		</div>
 	{:else}
 		{#if edition.lead}
-			<a class="lead" href={resolve('/read/[id]', { id: edition.lead.id })}>
+			<a
+				class="lead"
+				href={resolve('/read/[id]', { id: edition.lead.id })}
+				onclick={(e) => openFlip(e, edition.lead)}
+			>
 				<span class="section-tag">{edition.lead.siteName ?? 'Front page'}</span>
 				<h2>{edition.lead.title}</h2>
 				{#if edition.lead.note}<p class="standfirst">{edition.lead.note}</p>{/if}
@@ -196,7 +219,7 @@
 					<ul>
 						{#each section.cards as card, i (card.id)}
 							<li class:sublead={i === 0}>
-								<a href={resolve('/read/[id]', { id: card.id })}>
+								<a href={resolve('/read/[id]', { id: card.id })} onclick={(e) => openFlip(e, card)}>
 									<span class="hl">{card.title}</span>
 									{#if i === 0 && card.note}<span class="deck">{card.note}</span>{/if}
 									{#if dek(card)}<span class="meta">{dek(card)}</span>{/if}
@@ -209,6 +232,16 @@
 		</div>
 	{/if}
 </section>
+
+{#if flipStart !== null}
+	<FlipReader
+		cards={reading}
+		start={flipStart}
+		kind="newspaper"
+		label={`The Daily Lectern · ${dateLabel}`}
+		onclose={() => (flipStart = null)}
+	/>
+{/if}
 
 <style>
 	.paper {

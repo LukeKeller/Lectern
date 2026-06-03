@@ -8,6 +8,7 @@
 	import { buildMagazines } from '$lib/magazine';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
+	import FlipReader from '$lib/components/FlipReader.svelte';
 
 	const all = liveCards(() => db.cards.toArray());
 	const cards = $derived((all.value ?? []) as Card[]);
@@ -56,24 +57,45 @@
 		return out;
 	}
 
+	// "distributed-systems" -> "Distributed Systems" for the flip-reader masthead.
+	function issueLabel(tag: string): string {
+		return tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+	}
+
+	let flip = $state<{ cards: Card[]; start: number; label: string } | null>(null);
+	// Plain left-click flips through the issue; modified clicks fall through to the
+	// href so the full reader still opens in a new tab.
+	function openFlip(e: MouseEvent, list: Card[], index: number, label: string) {
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+		e.preventDefault();
+		flip = { cards: list, start: index, label };
+	}
+
 	onMount(() => {
 		void getSync().pull();
 	});
 </script>
 
-{#snippet tocEntry(card: Card, num: number, folio: number)}
-	<li>
-		<a class="entry" href={resolve('/read/[id]', { id: card.id })}>
-			<span class="num">{pad(num)}</span>
-			<span class="entry-main">
-				<span class="entry-row">
-					<span class="entry-title">{card.title}</span>
-					<span class="folio">{folio}</span>
+{#snippet tocEntry(list: Card[], index: number, num: number, folio: number, label: string)}
+	{@const card = list[index]}
+	{#if card}
+		<li>
+			<a
+				class="entry"
+				href={resolve('/read/[id]', { id: card.id })}
+				onclick={(e) => openFlip(e, list, index, label)}
+			>
+				<span class="num">{pad(num)}</span>
+				<span class="entry-main">
+					<span class="entry-row">
+						<span class="entry-title">{card.title}</span>
+						<span class="folio">{folio}</span>
+					</span>
+					{#if meta(card)}<span class="entry-by">{meta(card)}</span>{/if}
 				</span>
-				{#if meta(card)}<span class="entry-by">{meta(card)}</span>{/if}
-			</span>
-		</a>
-	</li>
+			</a>
+		</li>
+	{/if}
 {/snippet}
 
 <section class="page">
@@ -95,6 +117,7 @@
 		{@const lead = featured.cards[0]}
 		{@const featFolios = folios(featured.cards)}
 		{@const rest = issues.slice(1)}
+		{@const featLabel = issueLabel(featured.tag)}
 
 		<section class="hero" style={`--hue:${hue(featured.tag)}`}>
 			<div class="cover hero-cover">
@@ -118,7 +141,11 @@
 
 			<div class="spread">
 				<p class="kicker">In this issue</p>
-				<a class="feature" href={resolve('/read/[id]', { id: lead.id })}>
+				<a
+					class="feature"
+					href={resolve('/read/[id]', { id: lead.id })}
+					onclick={(e) => openFlip(e, featured.cards, 0, featLabel)}
+				>
 					<span class="feature-kicker">Lead story</span>
 					<h3 class="feature-title">{lead.title}</h3>
 					<span class="feature-by">
@@ -130,7 +157,7 @@
 					<p class="kicker also">Also inside</p>
 					<ol class="toc">
 						{#each featured.cards.slice(1) as card, i (card.id)}
-							{@render tocEntry(card, i + 1, featFolios[i + 1])}
+							{@render tocEntry(featured.cards, i + 1, i + 1, featFolios[i + 1], featLabel)}
 						{/each}
 					</ol>
 				{/if}
@@ -162,7 +189,7 @@
 						</summary>
 						<ol class="toc cover-toc">
 							{#each issue.cards as card, i (card.id)}
-								{@render tocEntry(card, i + 1, issueFolios[i])}
+								{@render tocEntry(issue.cards, i, i + 1, issueFolios[i], issueLabel(issue.tag))}
 							{/each}
 						</ol>
 					</details>
@@ -171,6 +198,16 @@
 		</div>
 	{/if}
 </section>
+
+{#if flip}
+	<FlipReader
+		cards={flip.cards}
+		start={flip.start}
+		kind="magazine"
+		label={flip.label}
+		onclose={() => (flip = null)}
+	/>
+{/if}
 
 <style>
 	.page {
