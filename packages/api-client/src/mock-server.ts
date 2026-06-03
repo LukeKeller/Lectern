@@ -56,6 +56,92 @@ function sampleCard(overrides: Partial<Card> = {}): Card {
   });
 }
 
+// A varied set so the UI can be developed against realistic data.
+function sampleCards(): Card[] {
+  const base = [
+    {
+      title: "The quiet death of the web we knew",
+      siteName: "danluu.com",
+      author: "Dan Luu",
+      category: "article",
+      source: "readeck",
+      location: "later",
+      wordCount: 4314,
+      readingTimeMinutes: 21,
+      readingProgress: 0.42,
+      tags: ["tech", "longread"],
+    },
+    {
+      title: "A Complete Guide to useEffect",
+      siteName: "overreacted.io",
+      author: "Dan Abramov",
+      category: "article",
+      source: "readeck",
+      location: "shortlist",
+      wordCount: 10198,
+      readingTimeMinutes: 50,
+      readingProgress: 0,
+      tags: ["react"],
+    },
+    {
+      title: "Microsoft's new MAI models",
+      siteName: "Simon Willison's Weblog",
+      author: "Simon Willison",
+      category: "rss",
+      source: "miniflux",
+      location: "feed",
+      wordCount: 620,
+      readingTimeMinutes: 3,
+      readingProgress: 0,
+      tags: [],
+    },
+    {
+      title: "How web bloat impacts users with slow devices",
+      siteName: "danluu.com",
+      author: "Dan Luu",
+      category: "article",
+      source: "readeck",
+      location: "archive",
+      wordCount: 5200,
+      readingTimeMinutes: 26,
+      readingProgress: 1,
+      tags: ["performance"],
+    },
+    {
+      title: "The Best Code is No Code At All",
+      siteName: "Coding Horror",
+      author: "Jeff Atwood",
+      category: "article",
+      source: "readeck",
+      location: "inbox",
+      wordCount: 728,
+      readingTimeMinutes: 3,
+      readingProgress: 0,
+      tags: [],
+    },
+    {
+      title: "Weeknotes: a new release",
+      siteName: "Simon Willison's Weblog",
+      author: "Simon Willison",
+      category: "rss",
+      source: "miniflux",
+      location: "feed",
+      wordCount: 1100,
+      readingTimeMinutes: 5,
+      readingProgress: 0.1,
+      tags: ["weeknotes"],
+    },
+  ] as const;
+  return base.map((b, i) =>
+    sampleCard({
+      ...b,
+      id: `card_${i + 1}`,
+      sourceId: `${b.source}_${i + 1}`,
+      url: `https://${b.siteName.includes(".") ? b.siteName : "example.com"}/post-${i + 1}`,
+    }),
+  );
+}
+
 function sampleHighlight(overrides: Partial<Highlight> = {}): Highlight {
   return Highlight.parse({
     id: "hl_1",
@@ -105,7 +191,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(
       res,
       200,
-      ListDocumentsResponse.parse({ results: [sampleCard()], nextCursor: null, count: 1 }),
+      ListDocumentsResponse.parse({
+        results: sampleCards(),
+        nextCursor: null,
+        count: sampleCards().length,
+      }),
     );
   }
   if (path === "/documents" && method === "POST") {
@@ -139,7 +229,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(
       res,
       200,
-      SyncPullResponse.parse({ cards: [sampleCard()], deletedIds: [], cursor: "1" }),
+      SyncPullResponse.parse({ cards: sampleCards(), deletedIds: [], cursor: "1" }),
     );
   }
   if (path === "/sync" && method === "POST") {

@@ -19,7 +19,7 @@ describe("mock server serves the contract", () => {
   // call proves the fixture conforms to the contract.
   it("listDocuments returns schema-valid results", async () => {
     const r = await client.listDocuments({ location: "later" });
-    expect(r.count).toBe(1);
+    expect(r.count).toBeGreaterThan(1);
     expect(r.results[0]!.source).toBe("readeck");
   });
 
@@ -41,7 +41,7 @@ describe("mock server serves the contract", () => {
   it("syncPull returns a cursor and cards", async () => {
     const r = await client.syncPull();
     expect(r.cursor).toBe("1");
-    expect(r.cards).toHaveLength(1);
+    expect(r.cards.length).toBeGreaterThan(1);
   });
 
   it("deleteDocument resolves on 204", async () => {
