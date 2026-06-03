@@ -10,6 +10,7 @@ import type {
   ReadState,
   RssBackend,
   SavedView,
+  Source,
   Tag,
   UpdateViewRequest,
 } from "@lectern/shared";
@@ -140,6 +141,28 @@ export interface OverlayPatch {
   title?: string;
 }
 
+/** Filters + pagination for an index list query. Cursor is an opaque offset. */
+export interface ListDocumentsParams {
+  location?: Location;
+  category?: string;
+  source?: Source;
+  tag?: string;
+  search?: string;
+  pageSize: number;
+  cursor?: string;
+}
+
+export interface DocumentsPage {
+  cards: Card[];
+  nextCursor: string | null;
+}
+
+/** A sync delta read straight from the index: changed cards + deleted ids. */
+export interface ChangedDocuments {
+  cards: Card[];
+  deletedIds: string[];
+}
+
 /**
  * The BFF-owned glue store. `UnificationService` only consumes the two read
  * methods at the top; the API routes use the full surface. Abstracted so routes
@@ -147,6 +170,14 @@ export interface OverlayPatch {
  * tests inject an in-memory fake).
  */
 export interface OverlayStore {
+  // --- index reads (the unified index is the source of truth for the UI) ---
+  /** Filtered, sorted, paginated list of live (non-deleted) documents. */
+  listDocuments(params: ListDocumentsParams): Promise<DocumentsPage>;
+  /**
+   * Delta for sync: live documents updated since `since` plus the ids of
+   * documents soft-deleted since then. `since` undefined = full snapshot.
+   */
+  documentsChangedSince(since: string | undefined): Promise<ChangedDocuments>;
   // --- consumed by UnificationService ---
   getOverlays(ids: string[]): Promise<Record<string, Overlay>>;
   getRssHighlightCounts(ids: string[]): Promise<Record<string, number>>;
@@ -160,6 +191,11 @@ export interface OverlayStore {
   indexFromBackend(card: Card): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */
   deleteDocument(id: string): Promise<void>;
+  /**
+   * Soft-delete (tombstone) live documents of `source` whose id is not in
+   * `presentIds` — the backend no longer has them. Returns how many were marked.
+   */
+  softDeleteMissing(source: Source, presentIds: Set<string>): Promise<number>;
 
   // --- overlay writes ---
   upsertOverlay(id: string, patch: OverlayPatch): Promise<void>;

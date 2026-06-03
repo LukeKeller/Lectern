@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq, inArray, sql as dsql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  sql as dsql,
+} from "drizzle-orm";
 import type {
   Card,
   CreateViewRequest,
@@ -14,9 +24,17 @@ import type {
 } from "@lectern/shared";
 import type { Db } from "./db/client";
 import { documents, rssHighlights, savedViews } from "./db/schema";
-import type { NewDocumentRow } from "./db/schema";
+import type { DocumentRow, NewDocumentRow } from "./db/schema";
 import { parseId } from "./ids";
-import { mergeOverlay, type Overlay, type OverlayPatch, type OverlayStore } from "./unify";
+import {
+  mergeOverlay,
+  type ChangedDocuments,
+  type DocumentsPage,
+  type ListDocumentsParams,
+  type Overlay,
+  type OverlayPatch,
+  type OverlayStore,
+} from "./unify";
 
 /**
  * Glue-DB-backed `OverlayStore`. Backs the unified document index (one row per
@@ -59,19 +77,65 @@ export class DrizzleOverlayStore implements OverlayStore {
   async getIndexedCard(id: string): Promise<Card | null> {
     const [row] = await this.db.select().from(documents).where(eq(documents.id, id));
     if (!row) return null;
-    const meta = (row.metadata ?? null) as { card?: Card } | null;
-    const base = meta?.card ?? null;
-    if (!base) return null;
-    const overlay: Overlay = {
-      location: row.location as Location,
-      tags: row.tags,
-      note: row.note,
-      readProgress: row.readProgress,
-      readAnchor: row.readAnchor,
-    };
     const counts = await this.getRssHighlightCounts([id]);
-    const merged = mergeOverlay(base, overlay, counts[id] ?? 0);
-    return row.title ? { ...merged, title: row.title } : merged;
+    return cardFromRow(row, counts[id] ?? 0);
+  }
+
+  async listDocuments(params: ListDocumentsParams): Promise<DocumentsPage> {
+    const offset = params.cursor ? Number.parseInt(params.cursor, 10) || 0 : 0;
+    const conds = [isNull(documents.deletedAt)];
+    if (params.location) conds.push(eq(documents.location, params.location));
+    if (params.category) conds.push(eq(documents.category, params.category));
+    if (params.source) conds.push(eq(documents.source, params.source));
+    if (params.tag) conds.push(arrayContains(documents.tags, [params.tag]));
+    if (params.search) {
+      const like = `%${params.search}%`;
+      conds.push(dsql`(${documents.title} ilike ${like} or ${documents.url} ilike ${like})`);
+    }
+    // Fetch one extra row to tell whether another page exists.
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(and(...conds))
+      .orderBy(desc(documents.updatedAt), desc(documents.id))
+      .limit(params.pageSize + 1)
+      .offset(offset);
+    const hasMore = rows.length > params.pageSize;
+    const pageRows = hasMore ? rows.slice(0, params.pageSize) : rows;
+    const cards = await this.cardsFromRows(pageRows);
+    return { cards, nextCursor: hasMore ? String(offset + pageRows.length) : null };
+  }
+
+  async documentsChangedSince(since: string | undefined): Promise<ChangedDocuments> {
+    if (!since) {
+      const rows = await this.db.select().from(documents).where(isNull(documents.deletedAt));
+      return { cards: await this.cardsFromRows(rows), deletedIds: [] };
+    }
+    const sinceDate = new Date(since);
+    const changed = await this.db
+      .select()
+      .from(documents)
+      .where(and(isNull(documents.deletedAt), gt(documents.updatedAt, sinceDate)));
+    const deleted = await this.db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(isNotNull(documents.deletedAt), gt(documents.deletedAt, sinceDate)));
+    return {
+      cards: await this.cardsFromRows(changed),
+      deletedIds: deleted.map((r) => r.id),
+    };
+  }
+
+  /** Reconstruct cards from index rows, batching the highlight-count lookup. */
+  private async cardsFromRows(rows: DocumentRow[]): Promise<Card[]> {
+    if (rows.length === 0) return [];
+    const counts = await this.getRssHighlightCounts(rows.map((r) => r.id));
+    const cards: Card[] = [];
+    for (const row of rows) {
+      const card = cardFromRow(row, counts[row.id] ?? 0);
+      if (card) cards.push(card);
+    }
+    return cards;
   }
 
   async upsertIndex(card: Card): Promise<void> {
@@ -93,6 +157,7 @@ export class DrizzleOverlayStore implements OverlayStore {
           metadata: row.metadata,
           savedAt: row.savedAt,
           updatedAt: row.updatedAt,
+          deletedAt: null,
         },
       });
   }
@@ -113,6 +178,8 @@ export class DrizzleOverlayStore implements OverlayStore {
           metadata: row.metadata,
           savedAt: row.savedAt,
           updatedAt: row.updatedAt,
+          // A re-indexed backend item is alive again: clear any tombstone.
+          deletedAt: null,
         },
       });
   }
@@ -120,6 +187,23 @@ export class DrizzleOverlayStore implements OverlayStore {
   async deleteDocument(id: string): Promise<void> {
     await this.db.delete(rssHighlights).where(eq(rssHighlights.documentId, id));
     await this.db.delete(documents).where(eq(documents.id, id));
+  }
+
+  async softDeleteMissing(source: string, presentIds: Set<string>): Promise<number> {
+    const live = await this.db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.source, source), isNull(documents.deletedAt)));
+    const missing = live.map((r) => r.id).filter((id) => !presentIds.has(id));
+    if (missing.length === 0) return 0;
+    const now = new Date();
+    for (let i = 0; i < missing.length; i += 500) {
+      await this.db
+        .update(documents)
+        .set({ deletedAt: now })
+        .where(inArray(documents.id, missing.slice(i, i + 500)));
+    }
+    return missing.length;
   }
 
   async upsertOverlay(id: string, patch: OverlayPatch): Promise<void> {
@@ -269,6 +353,26 @@ function defaultCategory(source: Source): string {
 
 function defaultLocation(source: Source): Location {
   return source === "miniflux" ? "feed" : "later";
+}
+
+/**
+ * Reconstruct a fully-overlaid `Card` from an index row: the backend-truth card
+ * lives in `metadata.card`, with the BFF-authoritative overlay columns merged on
+ * top. Returns null for rows that have no indexed backend card yet.
+ */
+function cardFromRow(row: DocumentRow, highlightCount: number): Card | null {
+  const meta = (row.metadata ?? null) as { card?: Card } | null;
+  const base = meta?.card ?? null;
+  if (!base) return null;
+  const overlay: Overlay = {
+    location: row.location as Location,
+    tags: row.tags,
+    note: row.note,
+    readProgress: row.readProgress,
+    readAnchor: row.readAnchor,
+  };
+  const merged = mergeOverlay(base, overlay, highlightCount);
+  return row.title ? { ...merged, title: row.title } : merged;
 }
 
 function rowFromCard(card: Card): NewDocumentRow {

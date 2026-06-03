@@ -10,6 +10,7 @@ import {
   type NewHighlight,
   type ReadLaterBackend,
   type RssBackend,
+  type Source,
   type SavedView,
   type Tag,
   type UpdateViewRequest,
@@ -19,6 +20,9 @@ import { config } from "./config";
 import {
   mergeOverlay,
   UnificationService,
+  type ChangedDocuments,
+  type DocumentsPage,
+  type ListDocumentsParams,
   type Overlay,
   type OverlayPatch,
   type OverlayStore,
@@ -190,7 +194,56 @@ class FakeOverlayStore implements OverlayStore {
   overlays = new Map<string, OverlayPatch>();
   rssHighlights = new Map<string, Highlight[]>();
   views = new Map<string, SavedView>();
+  deleted = new Map<string, string>();
   private seq = 0;
+
+  async listDocuments(params: ListDocumentsParams): Promise<DocumentsPage> {
+    const all: Card[] = [];
+    for (const id of this.index.keys()) {
+      if (this.deleted.has(id)) continue;
+      const card = await this.getIndexedCard(id);
+      if (card) all.push(card);
+    }
+    let f = all;
+    if (params.location) f = f.filter((c) => c.location === params.location);
+    if (params.category) f = f.filter((c) => c.category === params.category);
+    if (params.source) f = f.filter((c) => c.source === params.source);
+    if (params.tag) f = f.filter((c) => c.tags.includes(params.tag as string));
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      f = f.filter((c) => c.title.toLowerCase().includes(q) || c.url.toLowerCase().includes(q));
+    }
+    f.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+    const offset = params.cursor ? Number.parseInt(params.cursor, 10) || 0 : 0;
+    const page = f.slice(offset, offset + params.pageSize);
+    const nextCursor = offset + page.length < f.length ? String(offset + page.length) : null;
+    return { cards: page, nextCursor };
+  }
+
+  async documentsChangedSince(since: string | undefined): Promise<ChangedDocuments> {
+    const cards: Card[] = [];
+    for (const id of this.index.keys()) {
+      if (this.deleted.has(id)) continue;
+      const card = await this.getIndexedCard(id);
+      if (card && (!since || card.updatedAt > since)) cards.push(card);
+    }
+    const deletedIds: string[] = [];
+    if (since) for (const [id, at] of this.deleted) if (at > since) deletedIds.push(id);
+    return { cards, deletedIds };
+  }
+
+  async softDeleteMissing(source: Source, presentIds: Set<string>): Promise<number> {
+    let n = 0;
+    const now = new Date().toISOString();
+    for (const [id, card] of this.index) {
+      if (card.source !== source || this.deleted.has(id)) continue;
+      if (!presentIds.has(id)) {
+        this.deleted.set(id, now);
+        n++;
+      }
+    }
+    return n;
+  }
 
   async getOverlays(ids: string[]): Promise<Record<string, Overlay>> {
     const out: Record<string, Overlay> = {};
@@ -215,6 +268,7 @@ class FakeOverlayStore implements OverlayStore {
   }
   async upsertIndex(card: Card): Promise<void> {
     this.index.set(card.id, card);
+    this.deleted.delete(card.id);
     this.overlays.set(card.id, {
       location: card.location,
       tags: card.tags,
@@ -225,6 +279,7 @@ class FakeOverlayStore implements OverlayStore {
   }
   async indexFromBackend(card: Card): Promise<void> {
     this.index.set(card.id, card);
+    this.deleted.delete(card.id);
   }
   async deleteDocument(id: string): Promise<void> {
     this.index.delete(id);
@@ -323,6 +378,17 @@ function app() {
   return buildApp(harness.deps);
 }
 
+/** Simulate the ingestion poll: index every backend item into the overlay so the
+ *  index-backed read path (GET /documents, GET /sync) can see backend-seeded data. */
+async function poll(): Promise<void> {
+  for (const card of harness.deps.rss.entries.values()) {
+    await harness.deps.overlay.indexFromBackend(card);
+  }
+  for (const card of harness.deps.readLater.bookmarks.values()) {
+    await harness.deps.overlay.indexFromBackend(card);
+  }
+}
+
 describe("auth", () => {
   it("rejects /api/v1 without a bearer token (401)", async () => {
     const a = app();
@@ -369,6 +435,7 @@ describe("documents", () => {
       makeCard({ id: "readeck:b1", source: "readeck", tags: ["news"] }),
     );
     const a = app();
+    await poll();
 
     const all = await a.inject({ method: "GET", url: "/api/v1/documents", headers: auth });
     expect(all.statusCode).toBe(200);
@@ -619,6 +686,7 @@ describe("sync", () => {
     harness.deps.rss.entries.set("1", makeCard({ id: "miniflux:1", source: "miniflux" }));
     harness.deps.readLater.bookmarks.set("b1", makeCard({ id: "readeck:b1", source: "readeck" }));
     const a = app();
+    await poll();
     const res = await a.inject({ method: "GET", url: "/api/v1/sync", headers: auth });
     expect(res.statusCode).toBe(200);
     expect(res.json().cards).toHaveLength(2);
@@ -626,10 +694,8 @@ describe("sync", () => {
     await a.close();
   });
 
-  it("paginates across pages so a full library lands in one pull", async () => {
-    // 5 read-later bookmarks with a small page size forces multiple pages; the
-    // pull must walk them all and terminate (no infinite loop, no duplicates).
-    for (let i = 0; i < 5; i++) {
+  it("returns the full library and reports deletions on the next pull", async () => {
+    for (let i = 0; i < 4; i++) {
       harness.deps.readLater.bookmarks.set(
         `b${i}`,
         makeCard({ id: `readeck:b${i}`, source: "readeck", url: `https://x.test/${i}` }),
@@ -637,11 +703,31 @@ describe("sync", () => {
     }
     harness.deps.rss.entries.set("1", makeCard({ id: "miniflux:1", source: "miniflux" }));
     const a = app();
-    const res = await a.inject({ method: "GET", url: "/api/v1/sync?pageSize=2", headers: auth });
-    expect(res.statusCode).toBe(200);
-    const ids = (res.json().cards as { id: string }[]).map((c) => c.id);
-    expect(new Set(ids).size).toBe(ids.length); // no duplicates
-    expect(ids).toHaveLength(6); // 5 read-later + 1 rss
+    await poll();
+
+    // Full snapshot (no cursor): every indexed document, no duplicates.
+    const first = await a.inject({ method: "GET", url: "/api/v1/sync", headers: auth });
+    const ids = (first.json().cards as { id: string }[]).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(5); // 4 read-later + 1 rss
+    const cursor = first.json().cursor as string;
+
+    // A backend item disappears (e.g. dedup); reconcile tombstones it.
+    await new Promise((r) => setTimeout(r, 5));
+    harness.deps.readLater.bookmarks.delete("b0");
+    await harness.deps.overlay.softDeleteMissing(
+      "readeck",
+      new Set(["readeck:b1", "readeck:b2", "readeck:b3"]),
+    );
+
+    // The next pull reports the deletion instead of a stale card.
+    const next = await a.inject({
+      method: "GET",
+      url: `/api/v1/sync?since=${encodeURIComponent(cursor)}`,
+      headers: auth,
+    });
+    expect(next.json().deletedIds).toContain("readeck:b0");
+    expect((next.json().cards as { id: string }[]).map((c) => c.id)).not.toContain("readeck:b0");
     await a.close();
   });
 

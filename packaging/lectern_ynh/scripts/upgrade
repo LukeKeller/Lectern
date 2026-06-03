@@ -16,8 +16,19 @@ cp -a "$YNH_APP_BASEDIR/sources/web" "$install_dir/web"
 chmod -R o-rwx "$install_dir"
 chown -R "$app:$app" "$install_dir"
 
-# NOTE: v0.1 ships a single install-time migration. New migrations must be
-# written to be re-runnable (IF NOT EXISTS) before being applied here.
+#=================================================
+# APPLY DATABASE MIGRATIONS
+#=================================================
+# Migrations are written to be re-runnable (CREATE TABLE / ADD COLUMN IF NOT
+# EXISTS), so applying the full set on every upgrade is safe and idempotent.
+ynh_script_progression "Applying database migrations..."
+for sqlfile in "$YNH_APP_BASEDIR/sources/migrations/"*.sql; do
+    ynh_psql_db_shell <"$sqlfile"
+done
+ynh_psql_db_shell <<EOF
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$db_user";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$db_user";
+EOF
 
 #=================================================
 # RECONFIGURE

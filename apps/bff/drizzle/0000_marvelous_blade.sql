@@ -1,4 +1,4 @@
-CREATE TABLE "backend_tokens" (
+CREATE TABLE IF NOT EXISTS "backend_tokens" (
 	"source" text PRIMARY KEY NOT NULL,
 	"base_url" text,
 	"token" text,
@@ -6,7 +6,7 @@ CREATE TABLE "backend_tokens" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "documents" (
+CREATE TABLE IF NOT EXISTS "documents" (
 	"id" text PRIMARY KEY NOT NULL,
 	"source" text NOT NULL,
 	"source_id" text NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE "documents" (
 	CONSTRAINT "documents_source_source_id_key" UNIQUE("source","source_id")
 );
 --> statement-breakpoint
-CREATE TABLE "ingestion_log" (
+CREATE TABLE IF NOT EXISTS "ingestion_log" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"source" text NOT NULL,
 	"action" text NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE "ingestion_log" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "rss_highlights" (
+CREATE TABLE IF NOT EXISTS "rss_highlights" (
 	"id" text PRIMARY KEY NOT NULL,
 	"document_id" text NOT NULL,
 	"text" text NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE "rss_highlights" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "saved_views" (
+CREATE TABLE IF NOT EXISTS "saved_views" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"query" jsonb NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE "saved_views" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "sync_cursors" (
+CREATE TABLE IF NOT EXISTS "sync_cursors" (
 	"source" text PRIMARY KEY NOT NULL,
 	"cursor" text,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL

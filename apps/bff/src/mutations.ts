@@ -39,9 +39,10 @@ export async function applyTags(
 ): Promise<void> {
   if (parsed.source === "readeck") {
     await deps.readLater.setLabels(parsed.sourceId, tags);
-  } else {
-    await deps.overlay.upsertOverlay(id, { tags });
   }
+  // Always mirror into the index so the read path (now index-backed) reflects
+  // the change immediately, before the next backend poll.
+  await deps.overlay.upsertOverlay(id, { tags });
 }
 
 export async function applyProgress(
@@ -53,9 +54,8 @@ export async function applyProgress(
 ): Promise<void> {
   if (parsed.source === "readeck") {
     await deps.readLater.setReadingProgress(parsed.sourceId, progress, anchor);
-  } else {
-    await deps.overlay.upsertOverlay(id, { readProgress: progress, readAnchor: anchor });
   }
+  await deps.overlay.upsertOverlay(id, { readProgress: progress, readAnchor: anchor });
 }
 
 export async function applyNote(

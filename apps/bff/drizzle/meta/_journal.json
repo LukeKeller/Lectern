@@ -8,6 +8,13 @@
       "when": 1780456463682,
       "tag": "0000_marvelous_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780499811661,
+      "tag": "0001_add_deleted_at",
+      "breakpoints": true
     }
   ]
 }

@@ -70,21 +70,20 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // ---- documents ----------------------------------------------------------
   app.get("/documents", async (req) => {
     const q = coerceListQuery(req.query as Record<string, unknown>);
-    const page = await deps.unify.list({
-      updatedAfter: q.updatedAfter,
-      cursor: q.cursor,
-      pageSize: q.pageSize,
+    // Served from the unified index (single source of truth), not live backends.
+    const page = await deps.overlay.listDocuments({
+      location: q.location,
+      category: q.category,
+      source: q.source,
+      tag: q.tag,
       search: q.search,
+      pageSize: q.pageSize,
+      cursor: q.cursor,
     });
-    let results = page.items;
-    if (q.location) results = results.filter((c) => c.location === q.location);
-    if (q.category) results = results.filter((c) => c.category === q.category);
-    if (q.source) results = results.filter((c) => c.source === q.source);
-    if (q.tag) results = results.filter((c) => c.tags.includes(q.tag as string));
     return ListDocumentsResponse.parse({
-      results,
+      results: page.cards,
       nextCursor: page.nextCursor,
-      count: results.length,
+      count: page.cards.length,
     });
   });
 
@@ -256,19 +255,31 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       const results = await Promise.allSettled(
         rows.slice(i, i + concurrency).map(async (row) => {
           // Preserve the Readwise triage location. Readeck only models
-          // archived-vs-not, so inbox/later/shortlist live in the BFF overlay;
-          // without it every imported item collapses to "later" and the default
-          // Inbox stays empty (the "import worked but nothing shows up" bug).
+          // archived-vs-not, so inbox/later/shortlist live in our index.
           const location = readwiseLocationToUnified(row.location);
           const sourceId = await deps.readLater.createBookmark({
             url: row.url,
             labels: row.tags,
             archived: location === "archive",
           });
-          await deps.overlay.upsertOverlay(`readeck:${sourceId}`, {
+          // Index the card immediately so it shows up before the next backend
+          // poll (the index is the read source of truth). The CSV gives us the
+          // title/url/tags/location; the poll later refreshes backend-truth.
+          const now = new Date().toISOString();
+          const card = Card.parse({
+            id: `readeck:${sourceId}`,
+            source: "readeck",
+            sourceId,
+            category: "article",
             location,
+            readState: "unopened",
+            title: row.title ?? "",
+            url: row.url,
             tags: row.tags,
+            savedAt: now,
+            updatedAt: now,
           });
+          await deps.overlay.upsertIndex(card);
         }),
       );
       for (const r of results) {
@@ -282,28 +293,13 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // ---- sync ---------------------------------------------------------------
   app.get("/sync", async (req) => {
     const q = coerceSyncQuery(req.query as Record<string, unknown>);
-    // Walk every page so a full library lands in one pull. The unified list
-    // pages each backend independently via an opaque combined cursor; we stop
-    // when it is exhausted, when a cursor stops advancing (a degraded backend
-    // that keeps handing back the same cursor), or at a hard page ceiling.
-    const MAX_PAGES = 500;
-    const cards: Card[] = [];
-    const seen = new Set<string>();
-    let cursor: string | undefined;
-    for (let i = 0; i < MAX_PAGES; i++) {
-      const page = await deps.unify.list({
-        updatedAfter: q.since,
-        pageSize: q.pageSize,
-        cursor,
-      });
-      cards.push(...page.items);
-      if (!page.nextCursor || seen.has(page.nextCursor)) break;
-      seen.add(page.nextCursor);
-      cursor = page.nextCursor;
-    }
+    // Read the delta straight from the unified index: documents changed since the
+    // client's cursor, plus the ids tombstoned since then (backend deletions /
+    // dedup). Backends are no longer queried on the read path.
+    const delta = await deps.overlay.documentsChangedSince(q.since);
     return SyncPullResponse.parse({
-      cards,
-      deletedIds: [],
+      cards: delta.cards,
+      deletedIds: delta.deletedIds,
       cursor: new Date().toISOString(),
     });
   });

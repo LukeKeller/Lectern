@@ -20,6 +20,7 @@ const QUEUE = {
   pollMiniflux: "poll-miniflux",
   pollReadeck: "poll-readeck",
   reconcile: "orphan-reconcile",
+  reconcileDeletions: "reconcile-deletions",
 } as const;
 
 const POLL_PAGE_SIZE = 100;
@@ -118,6 +119,42 @@ export async function reconcileOrphans(): Promise<void> {
 }
 
 /**
+ * Tombstone index rows whose backend item no longer exists (e.g. after a Readeck
+ * dedup). Lists every id from each backend and soft-deletes index rows for that
+ * source not in the set. A backend that errors is skipped — never mass-delete a
+ * source's documents just because it was briefly unreachable.
+ */
+export async function reconcileDeletions(): Promise<number> {
+  const { rss, readLater, store } = backends();
+  let removed = 0;
+  for (const source of ["miniflux", "readeck"] as const) {
+    try {
+      const present = new Set<string>();
+      let cursor: string | null | undefined;
+      do {
+        const page =
+          source === "miniflux"
+            ? await rss.listEntries({ cursor: cursor ?? undefined, pageSize: POLL_PAGE_SIZE })
+            : await readLater.list({ cursor: cursor ?? undefined, pageSize: POLL_PAGE_SIZE });
+        for (const card of page.items) present.add(card.id);
+        cursor = page.nextCursor;
+      } while (cursor);
+      const n = await store.softDeleteMissing(source, present);
+      removed += n;
+      await logIngestion(source, "reconcile-deletions", "ok", `tombstoned ${n} missing`);
+    } catch (err) {
+      await logIngestion(
+        source,
+        "reconcile-deletions",
+        "error",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+  return removed;
+}
+
+/**
  * Start the pg-boss instance, register workers, and schedule the poll +
  * reconcile jobs. Idempotent registration via `createQueue`. Returns the boss
  * so callers can inspect/stop it.
@@ -137,10 +174,14 @@ export async function startJobs(): Promise<PgBoss> {
   await instance.work(QUEUE.reconcile, async () => {
     await reconcileOrphans();
   });
+  await instance.work(QUEUE.reconcileDeletions, async () => {
+    await reconcileDeletions();
+  });
 
   await instance.schedule(QUEUE.pollMiniflux, "*/5 * * * *");
   await instance.schedule(QUEUE.pollReadeck, "*/5 * * * *");
   await instance.schedule(QUEUE.reconcile, "0 * * * *");
+  await instance.schedule(QUEUE.reconcileDeletions, "*/15 * * * *");
 
   boss = instance;
   return instance;

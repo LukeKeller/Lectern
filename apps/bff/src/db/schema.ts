@@ -41,6 +41,9 @@ export const documents = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     savedAt: timestamp("saved_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
+    // Soft-delete tombstone: set when a backend item disappears (e.g. dedup) so
+    // /sync can report deletions to clients. Null = live.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [unique("documents_source_source_id_key").on(t.source, t.sourceId)],
 );
