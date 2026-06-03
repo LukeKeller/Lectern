@@ -10,6 +10,8 @@ import {
   HighlightsResponse,
   ImportOpmlRequest,
   ImportOpmlResponse,
+  ImportReadwiseRequest,
+  ImportReadwiseResponse,
   ListDocumentsQuery,
   ListDocumentsResponse,
   SaveDocumentRequest,
@@ -28,6 +30,7 @@ import {
 } from "@lectern/shared";
 import type { AppDeps } from "./app";
 import { parseId } from "./ids";
+import { parseReadwiseCsv } from "./csv";
 import {
   applyAddHighlight,
   applyLocation,
@@ -241,6 +244,30 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const body = ImportOpmlRequest.parse(req.body);
     const message = await deps.rss.importOpml(body.opml);
     return ImportOpmlResponse.parse({ message });
+  });
+
+  app.post<{ Body: unknown }>("/import/readwise", async (req) => {
+    const { csv } = ImportReadwiseRequest.parse(req.body);
+    const rows = parseReadwiseCsv(csv);
+    let imported = 0;
+    let failed = 0;
+    const concurrency = 6;
+    for (let i = 0; i < rows.length; i += concurrency) {
+      const results = await Promise.allSettled(
+        rows.slice(i, i + concurrency).map((row) =>
+          deps.readLater.createBookmark({
+            url: row.url,
+            labels: row.tags,
+            archived: row.location === "archive",
+          }),
+        ),
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled") imported++;
+        else failed++;
+      }
+    }
+    return ImportReadwiseResponse.parse({ total: rows.length, imported, failed });
   });
 
   // ---- sync ---------------------------------------------------------------

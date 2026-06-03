@@ -4,6 +4,8 @@ import {
   FeedsResponse,
   ImportOpmlRequest,
   ImportOpmlResponse,
+  ImportReadwiseRequest,
+  ImportReadwiseResponse,
   SubscribeFeedRequest,
   UpdateFeedRequest,
   CreateHighlightRequest,
@@ -154,5 +156,8 @@ export class LecternClient {
   }
   importOpml(body: ImportOpmlRequest) {
     return this.request("POST", "/feeds/import", { body, schema: ImportOpmlResponse });
+  }
+  importReadwise(body: ImportReadwiseRequest) {
+    return this.request("POST", "/import/readwise", { body, schema: ImportReadwiseResponse });
   }
 }

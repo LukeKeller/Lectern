@@ -48,6 +48,12 @@ export interface ReadLaterBackend {
   getContent(sourceId: string): Promise<string>;
   /** Save a URL (optionally with prefetched HTML). Returns the new source id. */
   save(input: { url: string; html?: string; labels?: string[] }): Promise<string>;
+  /**
+   * Create a bookmark without waiting for extraction to finish (fire-and-forget).
+   * Used by bulk import where polling each item would be prohibitively slow.
+   * Returns the new source id.
+   */
+  createBookmark(input: { url: string; labels?: string[]; archived?: boolean }): Promise<string>;
   /** progress is 0..1; the adapter scales to the backend's native unit. */
   setReadingProgress(sourceId: string, progress: number, anchor: string | null): Promise<void>;
   setArchived(sourceId: string, archived: boolean): Promise<void>;

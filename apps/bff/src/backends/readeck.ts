@@ -207,6 +207,24 @@ export class ReadeckBackend implements ReadLaterBackend {
     return id;
   }
 
+  async createBookmark(input: {
+    url: string;
+    labels?: string[];
+    archived?: boolean;
+  }): Promise<string> {
+    const body: Record<string, unknown> = { url: input.url };
+    if (input.labels && input.labels.length > 0) body.labels = input.labels;
+    const res = await this.request("/api/bookmarks", { method: "POST", body });
+    let id = res.headers.get("bookmark-id");
+    if (!id) {
+      const location = res.headers.get("location");
+      if (location) id = location.split("/").pop() ?? null;
+    }
+    if (!id) throw new Error("Readeck create: no bookmark id in response headers");
+    if (input.archived) await this.setArchived(id, true);
+    return id;
+  }
+
   private async pollLoaded(sourceId: string): Promise<void> {
     for (let i = 0; i < this.pollTries; i++) {
       const res = await this.request(`/api/bookmarks/${sourceId}`);

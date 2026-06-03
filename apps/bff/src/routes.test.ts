@@ -120,6 +120,25 @@ class FakeReadLaterBackend implements ReadLaterBackend {
     );
     return sourceId;
   }
+  async createBookmark(input: {
+    url: string;
+    labels?: string[];
+    archived?: boolean;
+  }): Promise<string> {
+    const sourceId = `b${++this.seq}`;
+    this.bookmarks.set(
+      sourceId,
+      makeCard({
+        id: `readeck:${sourceId}`,
+        source: "readeck",
+        url: input.url,
+        title: "Imported",
+        tags: input.labels ?? [],
+        location: input.archived ? "archive" : "later",
+      }),
+    );
+    return sourceId;
+  }
   async setReadingProgress(
     sourceId: string,
     progress: number,
@@ -742,6 +761,28 @@ describe("feeds", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().message).toBe("Feeds imported");
     expect(harness.deps.rss.imported).toEqual(["<opml/>"]);
+    await a.close();
+  });
+});
+
+describe("readwise import", () => {
+  it("POST /import/readwise creates a bookmark per http row and reports counts", async () => {
+    const a = app();
+    const csv = [
+      "Title,Source URL,Document tags,Location",
+      "A,https://a.test/1,news,later",
+      "B,https://b.test/2,,archive",
+      "skipme,,,",
+    ].join("\n");
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/import/readwise",
+      headers: auth,
+      payload: { csv },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ total: 2, imported: 2, failed: 0 });
+    expect(harness.deps.readLater.bookmarks.size).toBe(2);
     await a.close();
   });
 });

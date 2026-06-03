@@ -108,6 +108,16 @@ export type ImportOpmlRequest = z.infer<typeof ImportOpmlRequest>;
 export const ImportOpmlResponse = z.object({ message: z.string() });
 export type ImportOpmlResponse = z.infer<typeof ImportOpmlResponse>;
 
+export const ImportReadwiseRequest = z.object({ csv: z.string() });
+export type ImportReadwiseRequest = z.infer<typeof ImportReadwiseRequest>;
+
+export const ImportReadwiseResponse = z.object({
+  total: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+export type ImportReadwiseResponse = z.infer<typeof ImportReadwiseResponse>;
+
 // ---- Endpoint registry ------------------------------------------------------
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -328,6 +338,16 @@ export const endpoints: Endpoint[] = [
     tags: ["feeds"],
     body: ImportOpmlRequest,
     response: ImportOpmlResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/import/readwise",
+    operationId: "importReadwise",
+    summary: "Import a Readwise Reader library CSV export",
+    tags: ["documents"],
+    body: ImportReadwiseRequest,
+    response: ImportReadwiseResponse,
     status: 200,
   },
 ];

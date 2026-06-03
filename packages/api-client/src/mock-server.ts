@@ -5,6 +5,8 @@ import {
   FeedsResponse,
   ImportOpmlRequest,
   ImportOpmlResponse,
+  ImportReadwiseRequest,
+  ImportReadwiseResponse,
   SubscribeFeedRequest,
   UpdateFeedRequest,
   CreateHighlightRequest,
@@ -113,6 +115,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       201,
       sampleCard({ id: "card_new", url: input.url, location: input.location, tags: input.tags }),
     );
+  }
+  if (path === "/import/readwise" && method === "POST") {
+    const input = ImportReadwiseRequest.parse(body);
+    const total = input.csv.split("\n").filter((l) => /https?:\/\//.test(l)).length;
+    return send(res, 200, ImportReadwiseResponse.parse({ total, imported: total, failed: 0 }));
   }
   if (path === "/tags" && method === "GET") {
     return send(res, 200, TagsResponse.parse({ tags: [{ name: "sample", count: 1 }] }));
