@@ -785,4 +785,37 @@ describe("readwise import", () => {
     expect(harness.deps.readLater.bookmarks.size).toBe(2);
     await a.close();
   });
+
+  it("maps Readwise locations to unified locations so imported items are visible", async () => {
+    const a = app();
+    const csv = [
+      "Title,Source URL,Document tags,Location",
+      "New one,https://a.test/new,,new",
+      "Later one,https://b.test/later,,later",
+      "Short one,https://c.test/short,reading,shortlist",
+      "Archived one,https://d.test/arch,,archive",
+      "Feed one,https://e.test/feed,,feed",
+    ].join("\n");
+    const imp = await a.inject({
+      method: "POST",
+      url: "/api/v1/import/readwise",
+      headers: auth,
+      payload: { csv },
+    });
+    expect(imp.json()).toMatchObject({ total: 5, imported: 5, failed: 0 });
+
+    const res = await a.inject({ method: "GET", url: "/api/v1/documents", headers: auth });
+    const byUrl = new Map<string, string>(
+      (res.json().results as { url: string; location: string }[]).map((c) => [c.url, c.location]),
+    );
+    // The Readwise "new" location is the unified inbox: the default landing list.
+    // Without an overlay these would all collapse to Readeck's archived-derived
+    // "later"/"archive" and never appear in Inbox/Shortlist.
+    expect(byUrl.get("https://a.test/new")).toBe("inbox");
+    expect(byUrl.get("https://b.test/later")).toBe("later");
+    expect(byUrl.get("https://c.test/short")).toBe("shortlist");
+    expect(byUrl.get("https://d.test/arch")).toBe("archive");
+    expect(byUrl.get("https://e.test/feed")).toBe("later");
+    await a.close();
+  });
 });

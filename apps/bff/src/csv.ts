@@ -1,3 +1,5 @@
+import type { Location } from "@lectern/shared";
+
 /**
  * Minimal RFC-4180 CSV parser (handles quoted fields, escaped quotes, embedded
  * commas/newlines) plus a tolerant mapper for Readwise Reader library exports.
@@ -108,4 +110,25 @@ export function parseReadwiseCsv(text: string): ReadwiseRow[] {
     });
   }
   return out;
+}
+
+/**
+ * Map a Readwise Reader location label to a unified `Location`. Readwise's "new"
+ * is the unified inbox (the default landing list); "feed" rows are saved feed
+ * articles (not live RSS), so they land in "later" to stay visible in the
+ * library rather than the RSS-only Feed view. Unknown/empty defaults to inbox.
+ */
+export function readwiseLocationToUnified(location: string | undefined): Location {
+  switch (location) {
+    case "later":
+      return "later";
+    case "shortlist":
+      return "shortlist";
+    case "archive":
+      return "archive";
+    case "feed":
+      return "later";
+    default:
+      return "inbox";
+  }
 }

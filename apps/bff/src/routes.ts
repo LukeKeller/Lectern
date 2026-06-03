@@ -30,7 +30,7 @@ import {
 } from "@lectern/shared";
 import type { AppDeps } from "./app";
 import { parseId } from "./ids";
-import { parseReadwiseCsv } from "./csv";
+import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
 import {
   applyAddHighlight,
   applyLocation,
@@ -254,13 +254,22 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const concurrency = 6;
     for (let i = 0; i < rows.length; i += concurrency) {
       const results = await Promise.allSettled(
-        rows.slice(i, i + concurrency).map((row) =>
-          deps.readLater.createBookmark({
+        rows.slice(i, i + concurrency).map(async (row) => {
+          // Preserve the Readwise triage location. Readeck only models
+          // archived-vs-not, so inbox/later/shortlist live in the BFF overlay;
+          // without it every imported item collapses to "later" and the default
+          // Inbox stays empty (the "import worked but nothing shows up" bug).
+          const location = readwiseLocationToUnified(row.location);
+          const sourceId = await deps.readLater.createBookmark({
             url: row.url,
             labels: row.tags,
-            archived: row.location === "archive",
-          }),
-        ),
+            archived: location === "archive",
+          });
+          await deps.overlay.upsertOverlay(`readeck:${sourceId}`, {
+            location,
+            tags: row.tags,
+          });
+        }),
       );
       for (const r of results) {
         if (r.status === "fulfilled") imported++;
