@@ -1,0 +1,189 @@
+import type {
+  BackendListParams,
+  BackendPage,
+  Card,
+  ReadLaterBackend,
+  RssBackend,
+} from "@lectern/shared";
+import { describe, expect, it, vi } from "vitest";
+import {
+  decodeCombinedCursor,
+  deriveReadeckReadState,
+  encodeCombinedCursor,
+  locationToMinifluxRead,
+  locationToReadeckArchived,
+  mergeOverlay,
+  progressFromReadeck,
+  progressToReadeck,
+  readeckLocationFromArchived,
+  UnificationService,
+  type Overlay,
+  type OverlayStore,
+} from "./unify";
+
+function rssCard(over: Partial<Card> = {}): Card {
+  return {
+    id: "miniflux:1",
+    source: "miniflux",
+    sourceId: "1",
+    category: "rss",
+    location: "feed",
+    readState: "unopened",
+    title: "t",
+    author: null,
+    siteName: null,
+    url: "https://example.com/a",
+    wordCount: null,
+    readingTimeMinutes: 3,
+    readingProgress: 0,
+    readAnchor: null,
+    tags: [],
+    highlightCount: 0,
+    note: null,
+    savedAt: "2026-06-01T00:00:00Z",
+    updatedAt: "2026-06-01T00:00:00Z",
+    ...over,
+  };
+}
+
+function readeckCard(over: Partial<Card> = {}): Card {
+  return {
+    ...rssCard(),
+    id: "readeck:x",
+    source: "readeck",
+    sourceId: "x",
+    category: "article",
+    location: "later",
+    ...over,
+  };
+}
+
+describe("progress scaling", () => {
+  it("scales 0..1 to integer 0..100 and back", () => {
+    expect(progressToReadeck(0.42)).toBe(42);
+    expect(progressToReadeck(0)).toBe(0);
+    expect(progressToReadeck(1)).toBe(100);
+    expect(progressFromReadeck(42)).toBeCloseTo(0.42);
+    expect(progressFromReadeck(100)).toBe(1);
+  });
+
+  it("clamps out-of-range values", () => {
+    expect(progressToReadeck(1.5)).toBe(100);
+    expect(progressToReadeck(-0.2)).toBe(0);
+    expect(progressFromReadeck(250)).toBe(1);
+    expect(progressFromReadeck(-5)).toBe(0);
+  });
+});
+
+describe("location <-> backend state", () => {
+  it("derives Readeck read state from archive + progress", () => {
+    expect(deriveReadeckReadState(true, 0)).toBe("finished");
+    expect(deriveReadeckReadState(false, 100)).toBe("finished");
+    expect(deriveReadeckReadState(false, 30)).toBe("reading");
+    expect(deriveReadeckReadState(false, 0)).toBe("unopened");
+  });
+
+  it("maps archive flag to location and back", () => {
+    expect(readeckLocationFromArchived(true)).toBe("archive");
+    expect(readeckLocationFromArchived(false)).toBe("later");
+    expect(locationToReadeckArchived("archive")).toBe(true);
+    expect(locationToReadeckArchived("later")).toBe(false);
+    expect(locationToReadeckArchived("shortlist")).toBe(false);
+  });
+
+  it("maps location to MiniFlux read flag", () => {
+    expect(locationToMinifluxRead("archive")).toBe(true);
+    expect(locationToMinifluxRead("feed")).toBe(false);
+    expect(locationToMinifluxRead("inbox")).toBe(false);
+  });
+});
+
+describe("mergeOverlay", () => {
+  it("overlays BFF reading progress + highlight count onto RSS cards", () => {
+    const overlay: Overlay = { readProgress: 0.5, readAnchor: "#n3", location: "shortlist" };
+    const merged = mergeOverlay(rssCard(), overlay, 4);
+    expect(merged.readingProgress).toBe(0.5);
+    expect(merged.readAnchor).toBe("#n3");
+    expect(merged.highlightCount).toBe(4);
+    expect(merged.location).toBe("shortlist");
+  });
+
+  it("does not touch readeck progress but applies unified location/tags/note", () => {
+    const card = readeckCard({ readingProgress: 0.42, tags: ["old"] });
+    const merged = mergeOverlay(card, { location: "shortlist", tags: ["unified"], note: "hi" });
+    expect(merged.readingProgress).toBe(0.42);
+    expect(merged.location).toBe("shortlist");
+    expect(merged.tags).toEqual(["unified"]);
+    expect(merged.note).toBe("hi");
+  });
+
+  it("returns the card unchanged when no overlay exists", () => {
+    const card = rssCard();
+    expect(mergeOverlay(card, undefined, 0)).toEqual(card);
+  });
+});
+
+describe("combined cursor", () => {
+  it("round-trips both per-backend cursors", () => {
+    const encoded = encodeCombinedCursor("10", "20");
+    expect(encoded).not.toBeNull();
+    expect(decodeCombinedCursor(encoded ?? undefined)).toEqual({ rss: "10", readLater: "20" });
+  });
+
+  it("is null when both backends are exhausted", () => {
+    expect(encodeCombinedCursor(null, null)).toBeNull();
+  });
+
+  it("decodes an absent cursor to undefined parts", () => {
+    expect(decodeCombinedCursor(undefined)).toEqual({ rss: undefined, readLater: undefined });
+  });
+
+  it("survives one backend being exhausted", () => {
+    const encoded = encodeCombinedCursor(null, "20");
+    expect(decodeCombinedCursor(encoded ?? undefined)).toEqual({ rss: undefined, readLater: "20" });
+  });
+});
+
+describe("UnificationService", () => {
+  const overlayStore: OverlayStore = {
+    getOverlays: vi.fn(
+      async (): Promise<Record<string, Overlay>> => ({
+        "miniflux:1": { location: "shortlist", readProgress: 0.5 },
+      }),
+    ),
+    getRssHighlightCounts: vi.fn(async () => ({ "miniflux:1": 2 })),
+  };
+
+  it("merges both backends, overlays glue state, and combines cursors", async () => {
+    const rss: RssBackend = {
+      listEntries: vi.fn(
+        async (): Promise<BackendPage<Card>> => ({ items: [rssCard()], nextCursor: "50" }),
+      ),
+      getEntryContent: vi.fn(),
+      setRead: vi.fn(),
+      setStarred: vi.fn(),
+      refresh: vi.fn(),
+      exportOpml: vi.fn(),
+    } as unknown as RssBackend;
+    const readLater: ReadLaterBackend = {
+      list: vi.fn(
+        async (): Promise<BackendPage<Card>> => ({ items: [readeckCard()], nextCursor: null }),
+      ),
+    } as unknown as ReadLaterBackend;
+
+    const service = new UnificationService(rss, readLater, overlayStore);
+    const page = await service.list({ pageSize: 50 } satisfies BackendListParams);
+
+    expect(page.items).toHaveLength(2);
+    const rssResult = page.items.find((c) => c.source === "miniflux");
+    expect(rssResult?.location).toBe("shortlist");
+    expect(rssResult?.readingProgress).toBe(0.5);
+    expect(rssResult?.highlightCount).toBe(2);
+    expect(page.nextCursor).toBe(encodeCombinedCursor("50", null));
+  });
+
+  it("returns cards untouched when none are passed to applyOverlays", async () => {
+    const service = new UnificationService({} as RssBackend, {} as ReadLaterBackend, overlayStore);
+    expect(await service.applyOverlays([])).toEqual([]);
+  });
+});

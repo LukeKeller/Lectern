@@ -1,0 +1,65 @@
+import { Card } from "@lectern/shared";
+import { describe, expect, it } from "vitest";
+import { minifluxEntryToCard, minifluxReadState, type MinifluxEntry } from "./miniflux";
+
+const baseEntry: MinifluxEntry = {
+  id: 42,
+  feed_id: 7,
+  status: "unread",
+  title: "Things I learned",
+  url: "https://example.com/post",
+  author: "Ada",
+  published_at: "2026-06-02T22:21:52Z",
+  created_at: "2026-06-03T02:37:59Z",
+  changed_at: "2026-06-03T02:38:01Z",
+  content: "<p>hi</p>",
+  starred: false,
+  reading_time: 5,
+  tags: ["ai", "llms"],
+  feed: { id: 7, title: "Simon's Weblog", site_url: "https://simonwillison.net/", feed_url: "x" },
+};
+
+describe("minifluxEntryToCard", () => {
+  it("normalizes an entry into a Card", () => {
+    const card = minifluxEntryToCard(baseEntry);
+    expect(card).toMatchObject({
+      id: "miniflux:42",
+      source: "miniflux",
+      sourceId: "42",
+      category: "rss",
+      location: "feed",
+      readState: "unopened",
+      title: "Things I learned",
+      author: "Ada",
+      siteName: "Simon's Weblog",
+      url: "https://example.com/post",
+      readingTimeMinutes: 5,
+      readingProgress: 0,
+      readAnchor: null,
+      tags: ["ai", "llms"],
+      highlightCount: 0,
+      savedAt: "2026-06-02T22:21:52Z",
+      updatedAt: "2026-06-03T02:38:01Z",
+    });
+    expect(() => Card.parse(card)).not.toThrow();
+  });
+
+  it("maps read status to finished", () => {
+    const card = minifluxEntryToCard({ ...baseEntry, status: "read" });
+    expect(card.readState).toBe("finished");
+  });
+
+  it("tolerates missing tags, author, and feed", () => {
+    const card = minifluxEntryToCard({ ...baseEntry, tags: null, author: "", feed: undefined });
+    expect(card.tags).toEqual([]);
+    expect(card.author).toBeNull();
+    expect(card.siteName).toBeNull();
+  });
+});
+
+describe("minifluxReadState", () => {
+  it("maps the binary read flag", () => {
+    expect(minifluxReadState(true)).toBe("finished");
+    expect(minifluxReadState(false)).toBe("unopened");
+  });
+});

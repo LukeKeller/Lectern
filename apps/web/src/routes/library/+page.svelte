@@ -6,7 +6,7 @@
 	import CardList from '$lib/components/CardList.svelte';
 
 	const cards = liveCards(async () => {
-		const list = await db.cards.where('location').anyOf('inbox', 'later').sortBy('updatedAt');
+		const list = await db.cards.where('location').anyOf('shortlist', 'archive').sortBy('updatedAt');
 		return list.reverse();
 	});
 
@@ -15,13 +15,12 @@
 	});
 </script>
 
-<h1>Inbox</h1>
+<h1>Library</h1>
 <CardList
 	cards={cards.value}
-	empty="Inbox zero."
+	empty="Your library is empty."
 	actions={[
-		{ label: 'Later', location: 'later' },
-		{ label: 'Shortlist', location: 'shortlist' },
+		{ label: 'Inbox', location: 'inbox' },
 		{ label: 'Archive', location: 'archive' }
 	]}
 />
