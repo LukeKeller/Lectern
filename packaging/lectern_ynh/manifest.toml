@@ -5,7 +5,7 @@ id = "lectern"
 name = "Lectern"
 description.en = "Self-hosted RSS + read-later reader (unifies MiniFlux + Readeck)"
 
-version = "0.4.2~ynh1"
+version = "0.4.3~ynh1"
 maintainers = ["lukekeller"]
 
 [upstream]
@@ -67,6 +67,19 @@ ram.runtime = "250M"
     # requests to the login portal; the nginx public regex (conf/nginx.conf)
     # preserves the Authorization header. Keep both in sync.
     api.url = "/api"
+    # PWA app-shell assets are fetched WITHOUT credentials (the Web App Manifest
+    # and its icons), so they must be visitor-accessible or the installed app
+    # has no icon/name. SSOwat (access.lua) gates by permission, so listing them
+    # here — not just in nginx — is what actually makes them public.
+    api.additional_urls = [
+        "/manifest.webmanifest",
+        "/icon.svg",
+        "/icon-192.png",
+        "/icon-512.png",
+        "/icon-maskable.png",
+        "/apple-touch-icon.png",
+        "/robots.txt",
+    ]
     api.allowed = "visitors"
     api.auth_header = false
     api.show_tile = false
