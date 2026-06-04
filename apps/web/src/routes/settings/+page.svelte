@@ -7,6 +7,7 @@
 	import type { FontFamily, ThemeMode } from '$lib/typography';
 	import { buildBookmarklet } from '$lib/bookmarklet';
 	import { APP_VERSION } from '$lib/version';
+	import { resolve } from '$app/paths';
 
 	let token = $state('');
 	let saved = $state(false);
@@ -211,6 +212,10 @@
 			<div>
 				<dt>Deployed version</dt>
 				<dd><code>{APP_VERSION}</code></dd>
+			</div>
+			<div>
+				<dt>Release notes</dt>
+				<dd><a class="link" href={resolve('/changelog')}>What’s new →</a></dd>
 			</div>
 		</dl>
 	</section>
@@ -446,5 +451,12 @@
 		background: var(--surface-alt);
 		padding: 0.15rem 0.5rem;
 		border-radius: var(--radius-sm);
+	}
+	.about .link {
+		color: var(--accent);
+		font-size: var(--text-sm);
+	}
+	.about .link:hover {
+		text-decoration: underline;
 	}
 </style>

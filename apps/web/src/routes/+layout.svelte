@@ -16,6 +16,7 @@
 	import { buildMagazines } from '$lib/magazine';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
+	import WhatsNew from '$lib/components/WhatsNew.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import type { ThemeMode } from '$lib/typography';
 	import type { Card } from '@lectern/shared';
@@ -404,6 +405,8 @@
 {#if helpOpen}
 	<ShortcutsHelp onclose={() => (helpOpen = false)} />
 {/if}
+
+<WhatsNew />
 
 <style>
 	.brand {
