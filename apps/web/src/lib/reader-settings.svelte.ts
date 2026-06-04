@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import {
+	chromeForTheme,
 	DEFAULT_SETTINGS,
 	normalizeSettings,
 	parseSettings,
@@ -45,14 +46,11 @@ class ReaderSettingsStore {
 	 */
 	private syncThemeColor(): void {
 		if (!browser) return;
-		const LIGHT = '#f6f4ee';
-		const DARK = '#1a1815';
-		const t = this.current.theme;
-		const dark =
-			t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+		const { bg, dark } = chromeForTheme(this.current.theme, prefersDark);
 		document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
 		const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (meta) meta.content = dark ? DARK : LIGHT;
+		if (meta) meta.content = bg;
 	}
 
 	/**

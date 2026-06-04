@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.8.0',
+		date: '2026-06-04',
+		title: 'Themes & reading comfort',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Four new themes — Sepia and Newsprint for warm daytime reading, True Black for OLED screens at night, and a High-contrast theme for maximum legibility — alongside the existing Paper, Dark, and Auto.'
+			},
+			{
+				kind: 'added',
+				text: 'A reader-only theme: the article view can use its own theme (say, Sepia) while the rest of the app stays dark.'
+			},
+			{
+				kind: 'added',
+				text: 'Bundled reading fonts that no longer depend on what your device has installed: Literata, Atkinson Hyperlegible (built for low vision), Lexend, and OpenDyslexic for dyslexic readers.'
+			},
+			{
+				kind: 'added',
+				text: 'Finer typography control — letter, word, and paragraph spacing sliders, plus quick Narrow/Medium/Wide width presets.'
+			}
+		]
+	},
+	{
 		version: '0.7.2',
 		date: '2026-06-04',
 		title: 'Status bar matches your theme',

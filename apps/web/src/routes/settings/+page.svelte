@@ -4,7 +4,15 @@
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
 	import { readerSettings } from '$lib/reader-settings.svelte';
-	import type { FontFamily, ThemeMode } from '$lib/typography';
+	import {
+		FONT_LABELS,
+		FONT_STACKS,
+		THEME_SWATCHES,
+		WIDTH_PRESETS,
+		type FontFamily,
+		type ReaderTheme,
+		type ThemeMode
+	} from '$lib/typography';
 	import { buildBookmarklet } from '$lib/bookmarklet';
 	import { APP_VERSION } from '$lib/version';
 	import { resolve } from '$app/paths';
@@ -27,15 +35,23 @@
 		copied = true;
 	}
 
-	const FONTS: { value: FontFamily; label: string }[] = [
-		{ value: 'serif', label: 'Serif' },
-		{ value: 'sans', label: 'Sans' },
-		{ value: 'mono', label: 'Mono' }
-	];
-	const THEMES: { value: ThemeMode; label: string }[] = [
-		{ value: 'light', label: 'Light' },
+	const THEMES = (Object.keys(THEME_SWATCHES) as ThemeMode[]).map((value) => ({
+		value,
+		...THEME_SWATCHES[value]
+	}));
+	const FONTS = (Object.keys(FONT_LABELS) as FontFamily[]).map((value) => ({
+		value,
+		...FONT_LABELS[value],
+		stack: FONT_STACKS[value]
+	}));
+	const READER_THEMES: { value: ReaderTheme; label: string }[] = [
+		{ value: 'match', label: 'Match app' },
+		{ value: 'light', label: 'Paper' },
+		{ value: 'sepia', label: 'Sepia' },
+		{ value: 'newsprint', label: 'Newsprint' },
 		{ value: 'dark', label: 'Dark' },
-		{ value: 'auto', label: 'Auto' }
+		{ value: 'black', label: 'Black' },
+		{ value: 'contrast', label: 'Contrast' }
 	];
 
 	// ---- Listen (text-to-speech) ----
@@ -229,28 +245,52 @@
 		<div class="stack">
 			<div class="field">
 				<span class="flabel">Theme</span>
-				<div class="seg">
+				<div class="swatches">
 					{#each THEMES as t (t.value)}
 						<button
 							type="button"
+							class="swatch"
 							class:active={readerSettings.current.theme === t.value}
+							style={`--sw-bg:${t.bg};--sw-fg:${t.fg}`}
 							onclick={() => readerSettings.update({ theme: t.value })}
+							aria-pressed={readerSettings.current.theme === t.value}
 						>
-							{t.label}
+							<span class="chip" aria-hidden="true">Aa</span>
+							<span class="sw-label">{t.label}</span>
 						</button>
 					{/each}
 				</div>
 			</div>
 			<div class="field">
+				<span class="flabel">Reader theme</span>
+				<select
+					class="picker"
+					value={readerSettings.current.readerTheme}
+					onchange={(e) =>
+						readerSettings.update({ readerTheme: e.currentTarget.value as ReaderTheme })}
+				>
+					{#each READER_THEMES as r (r.value)}
+						<option value={r.value}>{r.label}</option>
+					{/each}
+				</select>
+				<span class="fhint">Theme the article view independently of the app chrome.</span>
+			</div>
+			<div class="field">
 				<span class="flabel">Typeface</span>
-				<div class="seg">
+				<div class="fonts">
 					{#each FONTS as f (f.value)}
 						<button
 							type="button"
+							class="fontcard"
 							class:active={readerSettings.current.fontFamily === f.value}
 							onclick={() => readerSettings.update({ fontFamily: f.value })}
+							aria-pressed={readerSettings.current.fontFamily === f.value}
 						>
-							{f.label}
+							<span class="fontsample" style={`font-family:${f.stack}`}>Ag</span>
+							<span class="fontmeta">
+								<span class="fontname">{f.label}</span>
+								<span class="fontnote">{f.note}</span>
+							</span>
 						</button>
 					{/each}
 				</div>
@@ -276,8 +316,21 @@
 					oninput={(e) => readerSettings.update({ lineHeight: Number(e.currentTarget.value) })}
 				/>
 			</label>
-			<label class="slider">
-				<span>Max width <em>{readerSettings.current.maxWidth}px</em></span>
+			<div class="field">
+				<span class="flabel"
+					>Width <em class="flabel-val">{readerSettings.current.maxWidth}px</em></span
+				>
+				<div class="seg">
+					{#each WIDTH_PRESETS as p (p.value)}
+						<button
+							type="button"
+							class:active={readerSettings.current.maxWidth === p.value}
+							onclick={() => readerSettings.update({ maxWidth: p.value })}
+						>
+							{p.label}
+						</button>
+					{/each}
+				</div>
 				<input
 					type="range"
 					min="480"
@@ -285,6 +338,42 @@
 					step="20"
 					value={readerSettings.current.maxWidth}
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
+				/>
+			</div>
+			<label class="slider">
+				<span>Letter spacing <em>{readerSettings.current.letterSpacing.toFixed(2)}em</em></span>
+				<input
+					type="range"
+					min="-0.05"
+					max="0.15"
+					step="0.01"
+					value={readerSettings.current.letterSpacing}
+					oninput={(e) => readerSettings.update({ letterSpacing: Number(e.currentTarget.value) })}
+				/>
+			</label>
+			<label class="slider">
+				<span>Word spacing <em>{readerSettings.current.wordSpacing.toFixed(2)}em</em></span>
+				<input
+					type="range"
+					min="0"
+					max="0.5"
+					step="0.02"
+					value={readerSettings.current.wordSpacing}
+					oninput={(e) => readerSettings.update({ wordSpacing: Number(e.currentTarget.value) })}
+				/>
+			</label>
+			<label class="slider">
+				<span
+					>Paragraph spacing <em>{readerSettings.current.paragraphSpacing.toFixed(1)}em</em></span
+				>
+				<input
+					type="range"
+					min="0.4"
+					max="2.4"
+					step="0.1"
+					value={readerSettings.current.paragraphSpacing}
+					oninput={(e) =>
+						readerSettings.update({ paragraphSpacing: Number(e.currentTarget.value) })}
 				/>
 			</label>
 			<label class="toggle">
@@ -579,6 +668,117 @@
 		background: var(--surface);
 		color: var(--text);
 		box-shadow: var(--shadow-sm);
+	}
+	.flabel-val {
+		font-style: normal;
+		font-weight: 500;
+		color: var(--text-muted);
+	}
+	.fhint {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	.picker {
+		max-width: 18rem;
+	}
+
+	/* Theme swatches: a small palette tile per theme, each rendered in its own
+	   colours so the choice is visible at a glance. */
+	.swatches {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(5.2rem, 1fr));
+		gap: 0.5rem;
+		max-width: 26rem;
+	}
+	.swatch {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.55rem 0.4rem;
+		border: 1.5px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			transform var(--dur-fast) var(--ease);
+	}
+	.swatch:hover {
+		transform: translateY(-1px);
+	}
+	.swatch.active {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.swatch .chip {
+		display: grid;
+		place-items: center;
+		width: 100%;
+		height: 2.2rem;
+		border-radius: calc(var(--radius) - 3px);
+		background: var(--sw-bg);
+		color: var(--sw-fg);
+		font-family: var(--font-serif);
+		font-size: 1rem;
+		border: 1px solid var(--border);
+	}
+	.sw-label {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	.swatch.active .sw-label {
+		color: var(--text);
+		font-weight: 600;
+	}
+
+	/* Font cards: a large glyph rendered in the actual face + name and rationale. */
+	.fonts {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+		gap: 0.5rem;
+		max-width: 30rem;
+	}
+	.fontcard {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.5rem 0.6rem;
+		border: 1.5px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		cursor: pointer;
+		text-align: left;
+		transition: border-color var(--dur-fast) var(--ease);
+	}
+	.fontcard:hover {
+		border-color: var(--border-strong);
+	}
+	.fontcard.active {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.fontsample {
+		flex-shrink: 0;
+		width: 2.3rem;
+		text-align: center;
+		font-size: 1.5rem;
+		line-height: 1;
+		color: var(--text);
+	}
+	.fontmeta {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.fontname {
+		font-size: var(--text-sm);
+		font-weight: 600;
+		color: var(--text);
+	}
+	.fontnote {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
 	}
 	.slider {
 		gap: 0.45rem;

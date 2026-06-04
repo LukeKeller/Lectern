@@ -153,8 +153,19 @@
 		}
 	}
 
+	// The footer button is a quick light/dark/auto toggle; the full palette
+	// (sepia, newsprint, black, contrast) lives in Settings → Reading. From any
+	// of those, one tap lands back on `light`.
 	const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'auto'];
-	const THEME_ICON: Record<ThemeMode, IconName> = { light: 'sun', dark: 'moon', auto: 'auto' };
+	const THEME_ICON: Record<ThemeMode, IconName> = {
+		light: 'sun',
+		sepia: 'sun',
+		newsprint: 'sun',
+		dark: 'moon',
+		black: 'moon',
+		contrast: 'moon',
+		auto: 'auto'
+	};
 
 	function isActive(href: string): boolean {
 		if (href === '/') return page.url.pathname === '/';

@@ -15,7 +15,14 @@
 	import { readingQueue } from '$lib/reading-queue.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
-	import { readerCssVars, type FontFamily, type ThemeMode } from '$lib/typography';
+	import {
+		readerCssVars,
+		readerThemeAttr,
+		FONT_LABELS,
+		THEME_SWATCHES,
+		type FontFamily,
+		type ThemeMode
+	} from '$lib/typography';
 	import {
 		childSelector,
 		computePercent,
@@ -90,17 +97,20 @@
 			.join(';')
 	);
 
-	const FONTS: { value: FontFamily; label: string }[] = [
-		{ value: 'serif', label: 'Serif' },
-		{ value: 'sans', label: 'Sans' },
-		{ value: 'mono', label: 'Mono' }
-	];
+	const FONTS = (Object.keys(FONT_LABELS) as FontFamily[]).map((value) => ({
+		value,
+		label: FONT_LABELS[value].label
+	}));
 
-	const THEMES: { value: ThemeMode; label: string }[] = [
-		{ value: 'light', label: 'Light' },
-		{ value: 'dark', label: 'Dark' },
-		{ value: 'auto', label: 'Auto' }
-	];
+	const THEMES = (Object.keys(THEME_SWATCHES) as ThemeMode[]).map((value) => ({
+		value,
+		label: THEME_SWATCHES[value].label
+	}));
+
+	// Reader-pane theme: the explicit override, or the app theme when matching.
+	const readerThemeValue = $derived(
+		readerThemeAttr(readerSettings.current.theme, readerSettings.current.readerTheme)
+	);
 
 	function candidates(): AnchorCandidate[] {
 		if (!articleEl) return [];
@@ -827,6 +837,8 @@
 	<div
 		class="doc"
 		class:focus-on={focusMode && focusIndex >= 0}
+		class:themed={readerSettings.current.readerTheme !== 'match'}
+		data-theme={readerThemeValue}
 		style={styleVars}
 		bind:this={docEl}
 	>
@@ -1125,6 +1137,16 @@
 		max-width: var(--reader-width);
 		min-width: 0;
 	}
+	/* Reader-only theme: when the pane overrides the app theme, paint its own
+	   surface (data-theme on .doc rescopes the palette) so the article reads as a
+	   distinct page floating on the app background. */
+	.doc.themed {
+		background: var(--bg);
+		color: var(--text);
+		padding: clamp(1.25rem, 3vw, 2.5rem);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-sm);
+	}
 	.focus-bar {
 		position: absolute;
 		left: -0.9rem;
@@ -1179,6 +1201,8 @@
 		font-family: var(--reader-font);
 		font-size: var(--reader-size);
 		line-height: var(--reader-leading);
+		letter-spacing: var(--reader-tracking, 0);
+		word-spacing: var(--reader-word-spacing, 0);
 		color: var(--text);
 	}
 	article :global(p),
@@ -1188,7 +1212,7 @@
 	article :global(pre),
 	article :global(figure),
 	article :global(table) {
-		margin: 0 0 1.15em;
+		margin: 0 0 var(--reader-para-gap, 1.15em);
 	}
 	article :global(h2),
 	article :global(h3),

@@ -24,17 +24,28 @@
 			// so the PWA status/nav bars never flash (or stick on) the wrong colour.
 			(function () {
 				try {
-					var LIGHT = '#f6f4ee',
-						DARK = '#1a1815';
+					// Mirror THEME_BG / isDarkTheme in typography.ts.
+					var BG = {
+						light: '#f6f4ee',
+						sepia: '#f4ecd8',
+						newsprint: '#f1e4c8',
+						dark: '#1a1815',
+						black: '#000000',
+						contrast: '#000000'
+					};
+					var DARKS = { dark: 1, black: 1, contrast: 1 };
 					var raw = localStorage.getItem('lectern.reader');
 					var t = raw ? JSON.parse(raw).theme || 'auto' : 'auto';
-					if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-					var dark =
-						t === 'dark' ||
-						(t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-					document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+					if (t !== 'auto' && BG[t]) document.documentElement.setAttribute('data-theme', t);
+					var resolved =
+						t === 'auto'
+							? window.matchMedia('(prefers-color-scheme: dark)').matches
+								? 'dark'
+								: 'light'
+							: t;
+					document.documentElement.style.colorScheme = DARKS[resolved] ? 'dark' : 'light';
 					var meta = document.querySelector('meta[name="theme-color"]');
-					if (meta) meta.setAttribute('content', dark ? DARK : LIGHT);
+					if (meta) meta.setAttribute('content', BG[resolved] || '#f6f4ee');
 				} catch (e) {}
 			})();
 		</script>
