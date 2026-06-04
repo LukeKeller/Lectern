@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.2',
+		date: '2026-06-04',
+		title: 'Listen polish',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Voice selection no longer errors — a set of built-in ElevenLabs voices is always available, even when your API key cannot list your account voices.'
+			},
+			{
+				kind: 'added',
+				text: 'Pick the voice right from the player, start listening from inside an article (not just the card), and see the listen queue as a Playlist in the sidebar.'
+			},
+			{
+				kind: 'improved',
+				text: 'Card dates now show the full publication date and time instead of just “today”.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Mobile swipe actions: the action panels no longer peek out before you swipe, and swiping no longer drags the header along with the card.'
+			}
+		]
+	},
+	{
 		version: '0.6.1',
 		date: '2026-06-03',
 		title: 'Swipe actions',

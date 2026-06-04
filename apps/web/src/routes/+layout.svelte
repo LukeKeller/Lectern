@@ -464,6 +464,28 @@
 			{/if}
 		</ul>
 
+		{#if ttsPlayer.hasQueue}
+			<p class="section">Playlist</p>
+			<ul>
+				{#each ttsPlayer.queue as item, i (item.id)}
+					<li>
+						<button
+							type="button"
+							class="playlist-item"
+							class:active={i === ttsPlayer.index}
+							onclick={() => ttsPlayer.playIndex(i)}
+						>
+							<Icon
+								name={i === ttsPlayer.index && ttsPlayer.status === 'playing' ? 'pause' : 'play'}
+								size={13}
+							/>
+							<span class="tree-label">{item.title || 'Untitled'}</span>
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
 		{#if viewsStore.pinned.length}
 			<p class="section">Pinned</p>
 			<ul>
@@ -762,6 +784,34 @@
 	}
 	.tree-row .nav-count {
 		margin-left: auto;
+	}
+	/* Sidebar playlist: a play/pause row per queued listen item. */
+	.playlist-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		line-height: 1.2;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.playlist-item:hover {
+		background: var(--surface-alt);
+		color: var(--text);
+	}
+	.playlist-item.active {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	/* Feed leaves: nudged a further step in from their folder. */
 	.feed-children a {

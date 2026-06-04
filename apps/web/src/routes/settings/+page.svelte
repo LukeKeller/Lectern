@@ -8,6 +8,7 @@
 	import { buildBookmarklet } from '$lib/bookmarklet';
 	import { APP_VERSION } from '$lib/version';
 	import { resolve } from '$app/paths';
+	import { voiceOptions } from '$lib/tts-voices';
 
 	let token = $state('');
 	let saved = $state(false);
@@ -45,7 +46,9 @@
 	let ttsModel = $state('eleven_flash_v2_5');
 	let ttsVoiceId = $state('');
 	let ttsKey = $state('');
-	let ttsVoices = $state<TtsVoice[]>([]);
+	let accountVoices = $state<TtsVoice[]>([]);
+	let ttsVoicesNote = $state<string | undefined>(undefined);
+	const voiceList = $derived(voiceOptions(accountVoices, ttsVoiceId));
 	let ttsBusy = $state(false);
 	let ttsMsg = $state<string | undefined>(undefined);
 	let ttsError = $state<string | undefined>(undefined);
@@ -104,8 +107,12 @@
 	async function loadVoices() {
 		ttsBusy = true;
 		ttsError = undefined;
+		ttsVoicesNote = undefined;
 		try {
-			ttsVoices = (await getClient().listTtsVoices()).voices;
+			accountVoices = (await getClient().listTtsVoices()).voices;
+			ttsVoicesNote = accountVoices.length
+				? undefined
+				: 'No account voices returned — your key may lack the Voices permission. Built-in voices are available below.';
 		} catch (err) {
 			ttsError = err instanceof Error ? err.message : 'Could not load voices (check the key).';
 		} finally {
@@ -338,25 +345,17 @@
 			</label>
 			<label class="field">
 				<span class="flabel">Voice</span>
-				{#if ttsVoices.length}
+				<div class="row">
 					<select value={ttsVoiceId} onchange={(e) => saveTtsVoice(e.currentTarget.value)}>
-						{#each ttsVoices as v (v.id)}
+						{#each voiceList as v (v.id)}
 							<option value={v.id}>{v.name}</option>
 						{/each}
 					</select>
-				{:else}
-					<div class="row">
-						<input
-							type="text"
-							value={ttsVoiceId}
-							placeholder="Voice ID"
-							onchange={(e) => saveTtsVoice(e.currentTarget.value)}
-						/>
-						<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
-							Load voices
-						</button>
-					</div>
-				{/if}
+					<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
+						Load my voices
+					</button>
+				</div>
+				{#if ttsVoicesNote}<p class="hint">{ttsVoicesNote}</p>{/if}
 			</label>
 		</div>
 	</section>

@@ -17,6 +17,7 @@ import {
   type UpdateViewRequest,
 } from "@lectern/shared";
 import { buildApp, type AppDeps } from "./app";
+import { BackendHttpError } from "./errors";
 import { config } from "./config";
 import {
   mergeOverlay,
@@ -416,11 +417,14 @@ class FakeOverlayStore implements OverlayStore {
 class FakeTtsBackend {
   calls: { text: string; voiceId: string; modelId: string }[] = [];
   voices = [{ id: "rachel", name: "Rachel" }];
+  voicesError = false;
   async synthesize(text: string, opts: { apiKey: string; voiceId: string; modelId: string }) {
     this.calls.push({ text, voiceId: opts.voiceId, modelId: opts.modelId });
     return Buffer.from(`audio:${text.length}`);
   }
   async listVoices() {
+    if (this.voicesError)
+      throw new BackendHttpError("elevenlabs", 401, null, "no voices permission");
     return this.voices;
   }
 }
@@ -1186,6 +1190,20 @@ describe("text-to-speech", () => {
     const ok = await a.inject({ method: "GET", url: "/api/v1/settings/tts/voices", headers: auth });
     expect(ok.statusCode).toBe(200);
     expect((ok.json() as { voices: unknown[] }).voices).toHaveLength(1);
+    await a.close();
+  });
+
+  it("returns an empty voice list (not 502) when the key lacks the Voices permission", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    harness.deps.tts.voicesError = true;
+    const a = app();
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/tts/voices",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { voices: unknown[] }).voices).toEqual([]);
     await a.close();
   });
 });

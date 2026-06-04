@@ -25,6 +25,7 @@ export function swipeable(node: HTMLElement, params: SwipeParams): SwipeHandle {
 	let enabled = params.enabled ?? true;
 	let onCommit = params.onCommit;
 	const front = node.querySelector<HTMLElement>('.swipe-front');
+	const bg = node.querySelector<HTMLElement>('.swipe-bg');
 	let startX = 0;
 	let startY = 0;
 	let dx = 0;
@@ -40,6 +41,8 @@ export function swipeable(node: HTMLElement, params: SwipeParams): SwipeHandle {
 			front.style.transition = animate ? 'transform 0.2s ease' : 'none';
 			front.style.background = '';
 		}
+		if (bg) bg.style.opacity = '0';
+		node.style.overflow = '';
 		setX(0);
 		tracking = false;
 		engaged = false;
@@ -68,8 +71,14 @@ export function swipeable(node: HTMLElement, params: SwipeParams): SwipeHandle {
 				} catch {
 					/* not all environments support capture; the gesture still works */
 				}
-				// Make the card opaque only now so the list keeps its flat resting look.
+				// Reveal the action panels + make the card opaque only now, so the
+				// list keeps its flat resting look (no panels bleeding through).
 				if (front) front.style.background = 'var(--bg)';
+				if (bg) bg.style.opacity = '1';
+				// Clip the wrapper only while swiping so the dragged front can't spill
+				// out and scroll the page (which dragged the header along). Desktop
+				// keeps its hover shadow because the swipe never engages there.
+				node.style.overflow = 'hidden';
 			} else if (Math.abs(dy) > 10) {
 				tracking = false; // vertical intent — let the page scroll
 				return;

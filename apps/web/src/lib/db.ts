@@ -14,12 +14,15 @@ export interface MetaEntry {
 	value: string;
 }
 
-/** A cached synthesized audio blob, keyed by document id (offline re-listens). */
+/** A cached synthesized audio blob, keyed by document id (offline re-listens).
+ *  voiceId/modelId record what produced it, so changing voice re-synthesizes. */
 export interface AudioEntry {
 	id: string;
 	contentHash: string;
 	mime: string;
 	blob: Blob;
+	voiceId?: string;
+	modelId?: string;
 	createdAt: string;
 }
 

@@ -23,6 +23,17 @@
 					<span>Up next · {ttsPlayer.queue.length}</span>
 					<button type="button" class="text-btn" onclick={() => ttsPlayer.clear()}>Clear</button>
 				</div>
+				<label class="voice-row">
+					<span>Voice</span>
+					<select
+						value={ttsPlayer.voiceId}
+						onchange={(e) => ttsPlayer.setVoice(e.currentTarget.value)}
+					>
+						{#each ttsPlayer.voices as v (v.id)}
+							<option value={v.id}>{v.name}</option>
+						{/each}
+					</select>
+				</label>
 				<ul>
 					{#each ttsPlayer.queue as item, i (item.id)}
 						<li class:current={i === ttsPlayer.index}>
@@ -189,6 +200,9 @@
 		font-size: var(--text-xs);
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.now-sub.error {
 		color: var(--danger, #d23);
@@ -291,6 +305,28 @@
 		font-size: var(--text-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
+	}
+	.voice-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.25rem 0.4rem 0.6rem;
+	}
+	.voice-row span {
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+	.voice-row select {
+		flex: 1;
+		min-width: 0;
+		padding: 0.35rem 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-sm);
 	}
 	.queue ul {
 		list-style: none;

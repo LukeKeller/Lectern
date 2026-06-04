@@ -77,19 +77,19 @@
 		return parts.join('  ·  ');
 	}
 
-	/** Relative "saved" stamp, kept terse to fit the meta row. */
-	function savedAgo(iso: string): string {
-		const t = Date.parse(iso);
+	/** Absolute publish date + time for the meta row (the year is dropped when it
+	 *  matches the current year to keep recent stamps compact). */
+	function publishedStamp(card: Card): string {
+		const t = Date.parse(card.publishedAt ?? card.savedAt);
 		if (Number.isNaN(t)) return '';
-		const day = 86_400_000;
-		const diff = Date.now() - t;
-		if (diff < day) return 'today';
-		if (diff < 2 * day) return 'yesterday';
-		const days = Math.floor(diff / day);
-		if (days < 7) return `${days}d`;
-		if (days < 30) return `${Math.floor(days / 7)}w`;
-		if (days < 365) return `${Math.floor(days / 30)}mo`;
-		return `${Math.floor(days / 365)}y`;
+		const d = new Date(t);
+		return d.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	const finished = (card: Card) => card.readingProgress >= 0.99;
@@ -179,9 +179,9 @@
 							{#if card.note}<p class="dek">{card.note}</p>{/if}
 							<div class="meta">
 								<span class="src">{meta(card)}</span>
-								{#if savedAgo(card.savedAt)}
+								{#if publishedStamp(card)}
 									<span class="dot" aria-hidden="true">·</span>
-									<span class="when">{savedAgo(card.savedAt)}</span>
+									<span class="when">{publishedStamp(card)}</span>
 								{/if}
 								{#if card.highlightCount > 0}
 									<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
@@ -291,6 +291,10 @@
 		display: flex;
 		border-radius: inherit;
 		overflow: hidden;
+		/* Hidden until a swipe engages (the action toggles opacity) so the panels
+		   never bleed through the transparent card at rest. */
+		opacity: 0;
+		transition: opacity 0.15s ease;
 	}
 	.swipe-action {
 		flex: 1;

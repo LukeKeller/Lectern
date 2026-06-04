@@ -156,7 +156,15 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/settings/tts/voices", async (_req, reply) => {
     const cfg = await deps.overlay.getTtsConfig();
     if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
-    return TtsVoicesResponse.parse({ voices: await deps.tts.listVoices(cfg.apiKey) });
+    try {
+      return TtsVoicesResponse.parse({ voices: await deps.tts.listVoices(cfg.apiKey) });
+    } catch (err) {
+      // A key can be valid for synthesis yet lack the "Voices read" permission
+      // (ElevenLabs scoped keys → 401). Don't fail the settings UI with a 502:
+      // return an empty list so the client falls back to its built-in voices.
+      app.log.warn({ err }, "listTtsVoices failed; returning empty list");
+      return TtsVoicesResponse.parse({ voices: [] });
+    }
   });
 
   // Synthesis fires ONLY here, on an explicit client Listen action. Cache-first

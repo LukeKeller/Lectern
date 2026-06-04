@@ -1,6 +1,8 @@
+import type { TtsVoice } from '@lectern/shared';
 import { LecternApiError } from '@lectern/api-client';
 import { db, type QueueItem } from './db';
 import { getClient } from './config';
+import { voiceOptions } from './tts-voices';
 
 export type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
 
@@ -20,6 +22,10 @@ class TtsPlayer {
 	error = $state<string | undefined>(undefined);
 	currentTime = $state(0);
 	duration = $state(0);
+	/** Current ElevenLabs voice + model (mirrors the server settings). */
+	voiceId = $state('');
+	modelId = $state('eleven_flash_v2_5');
+	accountVoices = $state<TtsVoice[]>([]);
 
 	private audio: HTMLAudioElement | null = null;
 	private objectUrl: string | null = null;
@@ -37,8 +43,12 @@ class TtsPlayer {
 	get hasQueue(): boolean {
 		return this.queue.length > 0;
 	}
+	/** Built-in voices merged with any account voices, current always present. */
+	get voices(): TtsVoice[] {
+		return voiceOptions(this.accountVoices, this.voiceId);
+	}
 
-	/** Restore the persisted queue (paused) and wire the audio element. Browser-only. */
+	/** Restore the persisted queue (paused), wire audio, load voice settings. */
 	init(): void {
 		if (this.restored || typeof window === 'undefined') return;
 		this.restored = true;
@@ -48,6 +58,29 @@ class TtsPlayer {
 			this.queue = s.queue;
 			this.index = s.index < s.queue.length ? s.index : -1;
 		});
+		void this.loadSettings();
+	}
+
+	/** Pull the configured voice + model so the player's selector reflects them. */
+	async loadSettings(): Promise<void> {
+		try {
+			const s = await getClient().getTtsSettings();
+			this.voiceId = s.voiceId;
+			this.modelId = s.modelId;
+		} catch {
+			/* offline: keep defaults; the selector still shows built-in voices */
+		}
+	}
+
+	/** Change the voice for future synthesis (persisted server-side). */
+	async setVoice(voiceId: string): Promise<void> {
+		if (voiceId === this.voiceId) return;
+		this.voiceId = voiceId;
+		try {
+			await getClient().updateTtsSettings({ voiceId });
+		} catch {
+			/* offline: the change applies on the next successful sync */
+		}
 	}
 
 	private ensureAudio(): HTMLAudioElement {
@@ -129,13 +162,30 @@ class TtsPlayer {
 		}
 	}
 
-	/** Audio bytes for a doc: Dexie cache first (instant/offline), else synth once. */
+	/**
+	 * Audio bytes for a doc: Dexie cache first (instant/offline), else synthesize
+	 * once. A cache entry is only reused when it was produced with the current
+	 * voice + model, so changing the voice re-synthesizes (the server still
+	 * content-hash-caches, so this never re-bills for a voice used before).
+	 */
 	private async loadAudio(id: string): Promise<Blob> {
 		const cached = await db.audio.get(id);
-		if (cached) return cached.blob;
+		const fresh =
+			cached &&
+			(!this.voiceId || cached.voiceId === this.voiceId) &&
+			(cached.modelId ?? this.modelId) === this.modelId;
+		if (cached && fresh) return cached.blob;
 		const { bytes, mime, contentHash } = await getClient().synthesizeAudio(id);
 		const blob = new Blob([bytes], { type: mime });
-		await db.audio.put({ id, contentHash, mime, blob, createdAt: new Date().toISOString() });
+		await db.audio.put({
+			id,
+			contentHash,
+			mime,
+			blob,
+			voiceId: this.voiceId,
+			modelId: this.modelId,
+			createdAt: new Date().toISOString()
+		});
 		return blob;
 	}
 

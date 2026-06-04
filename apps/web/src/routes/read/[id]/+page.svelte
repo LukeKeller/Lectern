@@ -652,7 +652,7 @@
 		{#if card}
 			<button
 				type="button"
-				class="rail-btn"
+				class="rail-btn rail-listen"
 				onclick={() => ttsPlayer.listen({ id: card!.id, title: card!.title })}
 				title="Listen"
 				aria-label="Listen to this article"
@@ -1357,7 +1357,7 @@
 		text-decoration: underline;
 	}
 	@media (max-width: 979px) {
-		.rail-btn {
+		.rail-btn:not(.rail-listen) {
 			display: none;
 		}
 	}
