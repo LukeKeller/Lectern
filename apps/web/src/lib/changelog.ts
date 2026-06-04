@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.11.1',
+		date: '2026-06-04',
+		title: 'Skip internal mail',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Newsletter ingestion can now ignore specific senders. Add a comma-separated list of From addresses under Settings → Newsletter ingestion to keep internal or system mail (server diagnostics, cron) out of your library.'
+			}
+		]
+	},
+	{
 		version: '0.11.0',
 		date: '2026-06-04',
 		title: 'A cleaner reading list',

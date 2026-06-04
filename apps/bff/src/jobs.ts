@@ -8,8 +8,10 @@ import { ReadeckBackend } from "./backends/readeck";
 import {
   EmailInbox,
   formatEmailCursor,
+  isExcludedSender,
   messageToSaveInput,
   parseEmailCursor,
+  parseExcludedSenders,
 } from "./backends/email-inbox";
 import { DrizzleOverlayStore } from "./overlay-store";
 
@@ -141,10 +143,19 @@ export async function pollEmail(): Promise<number> {
     baseUrl: config.READECK_URL,
     apiToken: config.READECK_API_TOKEN,
   });
+  const excluded = parseExcludedSenders(config.IMAP_EXCLUDE_SENDERS);
   const cursor = parseEmailCursor(await getCursor("email"));
   const { uidValidity, messages } = await inbox.fetchNew(cursor);
   let saved = 0;
+  let skipped = 0;
   for (const msg of messages) {
+    // Internal/system mail (e.g. server diagnostics) the user has excluded: drop
+    // it but still advance the cursor so it isn't re-fetched on the next poll.
+    if (isExcludedSender(msg, excluded)) {
+      skipped++;
+      await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
+      continue;
+    }
     try {
       await readLater.save(messageToSaveInput(msg));
       saved++;
@@ -159,7 +170,12 @@ export async function pollEmail(): Promise<number> {
       break;
     }
   }
-  await logIngestion("email", "poll", "ok", `saved ${saved} of ${messages.length}`);
+  await logIngestion(
+    "email",
+    "poll",
+    "ok",
+    `saved ${saved} of ${messages.length}${skipped ? `, skipped ${skipped}` : ""}`,
+  );
   return saved;
 }
 

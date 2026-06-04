@@ -62,6 +62,26 @@ export function formatEmailCursor(cursor: EmailCursor): string {
   return `${cursor.uidValidity}:${cursor.lastUid}`;
 }
 
+/**
+ * Parse the comma-separated `IMAP_EXCLUDE_SENDERS` list into a set of lowercased
+ * addresses. Lets the user drop internal/system mail (e.g. server diagnostics)
+ * that lands in the shared newsletter mailbox before it becomes a reading card.
+ */
+export function parseExcludedSenders(value: string | undefined): Set<string> {
+  return new Set(
+    (value ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** True when a message's From address is on the exclude list (case-insensitive). */
+export function isExcludedSender(msg: ParsedNewsletter, excluded: ReadonlySet<string>): boolean {
+  const addr = msg.fromAddress.trim().toLowerCase();
+  return addr !== "" && excluded.has(addr);
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

@@ -30,6 +30,8 @@ const EnvSchema = z.object({
   IMAP_MAILBOX: z.string().default("INBOX"),
   /** "0" for a plain/STARTTLS connection (143); anything else uses TLS (993). */
   IMAP_SECURE: z.string().default("1"),
+  /** Comma-separated From addresses to skip during ingestion (internal/system mail). */
+  IMAP_EXCLUDE_SENDERS: z.string().default(""),
   /** When set, the BFF serves the prebuilt web SPA from this dir (production single-service). */
   LECTERN_WEB_DIR: z.string().default(""),
   /** Set to "1" to start the pg-boss polling jobs. */

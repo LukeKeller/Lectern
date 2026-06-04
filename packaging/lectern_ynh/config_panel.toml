@@ -34,3 +34,10 @@ name = "Configuration"
         ask = "IMAP password"
         type = "password"
         optional = true
+
+        [main.newsletters.imap_exclude_senders]
+        ask = "Ignore senders"
+        type = "string"
+        example = "diagnosis@digitallyadrift.com, noreply@example.com"
+        help = "Comma-separated From addresses to skip — handy for internal or system mail (server diagnostics, cron) that lands in this mailbox. Case-insensitive, exact-match."
+        optional = true
