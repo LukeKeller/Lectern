@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.8.2',
+		date: '2026-06-04',
+		title: 'Bars follow the theme',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The installed app’s status and navigation bars now follow whatever theme you pick — light, sepia, dark, or black — so the whole screen reads as one colour. (A leftover fixed colour in the app manifest was pinning them; the bars now track the live theme.)'
+			}
+		]
+	},
+	{
 		version: '0.8.1',
 		date: '2026-06-04',
 		title: 'Installed-app bar colour',
