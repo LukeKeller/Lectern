@@ -38,6 +38,7 @@ import {
 } from "@lectern/shared";
 import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
+import { accentFromUrl } from "./palette";
 import { parseId } from "./ids";
 import { htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
@@ -154,6 +155,19 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       return DocumentContentResponse.parse({ id, html: await loadContentHtml(deps, id, refresh) });
     },
   );
+
+  // Adaptive reader accent derived from the cover image (computed once, cached).
+  // Returns `{ color: "#rrggbb" | null }`; null means no usable colour.
+  app.get<{ Params: { id: string } }>("/documents/:id/accent", async (req) => {
+    const { id } = req.params;
+    requireParsed(id);
+    const cached = await deps.overlay.getAccent(id);
+    if (cached !== undefined) return { color: cached };
+    const card = await loadDocument(deps, id);
+    const color = card.coverImage ? await accentFromUrl(card.coverImage) : null;
+    await deps.overlay.putAccent(id, color);
+    return { color };
+  });
 
   // ---- text-to-speech ("Listen") -----------------------------------------
   app.get("/settings/tts", async () => ttsSettings(deps));

@@ -126,6 +126,18 @@ export const ttsAudio = pgTable("tts_audio", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Per-document reader accent colour, derived server-side from the cover image
+ * (dominant, contrast-clamped). Separate table so it survives backend re-ingest.
+ * `color` is a hex string, or `''` to record "computed, no usable colour" so the
+ * lazy compute doesn't re-run on every open.
+ */
+export const documentAccent = pgTable("document_accent", {
+  documentId: text("document_id").primaryKey(),
+  color: text("color").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Append-only ingestion audit log for observability/debugging of sync runs. */
 export const ingestionLog = pgTable("ingestion_log", {
   id: serial("id").primaryKey(),

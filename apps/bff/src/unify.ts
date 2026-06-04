@@ -246,6 +246,13 @@ export interface OverlayStore {
     charCount: number;
   }): Promise<void>;
 
+  // --- adaptive reader accent (cover-derived colour cache) ---
+  /** Cached accent: a hex string, null for "computed, no colour", or undefined
+   *  when not yet computed. */
+  getAccent(documentId: string): Promise<string | null | undefined>;
+  /** Persist a computed accent (null records "no usable colour"). */
+  putAccent(documentId: string, color: string | null): Promise<void>;
+
   // --- cross-device Listen player state ---
   /** The player's queue/index/position/rate (defaults when never saved). */
   getPlayerState(): Promise<PlayerState>;

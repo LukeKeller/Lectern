@@ -26,6 +26,7 @@ import type {
 import type { Db } from "./db/client";
 import {
   appSettings,
+  documentAccent,
   documentContent,
   documents,
   rssHighlights,
@@ -483,6 +484,27 @@ export class DrizzleOverlayStore implements OverlayStore {
         charCount: row.charCount,
       })
       .onConflictDoNothing({ target: ttsAudio.contentHash });
+  }
+
+  /**
+   * Cached reader accent for a document, or null if not computed yet. A stored
+   * empty string means "computed, no usable colour" — distinct from null so the
+   * caller skips re-fetching the image.
+   */
+  async getAccent(documentId: string): Promise<string | null | undefined> {
+    const [row] = await this.db
+      .select({ color: documentAccent.color })
+      .from(documentAccent)
+      .where(eq(documentAccent.documentId, documentId));
+    if (!row) return undefined; // not computed
+    return row.color === "" ? null : row.color; // null = computed, no colour
+  }
+
+  async putAccent(documentId: string, color: string | null): Promise<void> {
+    await this.db
+      .insert(documentAccent)
+      .values({ documentId, color: color ?? "" })
+      .onConflictDoUpdate({ target: documentAccent.documentId, set: { color: color ?? "" } });
   }
 
   async getPlayerState(): Promise<PlayerState> {

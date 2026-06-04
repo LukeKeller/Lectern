@@ -52,6 +52,33 @@
 		return () => sub.unsubscribe();
 	});
 
+	// Adaptive accent: when enabled, fetch this document's cover-derived accent
+	// (computed + cached server-side) and tint the reader pane with it. Best-effort
+	// — any failure (offline, no cover, no usable colour) just leaves the theme
+	// accent in place.
+	let accentColor = $state<string | null>(null);
+	$effect(() => {
+		const current = id;
+		accentColor = null;
+		if (!current || !readerSettings.current.adaptiveAccent) return;
+		let cancelled = false;
+		void getClient()
+			.getDocumentAccent(current)
+			.then((r) => {
+				if (!cancelled) accentColor = r.color;
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+	// Override the pane's accent custom properties when an adaptive colour is live.
+	const accentStyle = $derived(
+		readerSettings.current.adaptiveAccent && accentColor
+			? `--accent:${accentColor};--accent-soft:color-mix(in srgb, ${accentColor} 16%, transparent)`
+			: ''
+	);
+
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
@@ -839,7 +866,7 @@
 		class:focus-on={focusMode && focusIndex >= 0}
 		class:themed={readerSettings.current.readerTheme !== 'match'}
 		data-theme={readerThemeValue}
-		style={styleVars}
+		style={`${styleVars};${accentStyle}`}
 		bind:this={docEl}
 	>
 		{#if focusIndex >= 0}

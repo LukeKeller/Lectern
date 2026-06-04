@@ -457,10 +457,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(res, 200, mockPlayer);
   }
 
-  const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio)?$/);
+  const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio|\/accent)?$/);
   if (doc) {
     const id = doc[1]!;
     const sub = doc[2];
+    if (sub === "/accent" && method === "GET") return send(res, 200, { color: null });
     if (sub === "/audio" && method === "POST") {
       if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
       // Placeholder bytes so the SPA can build an object URL + exercise the player

@@ -379,6 +379,17 @@
 			<label class="toggle">
 				<input
 					type="checkbox"
+					checked={readerSettings.current.adaptiveAccent}
+					onchange={(e) => readerSettings.update({ adaptiveAccent: e.currentTarget.checked })}
+				/>
+				<span>
+					Adaptive accent
+					<em>Tint each article’s links and accents with a colour drawn from its cover image.</em>
+				</span>
+			</label>
+			<label class="toggle">
+				<input
+					type="checkbox"
 					checked={readerSettings.current.autoAdvance}
 					onchange={(e) => readerSettings.update({ autoAdvance: e.currentTarget.checked })}
 				/>

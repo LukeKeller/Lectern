@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.9.0',
+		date: '2026-06-04',
+		title: 'Adaptive accent',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Turn on Adaptive accent (Settings → Reading) and each article’s links, header rule, and highlights pick up a colour drawn from its cover image — computed once on the server and cached, with readability preserved.'
+			}
+		]
+	},
+	{
 		version: '0.8.2',
 		date: '2026-06-04',
 		title: 'Bars follow the theme',

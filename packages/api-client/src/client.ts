@@ -122,6 +122,14 @@ export class LecternClient {
       schema: DocumentContentResponse,
     });
   }
+  /**
+   * Adaptive reader accent (a hex colour) derived from the document's cover
+   * image, or null when there's no usable colour. Computed once and cached
+   * server-side, so it's cheap to call on every open.
+   */
+  getDocumentAccent(id: string) {
+    return this.request<{ color: string | null }>("GET", `/documents/${id}/accent`);
+  }
   /** Full-text search over owned article bodies (server-side; online only). */
   search(q: string, limit = 20) {
     return this.request("GET", "/search", { query: { q, limit }, schema: SearchResponse });

@@ -414,6 +414,16 @@ class FakeOverlayStore implements OverlayStore {
     }
   }
 
+  accentCache = new Map<string, string>();
+  async getAccent(documentId: string): Promise<string | null | undefined> {
+    if (!this.accentCache.has(documentId)) return undefined;
+    const c = this.accentCache.get(documentId);
+    return c === "" ? null : c;
+  }
+  async putAccent(documentId: string, color: string | null) {
+    this.accentCache.set(documentId, color ?? "");
+  }
+
   player: PlayerState = PlayerState.parse({});
   async getPlayerState() {
     return this.player;
