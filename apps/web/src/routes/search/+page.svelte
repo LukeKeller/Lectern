@@ -69,7 +69,12 @@
 		<p class="muted">
 			{metaResults.length} match{metaResults.length === 1 ? '' : 'es'} in titles & tags
 		</p>
-		<CardList cards={metaResults} empty="No title or tag matches." emptyIcon="search" />
+		<CardList
+			cards={metaResults}
+			empty="No title or tag matches."
+			emptyHint="Nothing matched in titles or tags. Check the article-text results below, or try a different term."
+			emptyIcon="search"
+		/>
 
 		{#if bodyOnly.length}
 			<h2 class="section">In article text</h2>

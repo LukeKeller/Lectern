@@ -43,6 +43,7 @@
 		predicate,
 		actions = [],
 		empty = 'Nothing here.',
+		emptyHint,
 		emptyIcon = 'inbox',
 		hideReadKey = undefined,
 		baseQuery,
@@ -53,6 +54,8 @@
 		predicate: (card: Card) => boolean;
 		actions?: TriageAction[];
 		empty?: string;
+		/** Teaching line under the empty headline (what this list is for). */
+		emptyHint?: string;
 		emptyIcon?: IconName;
 		/**
 		 * Opts this list into a default of showing only unread items. The read-state
@@ -170,12 +173,20 @@
 	const tags = $derived(collectTags(afterCategory));
 	const cards = $derived(sortCards(filterByText(afterTag, textFilter), sortBy, sortDir));
 
+	// Group into date sections only when the order is chronological; alphabetical
+	// or length sorts have no meaningful date runs.
+	const grouped = $derived(
+		sortBy === 'publishedAt' || sortBy === 'savedAt' || sortBy === 'updatedAt'
+	);
+
+	// Facets that live behind the Filter popover (source / category / tag). Read
+	// state and text search stay inline, so they are counted separately.
+	const facetCount = $derived(
+		(sourceFilter !== 'all' ? 1 : 0) + (categoryFilter !== 'all' ? 1 : 0) + (tagFilter ? 1 : 0)
+	);
+	const hasFacets = $derived(sources.length > 1 || categories.length > 1 || tags.length > 0);
 	const activeCount = $derived(
-		(readFilter !== defaultRead ? 1 : 0) +
-			(sourceFilter !== 'all' ? 1 : 0) +
-			(categoryFilter !== 'all' ? 1 : 0) +
-			(tagFilter ? 1 : 0) +
-			(textFilter.trim() ? 1 : 0)
+		(readFilter !== defaultRead ? 1 : 0) + (textFilter.trim() ? 1 : 0) + facetCount
 	);
 	function clearFilters() {
 		readFilter = defaultRead;
@@ -229,14 +240,30 @@
 		noteRead(card.id, true);
 	}
 
-	// Bulk actions over the currently-visible cards, routed through the sync outbox.
+	// ---- Bulk actions over the currently-visible cards, each reversible. ----
+	// A bulk action is as easy to undo as a single swipe: it snapshots the prior
+	// state of every row it touches and offers a timed Undo that restores it.
+	let bulkUndo = $state<{ label: string; run: () => void } | null>(null);
+	let bulkUndoTimer: ReturnType<typeof setTimeout> | undefined;
+	function offerBulkUndo(label: string, run: () => void) {
+		bulkUndo = { label, run };
+		if (bulkUndoTimer) clearTimeout(bulkUndoTimer);
+		bulkUndoTimer = setTimeout(() => (bulkUndo = null), 8000);
+	}
+	function applyBulkUndo() {
+		if (!bulkUndo) return;
+		bulkUndo.run();
+		bulkUndo = null;
+		if (bulkUndoTimer) clearTimeout(bulkUndoTimer);
+	}
+
 	function markAllRead() {
 		const sync = getSync();
-		let queued = false;
-		for (const card of cards) {
-			if (card.readState === 'finished') continue;
-			// RSS items need their MiniFlux read flag flipped (markRead); saved
-			// articles have no read flag, so fall back to completing progress.
+		const changed = cards.filter((c) => c.readState !== 'finished');
+		if (!changed.length) return;
+		// Snapshot prior progress so undo restores it exactly (not just to zero).
+		const snap = changed.map((c) => ({ id: c.id, source: c.source, progress: c.readingProgress }));
+		for (const card of changed) {
 			if (card.source === 'miniflux') {
 				void sync.enqueue({ type: 'markRead', id: card.id, read: true });
 			} else {
@@ -248,19 +275,42 @@
 				});
 			}
 			noteRead(card.id, true);
-			queued = true;
 		}
-		if (queued) void sync.flush();
+		void sync.flush();
+		offerBulkUndo(`Marked ${changed.length} read`, () => {
+			const s = getSync();
+			for (const it of snap) {
+				if (it.source === 'miniflux') {
+					void s.enqueue({ type: 'markRead', id: it.id, read: false });
+				} else {
+					void s.enqueue({
+						type: 'setReadingProgress',
+						id: it.id,
+						readingProgress: it.progress,
+						readAnchor: null
+					});
+				}
+				noteRead(it.id, false);
+			}
+			void s.flush();
+		});
 	}
 	function archiveAll() {
 		const sync = getSync();
-		let queued = false;
-		for (const card of cards) {
-			if (card.location === 'archive') continue;
-			void sync.enqueue({ type: 'setLocation', id: card.id, location: 'archive' });
-			queued = true;
+		const changed = cards.filter((c) => c.location !== 'archive');
+		if (!changed.length) return;
+		const snap = changed.map((c) => ({ id: c.id, from: c.location }));
+		for (const c of changed) {
+			void sync.enqueue({ type: 'setLocation', id: c.id, location: 'archive' });
 		}
-		if (queued) void sync.flush();
+		void sync.flush();
+		offerBulkUndo(`Archived ${changed.length}`, () => {
+			const s = getSync();
+			for (const it of snap) {
+				void s.enqueue({ type: 'setLocation', id: it.id, location: it.from });
+			}
+			void s.flush();
+		});
 	}
 
 	/** Snapshot this list's order so the reader can auto-advance after triage. */
@@ -311,6 +361,15 @@
 		readingProgress: 'Progress'
 	};
 
+	// Header popovers: the Filter panel and the overflow menu, one open at a time,
+	// dismissed by an outside click (the window handler; inner clicks stop it).
+	let filtersOpen = $state(false);
+	let menuOpen = $state(false);
+	function closePopovers() {
+		filtersOpen = false;
+		menuOpen = false;
+	}
+
 	let saving = $state(false);
 	let viewName = $state('');
 	let saveError = $state<string | undefined>(undefined);
@@ -340,6 +399,8 @@
 		}
 	}
 </script>
+
+<svelte:window onclick={closePopovers} />
 
 <section class="list page">
 	<header class="head">
@@ -373,24 +434,6 @@
 					aria-label="Filter by title, site or author"
 				/>
 			</div>
-			{#if sources.length > 1}
-				<div class="select">
-					<select bind:value={sourceFilter} aria-label="Filter by source">
-						<option value="all">All sources</option>
-						{#each sources as src (src)}<option value={src}>{SOURCE_LABELS[src]}</option>{/each}
-					</select>
-				</div>
-			{/if}
-			{#if categories.length > 1}
-				<div class="select">
-					<select bind:value={categoryFilter} aria-label="Filter by category">
-						<option value="all">All types</option>
-						{#each categories as cat (cat)}
-							<option value={cat}>{CATEGORY_LABELS[cat]}</option>
-						{/each}
-					</select>
-				</div>
-			{/if}
 			<div class="seg" role="group" aria-label="Filter by read state">
 				{#each READ_FILTERS as opt (opt.value)}
 					<button
@@ -403,63 +446,143 @@
 					</button>
 				{/each}
 			</div>
-			{#if tags.length}
-				<div class="select">
-					<select bind:value={tagFilter} aria-label="Filter by tag">
-						<option value={null}>All tags</option>
-						{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
-					</select>
+
+			{#if hasFacets || facetCount}
+				<div class="pop-wrap">
+					<button
+						type="button"
+						class="icon"
+						class:on={facetCount > 0}
+						aria-label="Filters"
+						aria-expanded={filtersOpen}
+						title="Filters"
+						onclick={(e) => {
+							e.stopPropagation();
+							menuOpen = false;
+							filtersOpen = !filtersOpen;
+						}}
+					>
+						<Icon name="sliders" size={16} />
+						{#if facetCount}<span class="badge">{facetCount}</span>{/if}
+					</button>
+					{#if filtersOpen}
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+						<div class="popover" onclick={(e) => e.stopPropagation()}>
+							{#if sources.length > 1}
+								<label class="field">
+									<span>Source</span>
+									<div class="select block">
+										<select bind:value={sourceFilter} aria-label="Filter by source">
+											<option value="all">All sources</option>
+											{#each sources as src (src)}
+												<option value={src}>{SOURCE_LABELS[src]}</option>
+											{/each}
+										</select>
+									</div>
+								</label>
+							{/if}
+							{#if categories.length > 1}
+								<label class="field">
+									<span>Type</span>
+									<div class="select block">
+										<select bind:value={categoryFilter} aria-label="Filter by category">
+											<option value="all">All types</option>
+											{#each categories as cat (cat)}
+												<option value={cat}>{CATEGORY_LABELS[cat]}</option>
+											{/each}
+										</select>
+									</div>
+								</label>
+							{/if}
+							{#if tags.length}
+								<label class="field">
+									<span>Tag</span>
+									<div class="select block">
+										<select bind:value={tagFilter} aria-label="Filter by tag">
+											<option value={null}>All tags</option>
+											{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
+										</select>
+									</div>
+								</label>
+							{/if}
+							{#if activeCount}
+								<button type="button" class="ghost clear" onclick={clearFilters}>
+									<Icon name="close" size={14} /> Clear all filters
+									<span class="badge">{activeCount}</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/if}
-			{#if activeCount}
-				<button type="button" class="ghost clear" onclick={clearFilters} title="Clear all filters">
-					<Icon name="close" size={14} />
-					Clear
-					<span class="badge">{activeCount}</span>
-				</button>
-			{/if}
-			{#if cards.length}
-				<div class="bulk" role="group" aria-label="Bulk actions">
+
+			{#if cards.length || baseQuery}
+				<div class="pop-wrap">
 					<button
 						type="button"
-						class="ghost"
-						onclick={markAllRead}
-						title="Mark all visible items read"
+						class="icon"
+						aria-label="List actions"
+						aria-expanded={menuOpen}
+						title="List actions"
+						onclick={(e) => {
+							e.stopPropagation();
+							filtersOpen = false;
+							menuOpen = !menuOpen;
+						}}
 					>
-						<Icon name="check" size={15} />
-						Mark all read
+						<Icon name="more" size={18} />
 					</button>
-					<button
-						type="button"
-						class="ghost"
-						onclick={archiveAll}
-						title="Archive all visible items"
-					>
-						<Icon name="archive" size={15} />
-						Archive all
-					</button>
+					{#if menuOpen}
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+							{#if cards.length}
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										markAllRead();
+										menuOpen = false;
+									}}
+								>
+									<Icon name="check" size={15} /> Mark all read
+								</button>
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										archiveAll();
+										menuOpen = false;
+									}}
+								>
+									<Icon name="archive" size={15} /> Archive all
+								</button>
+							{/if}
+							{#if baseQuery}
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										saving = true;
+										menuOpen = false;
+									}}
+								>
+									<Icon name="bookmark" size={15} /> Save as view
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
-			{/if}
-			{#if baseQuery}
-				{#if saving}
-					<form class="save" onsubmit={saveView}>
-						<input bind:value={viewName} type="text" placeholder="View name" autocomplete="off" />
-						<button type="submit" class="text">Save</button>
-						<button type="button" class="text" onclick={() => (saving = false)}>Cancel</button>
-					</form>
-				{:else}
-					<button
-						type="button"
-						class="icon save-btn"
-						onclick={() => (saving = true)}
-						title="Save as view"
-					>
-						<Icon name="bookmark" size={16} />
-					</button>
-				{/if}
 			{/if}
 		</div>
 	</header>
+
+	{#if saving}
+		<form class="save" onsubmit={saveView}>
+			<input bind:value={viewName} type="text" placeholder="Name this view" autocomplete="off" />
+			<button type="submit" class="text">Save view</button>
+			<button type="button" class="text muted" onclick={() => (saving = false)}>Cancel</button>
+		</form>
+	{/if}
 
 	{#if saveError}<p class="error">{saveError}</p>{/if}
 
@@ -467,7 +590,9 @@
 		{cards}
 		{actions}
 		{empty}
+		{emptyHint}
 		{emptyIcon}
+		{grouped}
 		{selectedIndex}
 		{scrollNonce}
 		fadedIds={stickyRead}
@@ -476,6 +601,13 @@
 		onselect={(i) => (selectedIndex = i)}
 		onopen={snapshotQueue}
 	/>
+
+	{#if bulkUndo}
+		<div class="undo-toast" role="status">
+			<span>{bulkUndo.label}</span>
+			<button type="button" onclick={applyBulkUndo}>Undo</button>
+		</div>
+	{/if}
 </section>
 
 <style>
@@ -556,6 +688,7 @@
 		color: var(--text);
 	}
 	.icon {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -574,6 +707,11 @@
 	.icon:hover {
 		border-color: var(--border-strong);
 		color: var(--text);
+	}
+	.icon.on {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.seg {
 		display: flex;
@@ -604,11 +742,77 @@
 		color: var(--text);
 		box-shadow: var(--shadow-sm);
 	}
-	.bulk {
+
+	.pop-wrap {
+		position: relative;
+		display: inline-flex;
+	}
+	.popover {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 40;
+		min-width: 13rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		padding: 0.7rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow-md);
+	}
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.select.block,
+	.select.block select {
+		width: 100%;
+	}
+	.select.block {
+		display: flex;
+	}
+
+	.menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 40;
+		min-width: 12rem;
+		padding: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow-md);
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.menu button {
 		display: flex;
 		align-items: center;
-		gap: 0.2rem;
+		gap: 0.55rem;
+		width: 100%;
+		padding: 0.45rem 0.55rem;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		text-align: left;
+		cursor: pointer;
+		border-radius: var(--radius-sm);
 	}
+	.menu button:hover {
+		background: var(--surface-alt);
+	}
+
 	.ghost {
 		display: inline-flex;
 		align-items: center;
@@ -627,38 +831,44 @@
 			background var(--dur-fast) var(--ease),
 			color var(--dur-fast) var(--ease);
 	}
-	.ghost:hover {
-		background: var(--surface-alt);
-		color: var(--text);
-	}
 	.clear {
+		justify-content: flex-start;
 		color: var(--accent);
 	}
 	.clear:hover {
 		background: var(--accent-soft);
-		color: var(--accent);
 	}
 	.badge {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-width: 1.1rem;
-		height: 1.1rem;
-		padding: 0 0.3rem;
+		min-width: 1.05rem;
+		height: 1.05rem;
+		padding: 0 0.28rem;
 		border-radius: var(--radius-full);
 		background: var(--accent);
 		color: var(--accent-contrast);
 		font-size: var(--text-2xs);
 		font-weight: 600;
 	}
+	.icon .badge {
+		position: absolute;
+		top: -0.4rem;
+		right: -0.4rem;
+		border: 1.5px solid var(--bg);
+	}
+
 	.save {
 		display: flex;
 		align-items: center;
-		gap: 0.3rem;
+		gap: 0.4rem;
+		margin-bottom: 0.9rem;
 	}
 	.save input {
+		flex: 1;
+		max-width: 18rem;
 		font-size: var(--text-sm);
-		padding: 0.32rem 0.55rem;
+		padding: 0.4rem 0.6rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface);
@@ -673,9 +883,38 @@
 		padding: 0.32rem 0.4rem;
 		cursor: pointer;
 	}
+	.text.muted {
+		color: var(--text-muted);
+		font-weight: 500;
+	}
 	.error {
 		color: var(--error);
 		font-size: var(--text-sm);
 		margin: 0 0 0.75rem;
+	}
+
+	.undo-toast {
+		position: fixed;
+		left: 50%;
+		bottom: 5.5rem;
+		transform: translateX(-50%);
+		z-index: 70;
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.6rem 0.75rem 0.6rem 1rem;
+		background: var(--text);
+		color: var(--bg);
+		border-radius: var(--radius-full);
+		box-shadow: var(--shadow-md);
+		font-size: var(--text-sm);
+	}
+	.undo-toast button {
+		border: 0;
+		background: transparent;
+		color: var(--accent);
+		font-weight: 700;
+		cursor: pointer;
+		padding: 0.1rem 0.3rem;
 	}
 </style>

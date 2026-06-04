@@ -19,6 +19,7 @@
 	{predicate}
 	{baseQuery}
 	empty="No feed items."
+	emptyHint="Your RSS subscriptions appear here as they publish. Add feeds in your MiniFlux backend to fill it."
 	emptyIcon="rss"
 	hideReadKey="feed"
 	actions={[

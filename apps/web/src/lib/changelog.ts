@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.11.0',
+		date: '2026-06-04',
+		title: 'A cleaner reading list',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'The list now reads like a magazine index: entries are grouped under date headings (Today, Yesterday, Earlier this week…), titles are set as serif headlines, and cover images appear only where they earn their place — so a long read and a quick link no longer look identical.'
+			},
+			{
+				kind: 'improved',
+				text: 'The toolbar is calmer. Source, type, and tag filters now tuck behind a single Filter button, and the bulk actions moved into a tidy list menu — leaving the page to your reading.'
+			},
+			{
+				kind: 'improved',
+				text: 'Every row keeps a visible handle for its actions instead of hiding them until you hover, and empty lists now explain what belongs there.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Mark all read and Archive all can now be undone, just like swiping a single card away.'
+			}
+		]
+	},
+	{
 		version: '0.10.0',
 		date: '2026-06-04',
 		title: 'Newsletters by email',

@@ -22,6 +22,7 @@
 		sortBy={view.sortBy}
 		sortDir={view.sortDir}
 		empty="No cards match this view."
+		emptyHint="Nothing matches this saved view's query yet. Widen the query if it feels too narrow."
 		emptyIcon="views"
 	/>
 	<p class="query page">{viewQueryString(view.query)}</p>

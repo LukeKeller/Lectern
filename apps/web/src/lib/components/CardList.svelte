@@ -19,7 +19,9 @@
 		cards,
 		actions = [],
 		empty = 'Nothing here.',
+		emptyHint,
 		emptyIcon = 'inbox',
+		grouped = false,
 		selectedIndex = -1,
 		scrollNonce = 0,
 		fadedIds,
@@ -31,7 +33,11 @@
 		cards: Card[] | undefined;
 		actions?: TriageAction[];
 		empty?: string;
+		/** Secondary line under the empty headline that teaches what this list holds. */
+		emptyHint?: string;
 		emptyIcon?: IconName;
+		/** Insert date dividers (Today / Yesterday / …). Set when sorted by a date. */
+		grouped?: boolean;
 		selectedIndex?: number;
 		/** Bumped by the parent on keyboard moves to scroll the focused row in view. */
 		scrollNonce?: number;
@@ -46,13 +52,14 @@
 	} = $props();
 
 	// Scroll the keyboard-focused row into view. Depends only on scrollNonce (which
-	// the parent bumps on j/k/Space), so hover-driven selection never scrolls.
+	// the parent bumps on j/k/Space), so hover-driven selection never scrolls. Rows
+	// are addressed by class so interleaved date dividers don't shift the index.
 	let listEl = $state<HTMLUListElement | null>(null);
 	$effect(() => {
 		void scrollNonce;
 		untrack(() => {
-			const li = listEl?.children[selectedIndex] as HTMLElement | undefined;
-			li?.scrollIntoView({ block: 'nearest' });
+			const rows = listEl?.querySelectorAll<HTMLElement>('li.row');
+			rows?.[selectedIndex]?.scrollIntoView({ block: 'nearest' });
 		});
 	});
 
@@ -99,7 +106,7 @@
 		return parts.join('  ·  ');
 	}
 
-	/** The kind label shown top-right (Feed / Article / Email / PDF). */
+	/** The kind label shown in the byline (Feed / Article / Email / PDF). */
 	function kindLabel(card: Card): string {
 		if (card.location === 'feed' || card.category === 'rss') return 'Feed';
 		if (card.category === 'email') return 'Email';
@@ -107,9 +114,13 @@
 		return 'Article';
 	}
 
+	function cardDate(card: Card): number {
+		return Date.parse(card.publishedAt ?? card.savedAt);
+	}
+
 	/** Compact timestamp: time-of-day for today, else date + time. */
 	function publishedStamp(card: Card): string {
-		const t = Date.parse(card.publishedAt ?? card.savedAt);
+		const t = cardDate(card);
 		if (Number.isNaN(t)) return '';
 		const d = new Date(t);
 		const now = new Date();
@@ -122,6 +133,47 @@
 		});
 		return `${date}, ${time}`;
 	}
+
+	// Date bucket for the section dividers. Cards arrive already sorted, so equal
+	// consecutive labels collapse into one run under a single heading.
+	function startOfDay(d: Date): number {
+		return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+	}
+	function bucketLabel(card: Card): string {
+		const t = cardDate(card);
+		if (Number.isNaN(t)) return 'Undated';
+		const d = new Date(t);
+		const now = new Date();
+		const days = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+		if (days <= 0) return 'Today';
+		if (days === 1) return 'Yesterday';
+		if (days < 7) return 'Earlier this week';
+		if (days < 14) return 'Last week';
+		return d.toLocaleDateString(undefined, {
+			month: 'long',
+			year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric'
+		});
+	}
+
+	type Row = { type: 'header'; label: string } | { type: 'card'; card: Card; index: number };
+
+	// Flatten cards into a render list, threading the original index through so
+	// keyboard selection and hover stay aligned regardless of inserted headers.
+	const rows = $derived.by<Row[]>(() => {
+		const list = cards ?? [];
+		if (!grouped) return list.map((card, index) => ({ type: 'card', card, index }));
+		const out: Row[] = [];
+		let last = '';
+		list.forEach((card, index) => {
+			const label = bucketLabel(card);
+			if (label !== last) {
+				out.push({ type: 'header', label });
+				last = label;
+			}
+			out.push({ type: 'card', card, index });
+		});
+		return out;
+	});
 
 	const finished = (card: Card) => card.readingProgress >= 0.99;
 
@@ -181,8 +233,10 @@
 		if (undoTimer) clearTimeout(undoTimer);
 	}
 
-	// Cover thumbnails fall back to the source avatar when absent or on load error.
+	// Cover thumbnails fall back to text-only rows when absent or on load error —
+	// images become the exception that earns visual weight, not a forced rail.
 	let failedCovers = new SvelteSet<string>();
+	const hasCover = (card: Card) => !!card.coverImage && !failedCovers.has(card.id);
 </script>
 
 <svelte:window onclick={() => (menuOpenId = null)} />
@@ -190,80 +244,110 @@
 {#if !cards}
 	<ul class="cards" aria-hidden="true">
 		{#each [0, 1, 2, 3] as i (i)}
-			<li><div class="skeleton"><span class="sk-av"></span><span class="sk-lines"></span></div></li>
+			<li class="row">
+				<div class="skeleton">
+					<span class="sk-line sk-title"></span>
+					<span class="sk-line"></span>
+				</div>
+			</li>
 		{/each}
 	</ul>
 {:else if cards.length === 0}
 	<div class="empty">
-		<span class="empty-mark"><Icon name={emptyIcon} size={26} /></span>
-		<p>{empty}</p>
+		<span class="empty-mark"><Icon name={emptyIcon} size={24} /></span>
+		<p class="empty-title">{empty}</p>
+		{#if emptyHint}<p class="empty-hint">{emptyHint}</p>{/if}
 	</div>
 {:else}
 	<ul class="cards" bind:this={listEl}>
-		{#each cards as card, i (card.id)}
-			<li class:selected={i === selectedIndex} class:faded={fadedIds?.has(card.id)}>
-				<div class="swipe" use:swipeable={{ onCommit: (dir) => onSwipe(card, dir) }}>
-					<div class="swipe-bg" aria-hidden="true">
-						<span class="swipe-action read">
-							<Icon name="check" size={16} />
-							{card.readState === 'finished' ? 'Unread' : 'Read'}
-						</span>
-						<span class="swipe-action archive">
-							Archive
-							<Icon name="archive" size={16} />
-						</span>
-					</div>
-					<article
-						class="card swipe-front"
-						class:unread={card.readState !== 'finished'}
-						class:menu-open={menuOpenId === card.id}
-						onmouseenter={() => onselect?.(i)}
-					>
-						<span class="lead">
+		{#each rows as row (row.type === 'card' ? row.card.id : 'header:' + row.label)}
+			{#if row.type === 'header'}
+				<li class="group"><span class="group-label">{row.label}</span></li>
+			{:else}
+				{@const card = row.card}
+				{@const i = row.index}
+				<li class="row" class:selected={i === selectedIndex} class:faded={fadedIds?.has(card.id)}>
+					<div class="swipe" use:swipeable={{ onCommit: (dir) => onSwipe(card, dir) }}>
+						<div class="swipe-bg" aria-hidden="true">
+							<span class="swipe-action read">
+								<Icon name="check" size={16} />
+								{card.readState === 'finished' ? 'Unread' : 'Read'}
+							</span>
+							<span class="swipe-action archive">
+								Archive
+								<Icon name="archive" size={16} />
+							</span>
+						</div>
+						<article
+							class="card swipe-front"
+							class:read={card.readState === 'finished'}
+							class:menu-open={menuOpenId === card.id}
+							onmouseenter={() => onselect?.(i)}
+						>
 							{#if card.readState !== 'finished'}
-								<span class="unread-dot" aria-hidden="true"></span>
+								<span class="dot" aria-hidden="true"></span>
 							{/if}
-							{#if card.coverImage && !failedCovers.has(card.id)}
-								<img
-									class="thumb"
-									src={card.coverImage}
-									alt=""
-									loading="lazy"
-									onerror={() => failedCovers.add(card.id)}
-								/>
-							{:else}
-								<span class="thumb thumb-fallback">
-									<SourceAvatar url={card.url} siteName={card.siteName} size={30} />
+
+							{#if hasCover(card)}
+								<span class="media">
+									<img
+										class="cover"
+										src={card.coverImage}
+										alt=""
+										loading="lazy"
+										onerror={() => failedCovers.add(card.id)}
+									/>
 								</span>
 							{/if}
-						</span>
 
-						<div class="body">
-							<a
-								class="title"
-								href={resolve('/read/[id]', { id: card.id })}
-								onclick={() => onopen?.()}
-							>
-								{card.title || hostname(card.url)}
-							</a>
-							{#if card.excerpt}<p class="snippet">{card.excerpt}</p>{/if}
-							<p class="meta">
-								<span class="byline">{meta(card)}</span>
-								{#if card.highlightCount > 0}
-									<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
-								{/if}
-							</p>
-						</div>
+							<div class="body">
+								<a
+									class="title"
+									href={resolve('/read/[id]', { id: card.id })}
+									onclick={() => onopen?.()}
+								>
+									{card.title || hostname(card.url)}
+								</a>
+								{#if card.excerpt}<p class="snippet">{card.excerpt}</p>{/if}
+								<p class="meta">
+									<SourceAvatar url={card.url} siteName={card.siteName} size={16} />
+									<span class="byline">{meta(card)}</span>
+									{#if card.highlightCount > 0}
+										<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
+									{/if}
+									<span class="when">{kindLabel(card)} · {publishedStamp(card)}</span>
+								</p>
+							</div>
 
-						<div class="trail">
-							<span class="kind">
-								<span class="kind-type">{kindLabel(card)} · </span>{publishedStamp(card)}
-							</span>
-							<div class="actions">
+							<div class="trail">
+								<div class="quick">
+									{#if card.location !== 'later'}
+										<button
+											type="button"
+											class="round"
+											title="Read later"
+											aria-label="Read later"
+											onclick={() => triage(card.id, 'later')}
+										>
+											<Icon name="clock" size={17} />
+										</button>
+									{/if}
+									{#if card.location !== 'archive'}
+										<button
+											type="button"
+											class="round"
+											title="Archive"
+											aria-label="Archive"
+											onclick={() => triage(card.id, 'archive')}
+										>
+											<Icon name="archive" size={17} />
+										</button>
+									{/if}
+								</div>
 								<div class="menu-wrap">
 									<button
 										type="button"
-										class="round"
+										class="round more-btn"
 										title="More"
 										aria-label="More actions"
 										aria-expanded={menuOpenId === card.id}
@@ -360,45 +444,21 @@
 										</div>
 									{/if}
 								</div>
-								<div class="quick">
-									{#if card.location !== 'later'}
-										<button
-											type="button"
-											class="round"
-											title="Read later"
-											aria-label="Read later"
-											onclick={() => triage(card.id, 'later')}
-										>
-											<Icon name="clock" size={17} />
-										</button>
-									{/if}
-									{#if card.location !== 'archive'}
-										<button
-											type="button"
-											class="round"
-											title="Archive"
-											aria-label="Archive"
-											onclick={() => triage(card.id, 'archive')}
-										>
-											<Icon name="archive" size={17} />
-										</button>
-									{/if}
-								</div>
 							</div>
-						</div>
 
-						{#if finished(card)}
-							<span class="progress-bar done" aria-hidden="true"></span>
-						{:else if card.readingProgress > 0}
-							<span
-								class="progress-bar"
-								style={`--p:${Math.round(card.readingProgress * 100)}%`}
-								aria-hidden="true"
-							></span>
-						{/if}
-					</article>
-				</div>
-			</li>
+							{#if finished(card)}
+								<span class="progress-bar done" aria-hidden="true"></span>
+							{:else if card.readingProgress > 0}
+								<span
+									class="progress-bar"
+									style={`--p:${Math.round(card.readingProgress * 100)}%`}
+									aria-hidden="true"
+								></span>
+							{/if}
+						</article>
+					</div>
+				</li>
+			{/if}
 		{/each}
 	</ul>
 	{#if undo}
@@ -414,10 +474,43 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
 	}
+
+	/* Date divider: a tracked label trailed by a hairline section rule, the way a
+	   newspaper index breaks its columns. */
+	.group {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		padding: 1.6rem 0.2rem 0.55rem;
+	}
+	.group:first-child {
+		padding-top: 0.2rem;
+	}
+	.group-label {
+		font-size: var(--text-xs);
+		font-weight: 700;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.group::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: var(--border);
+	}
+
+	/* Each entry sits over a hairline rule so the list reads as an index at rest;
+	   the hover/selected highlight is an inset rounded plane above it. */
+	.row {
+		border-bottom: 1px solid var(--border);
+	}
+	.row:last-child {
+		border-bottom: 0;
+	}
+
 	/* Swipe-to-act: the front (the card) slides over coloured action panels.
 	   pan-y keeps vertical scrolling; the front is only opaque mid-swipe so the
 	   list keeps its flat resting look. */
@@ -483,15 +576,16 @@
 		cursor: pointer;
 		padding: 0.1rem 0.3rem;
 	}
+
 	.card {
 		position: relative;
 		display: flex;
 		gap: 0.9rem;
 		align-items: flex-start;
-		padding: 0.85rem 0.9rem 0.95rem;
+		/* Left inset reserves the unread-dot gutter so titles align whether or not
+		   a row is unread or carries a cover. */
+		padding: 0.85rem 0.55rem 0.9rem 1.45rem;
 		border-radius: var(--radius-lg);
-		border-left: 3px solid transparent;
-		overflow: hidden;
 		transition:
 			background var(--dur-fast) var(--ease),
 			box-shadow var(--dur-fast) var(--ease);
@@ -500,13 +594,9 @@
 		background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
 		box-shadow: var(--shadow-sm);
 	}
-	.card.unread {
-		border-left-color: var(--accent);
-	}
-	/* While the overflow menu is open, let it escape the card's overflow clip and
-	   paint above sibling cards (each .swipe-front establishes a z-index:1 context). */
+	/* While the overflow menu is open, let it paint above sibling rows
+	   (each .swipe-front establishes a z-index:1 context). */
 	.card.menu-open {
-		overflow: visible;
 		z-index: 30;
 	}
 	/* Read-but-kept rows: dimmed in place until the next refresh drops them. The
@@ -524,49 +614,49 @@
 		box-shadow: var(--shadow-sm);
 	}
 
-	.lead {
-		position: relative;
-		flex-shrink: 0;
-	}
-	.unread-dot {
+	.dot {
 		position: absolute;
-		top: -3px;
-		left: -3px;
-		width: 9px;
-		height: 9px;
+		left: 0.5rem;
+		top: 1.45rem;
+		width: 8px;
+		height: 8px;
 		border-radius: 50%;
 		background: var(--accent);
-		border: 2px solid var(--bg);
-		z-index: 2;
 	}
-	.thumb,
-	.thumb-fallback {
-		width: 52px;
-		height: 52px;
+
+	.media {
+		flex-shrink: 0;
+	}
+	.cover {
+		width: 58px;
+		height: 58px;
 		border-radius: var(--radius);
 		border: 1px solid var(--border);
 		background: var(--surface-alt);
 		object-fit: cover;
 		display: block;
 	}
-	.thumb-fallback {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
 
 	.body {
 		flex: 1;
 		min-width: 0;
 	}
+	/* Serif headlines give the list a magazine-index voice and a strong step over
+	   the sans byline below. */
 	.title {
 		display: block;
-		font-size: var(--text-md);
-		font-weight: 650;
-		line-height: 1.3;
+		font-family: var(--font-serif);
+		font-size: var(--text-lg);
+		font-weight: 600;
+		line-height: 1.25;
 		color: var(--text);
-		letter-spacing: -0.01em;
+		letter-spacing: -0.005em;
 		transition: color var(--dur-fast) var(--ease);
+	}
+	/* Read rows recede: the unread state owns full contrast and weight. */
+	.card.read .title {
+		color: var(--text-muted);
+		font-weight: 500;
 	}
 	/* Stretched link: the whole card opens the document; the trail actions sit
 	   on a higher layer and stay independently clickable. */
@@ -581,9 +671,9 @@
 		color: var(--accent);
 	}
 	.snippet {
-		margin: 0.25rem 0 0;
-		font-size: var(--text-sm);
-		line-height: 1.45;
+		margin: 0.3rem 0 0;
+		font-size: var(--text-base);
+		line-height: 1.5;
 		color: var(--text-muted);
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
@@ -594,8 +684,8 @@
 	.meta {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		margin: 0.45rem 0 0;
+		gap: 0.45rem;
+		margin: 0.5rem 0 0;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
 	}
@@ -612,39 +702,53 @@
 		flex-shrink: 0;
 		font-variant-numeric: tabular-nums;
 	}
+	/* Kind + timestamp ride the right edge of the byline, newspaper dateline style. */
+	.when {
+		margin-left: auto;
+		flex-shrink: 0;
+		white-space: nowrap;
+		letter-spacing: 0.02em;
+		font-variant-numeric: tabular-nums;
+	}
 
 	.trail {
 		flex-shrink: 0;
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
+		align-items: flex-start;
+		gap: 0.25rem;
 		position: relative;
 		z-index: 1;
 	}
-	.kind {
-		font-size: var(--text-2xs);
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		white-space: nowrap;
-		font-variant-numeric: tabular-nums;
-	}
-	.actions {
+	/* Quick triage floats in on hover so resting rows stay clean, while the
+	   overflow button below stays faintly present as a discoverable handle. */
+	.quick {
 		display: flex;
-		align-items: center;
 		gap: 0.25rem;
 		opacity: 0;
+		pointer-events: none;
 		transition: opacity var(--dur-fast) var(--ease);
 	}
-	.card:hover .actions,
-	li.selected .actions,
-	.card:focus-within .actions,
-	.actions:has(.menu) {
+	.card:hover .quick,
+	li.selected .quick,
+	.card:focus-within .quick {
+		opacity: 1;
+		pointer-events: auto;
+	}
+	.more-btn {
+		opacity: 0.5;
+		transition: opacity var(--dur-fast) var(--ease);
+	}
+	.card:hover .more-btn,
+	li.selected .more-btn,
+	.card:focus-within .more-btn,
+	.card.menu-open .more-btn {
 		opacity: 1;
 	}
 	@media (hover: none) {
-		.actions {
+		.quick {
+			display: none;
+		}
+		.more-btn {
 			opacity: 1;
 		}
 	}
@@ -673,26 +777,19 @@
 		opacity: 0.5;
 		cursor: default;
 	}
-	.quick {
-		display: flex;
-		gap: 0.25rem;
-	}
 
-	/* Mobile: drop the kind label + quick triage buttons (swipe handles those),
-	   keep just a compact timestamp and the overflow menu so titles get room. */
+	/* Mobile: serif title steps down, cover shrinks, swipe replaces quick buttons. */
 	@media (max-width: 640px) {
-		.kind-type {
-			display: none;
-		}
-		.quick {
-			display: none;
-		}
-		.actions {
-			opacity: 1;
-		}
 		.card {
 			gap: 0.7rem;
-			padding: 0.75rem 0.7rem 0.85rem;
+			padding: 0.75rem 0.4rem 0.8rem 1.3rem;
+		}
+		.title {
+			font-size: var(--text-md);
+		}
+		.cover {
+			width: 48px;
+			height: 48px;
 		}
 	}
 
@@ -758,8 +855,8 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 3.5rem 1rem;
+		gap: 0.6rem;
+		padding: 4rem 1rem;
 		text-align: center;
 		color: var(--text-muted);
 	}
@@ -773,19 +870,29 @@
 		background: var(--surface-alt);
 		color: var(--text-muted);
 	}
-	.empty p {
+	.empty-title {
+		margin: 0.2rem 0 0;
+		font-family: var(--font-serif);
+		font-size: var(--text-lg);
+		font-weight: 600;
+		color: var(--text);
+	}
+	.empty-hint {
 		margin: 0;
+		max-width: 24rem;
 		font-size: var(--text-base);
+		line-height: 1.5;
 	}
 
 	.skeleton {
 		display: flex;
-		gap: 0.85rem;
-		align-items: center;
-		padding: 0.8rem 0.85rem;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.9rem 0.55rem 0.95rem 1.45rem;
 	}
-	.sk-av,
-	.sk-lines {
+	.sk-line {
+		height: 0.85rem;
+		width: 60%;
 		border-radius: var(--radius-sm);
 		background: linear-gradient(
 			90deg,
@@ -796,15 +903,9 @@
 		background-size: 200% 100%;
 		animation: shimmer 1.3s linear infinite;
 	}
-	.sk-av {
-		width: 30px;
-		height: 30px;
-		flex-shrink: 0;
-	}
-	.sk-lines {
-		height: 1.5rem;
-		flex: 1;
-		max-width: 70%;
+	.sk-title {
+		height: 1.15rem;
+		width: 80%;
 	}
 	@keyframes shimmer {
 		from {
@@ -815,8 +916,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.sk-av,
-		.sk-lines {
+		.sk-line {
 			animation: none;
 		}
 	}
