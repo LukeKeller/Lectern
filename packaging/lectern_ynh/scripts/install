@@ -17,6 +17,20 @@ ynh_app_setting_set --key=miniflux_token --value="$miniflux_token"
 ynh_app_setting_set --key=readeck_url --value="$readeck_url"
 ynh_app_setting_set --key=readeck_token --value="$readeck_token"
 
+# Newsletter mailbox (optional). Persist as settings so the upgrade script can
+# re-render .env. Enable ingestion only when an IMAP host was provided; default
+# the port to 993 (implicit TLS).
+imap_port=993
+enable_email=""
+if [ -n "${imap_host:-}" ]; then
+    enable_email="1"
+fi
+ynh_app_setting_set --key=imap_host --value="${imap_host:-}"
+ynh_app_setting_set --key=imap_port --value="$imap_port"
+ynh_app_setting_set --key=imap_user --value="${imap_user:-}"
+ynh_app_setting_set --key=imap_password --value="${imap_password:-}"
+ynh_app_setting_set --key=enable_email --value="$enable_email"
+
 #=================================================
 # INSTALL APP FILES (prebuilt artifact)
 #=================================================

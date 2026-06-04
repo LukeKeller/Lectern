@@ -17,10 +17,25 @@ const EnvSchema = z.object({
   MINIFLUX_API_TOKEN: z.string().default(""),
   READECK_URL: z.string().default("http://localhost:8089"),
   READECK_API_TOKEN: z.string().default(""),
+  /** Dedicated newsletter mailbox (IMAP). Empty IMAP_HOST disables ingestion. */
+  IMAP_HOST: z.string().default(""),
+  // An empty/absent value (e.g. a pre-IMAP install's rendered .env) must fall
+  // back to 993, not coerce to NaN and abort startup.
+  IMAP_PORT: z.preprocess(
+    (v) => (v === "" || v === undefined ? 993 : v),
+    z.coerce.number().int().positive(),
+  ),
+  IMAP_USER: z.string().default(""),
+  IMAP_PASSWORD: z.string().default(""),
+  IMAP_MAILBOX: z.string().default("INBOX"),
+  /** "0" for a plain/STARTTLS connection (143); anything else uses TLS (993). */
+  IMAP_SECURE: z.string().default("1"),
   /** When set, the BFF serves the prebuilt web SPA from this dir (production single-service). */
   LECTERN_WEB_DIR: z.string().default(""),
   /** Set to "1" to start the pg-boss polling jobs. */
   LECTERN_ENABLE_JOBS: z.string().default(""),
+  /** Set to "1" to enable the newsletter mailbox poll (requires IMAP_* + jobs). */
+  LECTERN_ENABLE_EMAIL: z.string().default(""),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

@@ -16,6 +16,7 @@ import {
 } from "../unify";
 import { safeHttpUrl } from "../cover";
 import { snippet } from "../html-text";
+import { EMAIL_LABEL } from "./email-inbox";
 
 /**
  * Readeck read-later adapter. Bearer-token API; normalizes bookmarks into
@@ -85,11 +86,17 @@ function toHighlightColor(color: string): HighlightColor {
  * caller (Readeck's list payload omits it); progress is scaled to 0..1.
  */
 export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount = 0): Card {
+  // Newsletters are saved with a reserved sentinel label; map them to the `email`
+  // category and hide the sentinel from the user-facing tag list (the sender tag
+  // stays). Derived from the label so it survives Readeck re-indexing on poll.
+  const labels = bookmark.labels ?? [];
+  const isEmail = labels.includes(EMAIL_LABEL);
+  const tags = isEmail ? labels.filter((l) => l !== EMAIL_LABEL) : labels;
   return {
     id: `readeck:${bookmark.id}`,
     source: "readeck",
     sourceId: bookmark.id,
-    category: "article",
+    category: isEmail ? "email" : "article",
     location: readeckLocationFromArchived(bookmark.is_archived),
     readState: deriveReadeckReadState(bookmark.is_archived, bookmark.read_progress ?? 0),
     title: bookmark.title,
@@ -102,7 +109,7 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     readingTimeMinutes: bookmark.reading_time ?? null,
     readingProgress: progressFromReadeck(bookmark.read_progress ?? 0),
     readAnchor: bookmark.read_anchor ?? null,
-    tags: bookmark.labels ?? [],
+    tags,
     highlightCount,
     note: null,
     savedAt: bookmark.created,
