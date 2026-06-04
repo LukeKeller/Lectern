@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.0',
+		date: '2026-06-03',
+		title: 'Listen (text-to-speech)',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Listen to any article read aloud with ElevenLabs. Press the headphones on a card or in the reader to play; audio synthesizes only when you ask and is cached so replays and offline listens are free.'
+			},
+			{
+				kind: 'added',
+				text: 'A listen queue with a bottom mini-player — add articles, reorder or remove them, scrub the timeline, and it auto-advances to the next one.'
+			},
+			{
+				kind: 'added',
+				text: 'Set your ElevenLabs API key, voice, and model in Settings → Listen. The key stays on the server and is never exposed to the browser.'
+			}
+		]
+	},
+	{
 		version: '0.5.3',
 		date: '2026-06-03',
 		title: 'Auto-advance',

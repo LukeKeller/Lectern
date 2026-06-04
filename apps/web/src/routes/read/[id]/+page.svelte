@@ -13,6 +13,7 @@
 	import { serializeRange, renderHighlights } from '$lib/highlight';
 	import { liveQuery } from 'dexie';
 	import { readingQueue } from '$lib/reading-queue.svelte';
+	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { readerCssVars, type FontFamily, type ThemeMode } from '$lib/typography';
 	import {
@@ -648,6 +649,17 @@
 		>
 			<Icon name="book" size={16} />
 		</button>
+		{#if card}
+			<button
+				type="button"
+				class="rail-btn"
+				onclick={() => ttsPlayer.listen({ id: card!.id, title: card!.title })}
+				title="Listen"
+				aria-label="Listen to this article"
+			>
+				<Icon name="headphones" size={16} />
+			</button>
+		{/if}
 		{#if card}
 			<!-- card.url is an external absolute URL, not an internal route -->
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->

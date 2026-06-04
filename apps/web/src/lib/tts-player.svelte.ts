@@ -34,6 +34,9 @@ class TtsPlayer {
 	get currentId(): string | undefined {
 		return this.current?.id;
 	}
+	get hasQueue(): boolean {
+		return this.queue.length > 0;
+	}
 
 	/** Restore the persisted queue (paused) and wire the audio element. Browser-only. */
 	init(): void {

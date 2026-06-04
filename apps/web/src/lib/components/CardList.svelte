@@ -6,6 +6,7 @@
 	import Icon, { type IconName } from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { ttsPlayer } from '$lib/tts-player.svelte';
 
 	interface TriageAction {
 		label: string;
@@ -147,25 +148,43 @@
 								{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
 							</div>
 						{/if}
-						{#if actions.length || card.source === 'miniflux'}
-							<div class="actions">
-								{#each actions as action (action.location)}
-									<button type="button" onclick={() => triage(card.id, action.location)}>
-										{action.label}
-									</button>
-								{/each}
-								{#if card.source === 'miniflux'}
-									<button
-										type="button"
-										class="primary"
-										onclick={() => saveToLater(card)}
-										disabled={savingId === card.id}
-									>
-										{savingId === card.id ? 'Saving…' : 'Read later'}
-									</button>
-								{/if}
-							</div>
-						{/if}
+						<div class="actions">
+							<button
+								type="button"
+								class="icon-btn"
+								title="Listen"
+								aria-label="Listen"
+								onclick={() =>
+									ttsPlayer.listen({ id: card.id, title: card.title || hostname(card.url) })}
+							>
+								<Icon name="headphones" size={15} />
+							</button>
+							<button
+								type="button"
+								class="icon-btn"
+								title="Add to listen queue"
+								aria-label="Add to listen queue"
+								onclick={() =>
+									ttsPlayer.enqueue({ id: card.id, title: card.title || hostname(card.url) })}
+							>
+								<Icon name="plus" size={15} />
+							</button>
+							{#each actions as action (action.location)}
+								<button type="button" onclick={() => triage(card.id, action.location)}>
+									{action.label}
+								</button>
+							{/each}
+							{#if card.source === 'miniflux'}
+								<button
+									type="button"
+									class="primary"
+									onclick={() => saveToLater(card)}
+									disabled={savingId === card.id}
+								>
+									{savingId === card.id ? 'Saving…' : 'Read later'}
+								</button>
+							{/if}
+						</div>
 					</div>
 					<div class="aside">
 						{#if finished(card)}
@@ -366,6 +385,20 @@
 	.actions button:disabled {
 		opacity: 0.55;
 		cursor: default;
+	}
+	.actions button.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		width: 1.85rem;
+		height: 1.85rem;
+		border-radius: 50%;
+	}
+	.actions button.icon-btn:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
 	}
 
 	.aside {

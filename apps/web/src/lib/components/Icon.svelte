@@ -30,7 +30,15 @@
 		| 'info'
 		| 'newspaper'
 		| 'magazine'
-		| 'chevron';
+		| 'chevron'
+		| 'play'
+		| 'pause'
+		| 'next'
+		| 'prev'
+		| 'headphones'
+		| 'trash'
+		| 'plus'
+		| 'grip';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -71,7 +79,17 @@
 			'<path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H16a1 1 0 0 1 1 1v12.5a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 4 18.5z"/><path d="M17 9h1.5A1.5 1.5 0 0 1 20 10.5V18a2 2 0 0 1-2 2"/><path d="M7 8.5h6M7 11.5h6M7 14.5h4"/>',
 		magazine:
 			'<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 7.5h7"/><path d="M8.5 11h7M8.5 13.5h4.5"/>',
-		chevron: '<path d="m9 6 6 6-6 6"/>'
+		chevron: '<path d="m9 6 6 6-6 6"/>',
+		play: '<path d="M7 5l12 7-12 7z"/>',
+		pause: '<path d="M9 5v14M15 5v14"/>',
+		next: '<path d="M6 5l9 7-9 7z"/><path d="M18 5v14"/>',
+		prev: '<path d="M18 5l-9 7 9 7z"/><path d="M6 5v14"/>',
+		headphones:
+			'<path d="M5 13v-1a7 7 0 0 1 14 0v1"/><rect x="3.5" y="13" width="3.6" height="6.2" rx="1.2"/><rect x="16.9" y="13" width="3.6" height="6.2" rx="1.2"/>',
+		trash:
+			'<path d="M4 7h16"/><path d="M9.5 7V5h5v2"/><path d="M6.5 7l.9 12.6a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/>',
+		plus: '<path d="M12 5v14M5 12h14"/>',
+		grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>'
 	};
 </script>
 

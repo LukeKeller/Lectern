@@ -20,6 +20,8 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
+	import ListenPlayer from '$lib/components/ListenPlayer.svelte';
+	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import type { ThemeMode } from '$lib/typography';
 	import type { Card } from '@lectern/shared';
@@ -257,6 +259,7 @@
 		readerSettings.applyTheme();
 		void viewsStore.load();
 		void feedsStore.load();
+		ttsPlayer.init();
 		const sync = getSync();
 		sync.start();
 		// Make new deploys reach the user: force a service-worker update check on
@@ -531,6 +534,7 @@
 {/if}
 
 <WhatsNew />
+<ListenPlayer />
 
 <style>
 	.brand {

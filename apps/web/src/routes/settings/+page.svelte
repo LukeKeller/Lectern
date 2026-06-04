@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ImportReadwiseResponse } from '@lectern/shared';
+	import type { ImportReadwiseResponse, TtsVoice } from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
@@ -36,9 +36,82 @@
 		{ value: 'auto', label: 'Auto' }
 	];
 
+	// ---- Listen (text-to-speech) ----
+	const TTS_MODELS = [
+		{ value: 'eleven_flash_v2_5', label: 'Flash v2.5 — fast, affordable (default)' },
+		{ value: 'eleven_multilingual_v2', label: 'Multilingual v2 — highest quality' }
+	];
+	let ttsConfigured = $state(false);
+	let ttsModel = $state('eleven_flash_v2_5');
+	let ttsVoiceId = $state('');
+	let ttsKey = $state('');
+	let ttsVoices = $state<TtsVoice[]>([]);
+	let ttsBusy = $state(false);
+	let ttsMsg = $state<string | undefined>(undefined);
+	let ttsError = $state<string | undefined>(undefined);
+
 	onMount(() => {
 		token = getToken() ?? '';
+		void loadTts();
 	});
+
+	async function loadTts() {
+		try {
+			const s = await getClient().getTtsSettings();
+			ttsConfigured = s.configured;
+			ttsModel = s.modelId;
+			ttsVoiceId = s.voiceId;
+		} catch {
+			/* offline: keep defaults */
+		}
+	}
+
+	async function saveTtsKey(event: SubmitEvent) {
+		event.preventDefault();
+		ttsBusy = true;
+		ttsError = undefined;
+		ttsMsg = undefined;
+		try {
+			const s = await getClient().updateTtsSettings({ apiKey: ttsKey.trim() || null });
+			ttsConfigured = s.configured;
+			ttsKey = '';
+			ttsMsg = s.configured ? 'API key saved.' : 'API key cleared.';
+		} catch (err) {
+			ttsError = err instanceof Error ? err.message : 'Failed to save the key.';
+		} finally {
+			ttsBusy = false;
+		}
+	}
+
+	async function saveTtsModel(modelId: string) {
+		ttsModel = modelId;
+		try {
+			await getClient().updateTtsSettings({ modelId });
+		} catch (err) {
+			ttsError = err instanceof Error ? err.message : 'Failed to save the model.';
+		}
+	}
+
+	async function saveTtsVoice(voiceId: string) {
+		ttsVoiceId = voiceId;
+		try {
+			await getClient().updateTtsSettings({ voiceId });
+		} catch (err) {
+			ttsError = err instanceof Error ? err.message : 'Failed to save the voice.';
+		}
+	}
+
+	async function loadVoices() {
+		ttsBusy = true;
+		ttsError = undefined;
+		try {
+			ttsVoices = (await getClient().listTtsVoices()).voices;
+		} catch (err) {
+			ttsError = err instanceof Error ? err.message : 'Could not load voices (check the key).';
+		} finally {
+			ttsBusy = false;
+		}
+	}
 
 	function save(event: SubmitEvent) {
 		event.preventDefault();
@@ -217,6 +290,77 @@
 		</button>
 	</section>
 
+	<section>
+		<h2>Listen (text-to-speech)</h2>
+		<p class="hint">
+			Read articles aloud with ElevenLabs. Your API key is stored on the server and never sent to
+			the browser; audio is synthesized only when you press Listen and cached so replays are free.
+			Get a key at <span class="mono">elevenlabs.io</span> → Profile → API Keys.
+		</p>
+		<form class="row" onsubmit={saveTtsKey}>
+			<input
+				type="password"
+				bind:value={ttsKey}
+				placeholder={ttsConfigured ? '•••••••• (key saved)' : 'ElevenLabs API key'}
+				autocomplete="off"
+			/>
+			<button type="submit" class="btn" disabled={ttsBusy}>Save</button>
+			{#if ttsConfigured}
+				<button
+					type="button"
+					class="btn ghost"
+					disabled={ttsBusy}
+					onclick={() => {
+						ttsKey = '';
+						void getClient()
+							.updateTtsSettings({ apiKey: null })
+							.then((s) => {
+								ttsConfigured = s.configured;
+								ttsMsg = 'API key cleared.';
+							});
+					}}
+				>
+					Clear
+				</button>
+			{/if}
+		</form>
+		{#if ttsMsg}<p class="ok">{ttsMsg}</p>{/if}
+		{#if ttsError}<p class="err">{ttsError}</p>{/if}
+
+		<div class="stack">
+			<label class="field">
+				<span class="flabel">Model</span>
+				<select value={ttsModel} onchange={(e) => saveTtsModel(e.currentTarget.value)}>
+					{#each TTS_MODELS as m (m.value)}
+						<option value={m.value}>{m.label}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="field">
+				<span class="flabel">Voice</span>
+				{#if ttsVoices.length}
+					<select value={ttsVoiceId} onchange={(e) => saveTtsVoice(e.currentTarget.value)}>
+						{#each ttsVoices as v (v.id)}
+							<option value={v.id}>{v.name}</option>
+						{/each}
+					</select>
+				{:else}
+					<div class="row">
+						<input
+							type="text"
+							value={ttsVoiceId}
+							placeholder="Voice ID"
+							onchange={(e) => saveTtsVoice(e.currentTarget.value)}
+						/>
+						<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
+							Load voices
+						</button>
+					</div>
+				{/if}
+			</label>
+		</div>
+	</section>
+
 	<section class="about">
 		<h2>About</h2>
 		<dl class="meta-list">
@@ -277,6 +421,18 @@
 	}
 	input[readonly] {
 		color: var(--text-muted);
+	}
+	select {
+		padding: 0.5rem 0.65rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-base);
+		max-width: 24rem;
+	}
+	.mono {
+		font-family: var(--font-mono, ui-monospace, monospace);
 	}
 	.row {
 		display: flex;
