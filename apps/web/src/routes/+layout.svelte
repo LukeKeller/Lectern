@@ -20,6 +20,7 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
+	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
 	import ListenPlayer from '$lib/components/ListenPlayer.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -268,17 +269,8 @@
 		ttsPlayer.init();
 		const sync = getSync();
 		sync.start();
-		// Make new deploys reach the user: force a service-worker update check on
-		// load, and reload once when a newer worker takes control (the classic
-		// "needs a second refresh" PWA gotcha). Guarded so the first install and
-		// post-reload states don't loop.
-		if ('serviceWorker' in navigator) {
-			const hadController = !!navigator.serviceWorker.controller;
-			navigator.serviceWorker.addEventListener('controllerchange', () => {
-				if (hadController) window.location.reload();
-			});
-			void navigator.serviceWorker.ready.then((reg) => reg.update()).catch(() => {});
-		}
+		// Service-worker update lifecycle (deploy detection + "new version" prompt)
+		// lives in <UpdatePrompt>.
 		window.addEventListener('keydown', onKeydown);
 		return () => {
 			sync.stop();
@@ -562,6 +554,7 @@
 {/if}
 
 <WhatsNew />
+<UpdatePrompt />
 <ListenPlayer />
 
 <style>
