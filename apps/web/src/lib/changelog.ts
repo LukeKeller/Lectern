@@ -26,6 +26,33 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.7.0',
+		date: '2026-06-04',
+		title: 'Installs and works offline',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Share a page to Lectern from any app’s share sheet and it lands in Later — no copy-pasting links.'
+			},
+			{
+				kind: 'improved',
+				text: 'Installed as an app, Lectern now opens and works offline: your library and already-saved articles are there with no connection, and cover images you’ve seen stay cached.'
+			},
+			{
+				kind: 'improved',
+				text: 'Updates no longer reload the app out from under you. When a new version is ready you get a small “Reload” prompt and choose when to take it.'
+			},
+			{
+				kind: 'improved',
+				text: 'Smoother install on phones: home-screen shortcuts for Inbox, Feed, Library and Search, plus a cleaner app identity and icons.'
+			},
+			{
+				kind: 'fixed',
+				text: 'The Listen player’s controls no longer sit under the iPhone home indicator.'
+			}
+		]
+	},
+	{
 		version: '0.6.9',
 		date: '2026-06-04',
 		title: 'Mark read, Space to skim & re-fetch',
