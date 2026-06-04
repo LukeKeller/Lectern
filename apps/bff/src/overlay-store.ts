@@ -303,11 +303,15 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   async listViews(): Promise<SavedView[]> {
-    const rows = await this.db.select().from(savedViews).orderBy(desc(savedViews.createdAt));
+    const rows = await this.db
+      .select()
+      .from(savedViews)
+      .orderBy(savedViews.position, desc(savedViews.createdAt));
     return rows.map(viewRowToView);
   }
 
   async createView(input: CreateViewRequest): Promise<SavedView> {
+    const existing = await this.db.select({ id: savedViews.id }).from(savedViews);
     const [row] = await this.db
       .insert(savedViews)
       .values({
@@ -315,6 +319,9 @@ export class DrizzleOverlayStore implements OverlayStore {
         name: input.name,
         query: input.query,
         pinned: input.pinned,
+        icon: input.icon ?? null,
+        // Append to the end unless an explicit position is given.
+        position: input.position || existing.length,
         sortBy: input.sortBy,
         sortDir: input.sortDir,
       })
@@ -329,6 +336,8 @@ export class DrizzleOverlayStore implements OverlayStore {
     if (patch.pinned !== undefined) set.pinned = patch.pinned;
     if (patch.sortBy !== undefined) set.sortBy = patch.sortBy;
     if (patch.sortDir !== undefined) set.sortDir = patch.sortDir;
+    if (patch.icon !== undefined) set.icon = patch.icon;
+    if (patch.position !== undefined) set.position = patch.position;
     const [row] = await this.db
       .update(savedViews)
       .set(set)
@@ -468,6 +477,8 @@ function viewRowToView(row: typeof savedViews.$inferSelect): SavedView {
     name: row.name,
     query: row.query,
     pinned: row.pinned,
+    icon: row.icon ?? null,
+    position: row.position,
     sortBy: row.sortBy as SavedView["sortBy"],
     sortDir: row.sortDir as SavedView["sortDir"],
     createdAt: row.createdAt.toISOString(),

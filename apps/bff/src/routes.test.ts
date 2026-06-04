@@ -326,7 +326,7 @@ class FakeOverlayStore implements OverlayStore {
     return [...counts].map(([name, count]) => ({ name, count }));
   }
   async listViews(): Promise<SavedView[]> {
-    return [...this.views.values()];
+    return [...this.views.values()].sort((a, b) => a.position - b.position);
   }
   async createView(input: CreateViewRequest): Promise<SavedView> {
     const view: SavedView = {
@@ -748,6 +748,34 @@ describe("views", () => {
       headers: auth,
     });
     expect(missing.statusCode).toBe(404);
+    await a.close();
+  });
+
+  it("round-trips a saved view's icon and position", async () => {
+    const a = app();
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/v1/views",
+      headers: auth,
+      payload: {
+        name: "Reads",
+        query: { kind: "term", field: "location", op: "eq", value: "later" },
+        pinned: true,
+        icon: "📚",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().icon).toBe("📚");
+    const id = created.json().id;
+    const updated = await a.inject({
+      method: "PATCH",
+      url: `/api/v1/views/${id}`,
+      headers: auth,
+      payload: { icon: "📰", position: 3 },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().icon).toBe("📰");
+    expect(updated.json().position).toBe(3);
     await a.close();
   });
 });

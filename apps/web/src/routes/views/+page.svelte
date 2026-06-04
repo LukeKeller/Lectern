@@ -3,11 +3,18 @@
 	import { resolve } from '$app/paths';
 	import { PREDEFINED_VIEWS, parseViewQuery, viewQueryString } from '$lib/views';
 	import { viewsStore } from '$lib/views-store.svelte';
+	import { matchesQuery } from '$lib/lists';
+	import { liveCards } from '$lib/live.svelte';
+	import { db } from '$lib/db';
+	import Icon from '$lib/components/Icon.svelte';
+	import type { Card } from '@lectern/shared';
 
 	let name = $state('');
 	let queryText = $state('location:later');
 	let pinned = $state(true);
 	let formError = $state<string | undefined>(undefined);
+	let icon = $state('');
+	const allCards = liveCards(() => db.cards.toArray());
 
 	onMount(() => {
 		if (!viewsStore.loaded) void viewsStore.load();
@@ -31,11 +38,14 @@
 			name: trimmed,
 			query,
 			pinned,
+			icon: icon.trim() || null,
+			position: 0,
 			sortBy: 'savedAt',
 			sortDir: 'desc'
 		});
 		if (view) {
 			name = '';
+			icon = '';
 			formError = undefined;
 		} else {
 			formError = viewsStore.error ?? 'Could not save view';
@@ -64,11 +74,60 @@
 			<p class="muted">No saved views yet. Create one below or save a filtered list as a view.</p>
 		{:else}
 			<ul class="views">
-				{#each viewsStore.views as v (v.id)}
+				{#each viewsStore.sorted as v, i (v.id)}
+					{@const n = ((allCards.value ?? []) as Card[]).filter((c) =>
+						matchesQuery(c, v.query)
+					).length}
 					<li>
-						<a href={resolve('/views/[id]', { id: v.id })}>{v.name}</a>
-						{#if v.pinned}<span class="pin">pinned</span>{/if}
+						<input
+							class="emoji-input"
+							value={v.icon ?? ''}
+							maxlength="2"
+							placeholder="📑"
+							aria-label={`Icon for ${v.name}`}
+							onchange={(e) =>
+								viewsStore.update(v.id, { icon: e.currentTarget.value.trim() || null })}
+						/>
+						<a class="vname" href={resolve('/views/[id]', { id: v.id })}>{v.name}</a>
+						{#if n > 0}<span class="count">{n}</span>{/if}
 						<code>{viewQueryString(v.query)}</code>
+						<div class="row-actions">
+							<button
+								type="button"
+								class="ic"
+								title="Move up"
+								aria-label="Move up"
+								disabled={i === 0}
+								onclick={() => viewsStore.move(v.id, 'up')}>↑</button
+							>
+							<button
+								type="button"
+								class="ic"
+								title="Move down"
+								aria-label="Move down"
+								disabled={i === viewsStore.sorted.length - 1}
+								onclick={() => viewsStore.move(v.id, 'down')}>↓</button
+							>
+							<button
+								type="button"
+								class="ic"
+								class:on={v.pinned}
+								title={v.pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+								aria-pressed={v.pinned}
+								onclick={() => viewsStore.update(v.id, { pinned: !v.pinned })}
+							>
+								<Icon name="bookmark" size={14} />
+							</button>
+							<button
+								type="button"
+								class="ic danger"
+								title="Delete view"
+								aria-label="Delete view"
+								onclick={() => viewsStore.remove(v.id)}
+							>
+								<Icon name="close" size={14} />
+							</button>
+						</div>
 					</li>
 				{/each}
 			</ul>
@@ -81,6 +140,10 @@
 			<label>
 				<span>Name</span>
 				<input bind:value={name} type="text" placeholder="e.g. Long reads" autocomplete="off" />
+			</label>
+			<label>
+				<span>Icon (emoji, optional)</span>
+				<input bind:value={icon} type="text" maxlength="2" placeholder="📚" autocomplete="off" />
 			</label>
 			<label>
 				<span>Query</span>
@@ -144,13 +207,60 @@
 		padding: 0.1rem 0.4rem;
 		border-radius: var(--radius-sm);
 	}
-	.pin {
+	.emoji-input {
+		width: 2.2rem;
+		flex-shrink: 0;
+		text-align: center;
+		padding: 0.3rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 1rem;
+	}
+	.count {
 		font-size: var(--text-2xs);
-		letter-spacing: 0.02em;
-		padding: 0.1rem 0.45rem;
+		font-variant-numeric: tabular-nums;
+		padding: 0.05rem 0.4rem;
 		border-radius: var(--radius-full);
-		background: var(--accent-soft);
+		background: var(--surface-alt);
+		color: var(--text-muted);
+	}
+	.row-actions {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+	}
+	.ic {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.9rem;
+		height: 1.9rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: var(--text-sm);
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.ic:hover:not(:disabled) {
+		background: var(--surface);
+		color: var(--text);
+	}
+	.ic:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+	.ic.on {
 		color: var(--accent);
+	}
+	.ic.danger:hover {
+		color: var(--error);
 	}
 	form {
 		display: flex;

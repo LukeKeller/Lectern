@@ -13,6 +13,8 @@ export const SavedView = z.object({
   name: z.string().min(1),
   query: QueryNode,
   pinned: z.boolean().default(false),
+  icon: z.string().nullable().default(null),
+  position: z.number().int().default(0),
   sortBy: ViewSortBy.default("savedAt"),
   sortDir: SortDir.default("desc"),
   createdAt: z.string(),

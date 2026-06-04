@@ -349,7 +349,11 @@
 							class:active={isActive(`/views/${view.id}`)}
 							aria-current={isActive(`/views/${view.id}`) ? 'page' : undefined}
 						>
-							<Icon name="bookmark" />
+							{#if view.icon}
+								<span class="view-emoji" aria-hidden="true">{view.icon}</span>
+							{:else}
+								<Icon name="bookmark" />
+							{/if}
 							<span>{view.name}</span>
 							{#if count > 0}<span class="nav-count">{count}</span>{/if}
 						</a>
@@ -530,6 +534,13 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.view-emoji {
+		flex-shrink: 0;
+		width: 1.15rem;
+		text-align: center;
+		font-size: 1.02rem;
+		line-height: 1;
 	}
 	nav a:hover,
 	.foot-link:hover {

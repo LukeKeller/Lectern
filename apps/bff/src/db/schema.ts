@@ -81,6 +81,8 @@ export const savedViews = pgTable("saved_views", {
   name: text("name").notNull(),
   query: jsonb("query").$type<QueryNode>().notNull(),
   pinned: boolean("pinned").notNull().default(false),
+  icon: text("icon"),
+  position: integer("position").notNull().default(0),
   sortBy: text("sort_by").notNull().default("savedAt"),
   sortDir: text("sort_dir").notNull().default("desc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

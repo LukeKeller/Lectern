@@ -271,7 +271,15 @@
 		if (!name) return;
 		// Fold the active tag filter into the saved query so the view reproduces it.
 		const query = tagFilter ? andQueries(baseQuery, tagQuery(tagFilter)) : baseQuery;
-		const view = await viewsStore.create({ name, query, pinned: true, sortBy, sortDir });
+		const view = await viewsStore.create({
+			name,
+			query,
+			pinned: true,
+			icon: null,
+			position: 0,
+			sortBy,
+			sortDir
+		});
 		if (view) {
 			saving = false;
 			viewName = '';
