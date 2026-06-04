@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { buildOpenApiDocument } from "@lectern/shared";
 import type { ReadLaterBackend, RssBackend } from "@lectern/shared";
 import type { OverlayStore, UnificationService } from "./unify";
+import type { TtsBackend } from "./backends/elevenlabs";
 import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
 import { buildRealDeps } from "./deps";
@@ -20,6 +21,7 @@ export interface AppDeps {
   readLater: ReadLaterBackend;
   overlay: OverlayStore;
   unify: UnificationService;
+  tts: TtsBackend;
 }
 
 function statusCodeOf(err: unknown): number | undefined {

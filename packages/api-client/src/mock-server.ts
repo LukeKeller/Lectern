@@ -21,7 +21,10 @@ import {
   SyncPullResponse,
   SyncPushResponse,
   TagsResponse,
+  TtsSettings,
+  TtsVoicesResponse,
   UpdateDocumentRequest,
+  UpdateTtsSettingsRequest,
   UpdateViewRequest,
   ViewsResponse,
 } from "@lectern/shared";
@@ -249,6 +252,14 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(body === undefined ? "" : JSON.stringify(body));
 }
 
+// In-memory TTS config for dev. Pre-configured so the Listen flow is exercisable
+// without a real key; the audio endpoint returns placeholder bytes.
+const mockTts = {
+  apiKey: "mock-key" as string | null,
+  voiceId: "21m00Tcm4TlvDq8ikWAM",
+  modelId: "eleven_flash_v2_5",
+};
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
   if (method === "OPTIONS") {
@@ -378,10 +389,64 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(res, 200, ImportOpmlResponse.parse({ message: "Feeds imported." }));
   }
 
-  const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights)?$/);
+  // ---- text-to-speech ("Listen") ----
+  if (path === "/settings/tts" && method === "GET") {
+    return send(
+      res,
+      200,
+      TtsSettings.parse({
+        configured: !!mockTts.apiKey,
+        voiceId: mockTts.voiceId,
+        modelId: mockTts.modelId,
+      }),
+    );
+  }
+  if (path === "/settings/tts" && method === "PATCH") {
+    const patch = UpdateTtsSettingsRequest.parse(body);
+    if (patch.apiKey !== undefined) mockTts.apiKey = patch.apiKey ? patch.apiKey : null;
+    if (patch.voiceId !== undefined) mockTts.voiceId = patch.voiceId;
+    if (patch.modelId !== undefined) mockTts.modelId = patch.modelId;
+    return send(
+      res,
+      200,
+      TtsSettings.parse({
+        configured: !!mockTts.apiKey,
+        voiceId: mockTts.voiceId,
+        modelId: mockTts.modelId,
+      }),
+    );
+  }
+  if (path === "/settings/tts/voices" && method === "GET") {
+    if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
+    return send(
+      res,
+      200,
+      TtsVoicesResponse.parse({
+        voices: [
+          { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" },
+          { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi" },
+        ],
+      }),
+    );
+  }
+
+  const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio)?$/);
   if (doc) {
     const id = doc[1]!;
     const sub = doc[2];
+    if (sub === "/audio" && method === "POST") {
+      if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
+      // Placeholder bytes so the SPA can build an object URL + exercise the player
+      // without a real ElevenLabs call. Not valid audio; enough for UI/state checks.
+      const bytes = Buffer.from(`mock-audio:${id}`);
+      res.writeHead(200, {
+        "content-type": "audio/mpeg",
+        "x-tts-content-hash": `mockhash_${id}`,
+        ...CORS_HEADERS,
+      });
+      res.end(bytes);
+      return;
+    }
     if (!sub && method === "GET") return send(res, 200, sampleCard({ id }));
     if (!sub && method === "PATCH")
       return send(res, 200, sampleCard({ id, ...UpdateDocumentRequest.parse(body) }));

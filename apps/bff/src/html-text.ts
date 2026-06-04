@@ -1,0 +1,54 @@
+/**
+ * Server-side HTML → plain text for TTS synthesis. No DOM: strips script/style,
+ * turns block-level boundaries into paragraph breaks (so the chunker can split
+ * sensibly), removes remaining tags, decodes common entities, and normalizes
+ * whitespace. Good enough to read an article aloud — not a full HTML parser.
+ */
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+  ldquo: "“",
+  rdquo: "”",
+  lsquo: "‘",
+  rsquo: "’",
+};
+
+function decodeEntities(s: string): string {
+  return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, body: string) => {
+    if (body[0] === "#") {
+      const code =
+        body[1] === "x" || body[1] === "X"
+          ? parseInt(body.slice(2), 16)
+          : parseInt(body.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return NAMED_ENTITIES[body.toLowerCase()] ?? match;
+  });
+}
+
+export function htmlToText(html: string): string {
+  let s = html;
+  s = s.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ");
+  s = s.replace(
+    /<\/(p|div|section|article|h[1-6]|li|blockquote|figcaption|tr|table|ul|ol|pre|header|footer)>/gi,
+    "\n\n",
+  );
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = decodeEntities(s);
+  s = s.replace(/[ \t\f\v\u00a0]+/g, " ");
+  s = s
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n");
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}

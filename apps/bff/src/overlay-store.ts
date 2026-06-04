@@ -24,7 +24,14 @@ import type {
   UpdateViewRequest,
 } from "@lectern/shared";
 import type { Db } from "./db/client";
-import { documentContent, documents, rssHighlights, savedViews } from "./db/schema";
+import {
+  appSettings,
+  documentContent,
+  documents,
+  rssHighlights,
+  savedViews,
+  ttsAudio,
+} from "./db/schema";
 import type { DocumentRow, NewDocumentRow } from "./db/schema";
 import { parseId } from "./ids";
 import {
@@ -411,7 +418,79 @@ export class DrizzleOverlayStore implements OverlayStore {
       .returning({ id: rssHighlights.id });
     return rows.length > 0;
   }
+
+  // --- text-to-speech config + audio cache ---
+  async getTtsConfig(): Promise<{ apiKey: string | null; voiceId: string; modelId: string }> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "tts"));
+    const v = (row?.value ?? {}) as Record<string, unknown>;
+    return {
+      apiKey: typeof v.apiKey === "string" && v.apiKey ? v.apiKey : null,
+      voiceId: typeof v.voiceId === "string" && v.voiceId ? v.voiceId : DEFAULT_TTS.voiceId,
+      modelId: typeof v.modelId === "string" && v.modelId ? v.modelId : DEFAULT_TTS.modelId,
+    };
+  }
+
+  async setTtsConfig(patch: {
+    apiKey?: string | null;
+    voiceId?: string;
+    modelId?: string;
+  }): Promise<void> {
+    const current = await this.getTtsConfig();
+    // Read the raw stored key (getTtsConfig already normalizes it to string|null).
+    const next: Record<string, unknown> = {
+      apiKey: current.apiKey,
+      voiceId: current.voiceId,
+      modelId: current.modelId,
+    };
+    if (patch.apiKey !== undefined) next.apiKey = patch.apiKey ? patch.apiKey : null;
+    if (patch.voiceId !== undefined) next.voiceId = patch.voiceId;
+    if (patch.modelId !== undefined) next.modelId = patch.modelId;
+    await this.db
+      .insert(appSettings)
+      .values({ key: "tts", value: next, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: next, updatedAt: new Date() },
+      });
+  }
+
+  async getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null> {
+    const [row] = await this.db
+      .select({ mime: ttsAudio.mime, audioBase64: ttsAudio.audioBase64 })
+      .from(ttsAudio)
+      .where(eq(ttsAudio.contentHash, contentHash));
+    if (!row) return null;
+    return { mime: row.mime, bytes: Buffer.from(row.audioBase64, "base64") };
+  }
+
+  async putCachedAudio(row: {
+    contentHash: string;
+    documentId: string;
+    mime: string;
+    bytes: Buffer;
+    charCount: number;
+  }): Promise<void> {
+    await this.db
+      .insert(ttsAudio)
+      .values({
+        contentHash: row.contentHash,
+        documentId: row.documentId,
+        mime: row.mime,
+        audioBase64: row.bytes.toString("base64"),
+        charCount: row.charCount,
+      })
+      .onConflictDoNothing({ target: ttsAudio.contentHash });
+  }
 }
+
+/** Fallback voice (ElevenLabs "Rachel") + model when the user hasn't chosen. */
+export const DEFAULT_TTS = {
+  voiceId: "21m00Tcm4TlvDq8ikWAM",
+  modelId: "eleven_flash_v2_5",
+} as const;
 
 function defaultCategory(source: Source): string {
   return source === "miniflux" ? "rss" : "article";

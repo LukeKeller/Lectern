@@ -199,6 +199,15 @@ class FakeOverlayStore implements OverlayStore {
   rssHighlights = new Map<string, Highlight[]>();
   views = new Map<string, SavedView>();
   deleted = new Map<string, string>();
+  ttsConfig: { apiKey: string | null; voiceId: string; modelId: string } = {
+    apiKey: null,
+    voiceId: "rachel",
+    modelId: "eleven_flash_v2_5",
+  };
+  audioCache = new Map<
+    string,
+    { mime: string; bytes: Buffer; documentId: string; charCount: number }
+  >();
   private seq = 0;
 
   async listDocuments(params: ListDocumentsParams): Promise<DocumentsPage> {
@@ -373,6 +382,47 @@ class FakeOverlayStore implements OverlayStore {
     }
     return false;
   }
+
+  async getTtsConfig() {
+    return { ...this.ttsConfig };
+  }
+  async setTtsConfig(patch: { apiKey?: string | null; voiceId?: string; modelId?: string }) {
+    if (patch.apiKey !== undefined) this.ttsConfig.apiKey = patch.apiKey ? patch.apiKey : null;
+    if (patch.voiceId !== undefined) this.ttsConfig.voiceId = patch.voiceId;
+    if (patch.modelId !== undefined) this.ttsConfig.modelId = patch.modelId;
+  }
+  async getCachedAudio(contentHash: string) {
+    const hit = this.audioCache.get(contentHash);
+    return hit ? { mime: hit.mime, bytes: hit.bytes } : null;
+  }
+  async putCachedAudio(row: {
+    contentHash: string;
+    documentId: string;
+    mime: string;
+    bytes: Buffer;
+    charCount: number;
+  }) {
+    if (!this.audioCache.has(row.contentHash)) {
+      this.audioCache.set(row.contentHash, {
+        mime: row.mime,
+        bytes: row.bytes,
+        documentId: row.documentId,
+        charCount: row.charCount,
+      });
+    }
+  }
+}
+
+class FakeTtsBackend {
+  calls: { text: string; voiceId: string; modelId: string }[] = [];
+  voices = [{ id: "rachel", name: "Rachel" }];
+  async synthesize(text: string, opts: { apiKey: string; voiceId: string; modelId: string }) {
+    this.calls.push({ text, voiceId: opts.voiceId, modelId: opts.modelId });
+    return Buffer.from(`audio:${text.length}`);
+  }
+  async listVoices() {
+    return this.voices;
+  }
 }
 
 // ---- Test harness ----------------------------------------------------------
@@ -382,6 +432,7 @@ interface Harness {
     rss: FakeRssBackend;
     readLater: FakeReadLaterBackend;
     overlay: FakeOverlayStore;
+    tts: FakeTtsBackend;
   };
 }
 
@@ -390,7 +441,8 @@ function makeHarness(): Harness {
   const readLater = new FakeReadLaterBackend();
   const overlay = new FakeOverlayStore();
   const unify = new UnificationService(rss, readLater, overlay);
-  return { deps: { rss, readLater, overlay, unify } };
+  const tts = new FakeTtsBackend();
+  return { deps: { rss, readLater, overlay, unify, tts } };
 }
 
 const TOKEN = config.LECTERN_API_TOKEN;
@@ -1047,6 +1099,93 @@ describe("readwise import", () => {
     expect(byUrl.get("https://c.test/short")).toBe("shortlist");
     expect(byUrl.get("https://d.test/arch")).toBe("archive");
     expect(byUrl.get("https://e.test/feed")).toBe("later");
+    await a.close();
+  });
+});
+
+describe("text-to-speech", () => {
+  it("reports unconfigured with default voice/model, never leaking a key", async () => {
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/settings/tts", headers: auth });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.configured).toBe(false);
+    expect(body.modelId).toBe("eleven_flash_v2_5");
+    expect(body).not.toHaveProperty("apiKey");
+    await a.close();
+  });
+
+  it("PATCH stores the key + voice/model and flips configured without echoing the key", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/settings/tts",
+      headers: auth,
+      payload: { apiKey: "sk-secret", voiceId: "v1", modelId: "eleven_multilingual_v2" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      configured: true,
+      voiceId: "v1",
+      modelId: "eleven_multilingual_v2",
+    });
+    expect(JSON.stringify(body)).not.toContain("sk-secret");
+    expect(harness.deps.overlay.ttsConfig.apiKey).toBe("sk-secret");
+    await a.close();
+  });
+
+  it("returns 409 for synthesis when no key is configured", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(harness.deps.tts.calls).toHaveLength(0);
+    await a.close();
+  });
+
+  it("synthesizes audio once, then serves the cache on a re-listen", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["content-type"]).toContain("audio/mpeg");
+    expect(first.headers["x-tts-content-hash"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(harness.deps.tts.calls).toHaveLength(1);
+    // Synthesis ran over the extracted plain text ("rss"), not raw HTML.
+    expect(harness.deps.tts.calls[0]!.text).toBe("rss");
+
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.headers["x-tts-content-hash"]).toBe(first.headers["x-tts-content-hash"]);
+    // Cache hit: ElevenLabs was NOT called again.
+    expect(harness.deps.tts.calls).toHaveLength(1);
+    await a.close();
+  });
+
+  it("lists voices only when configured", async () => {
+    const a = app();
+    const unset = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/tts/voices",
+      headers: auth,
+    });
+    expect(unset.statusCode).toBe(409);
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const ok = await a.inject({ method: "GET", url: "/api/v1/settings/tts/voices", headers: auth });
+    expect(ok.statusCode).toBe(200);
+    expect((ok.json() as { voices: unknown[] }).voices).toHaveLength(1);
     await a.close();
   });
 });

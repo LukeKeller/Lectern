@@ -224,6 +224,22 @@ export interface OverlayStore {
   listRssHighlights(documentId: string): Promise<Highlight[]>;
   addRssHighlight(documentId: string, input: NewHighlight): Promise<Highlight>;
   removeRssHighlight(highlightId: string): Promise<boolean>;
+
+  // --- text-to-speech config + audio cache (BFF-owned, server-side only) ---
+  /** TTS config including the raw API key. Server-internal: NEVER sent to the SPA. */
+  getTtsConfig(): Promise<{ apiKey: string | null; voiceId: string; modelId: string }>;
+  /** Merge a partial TTS config patch (apiKey === null clears the key). */
+  setTtsConfig(patch: { apiKey?: string | null; voiceId?: string; modelId?: string }): Promise<void>;
+  /** Synthesized audio cached under a content hash, or null on a miss. */
+  getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null>;
+  /** Persist synthesized audio under its content hash (ignored if it exists). */
+  putCachedAudio(row: {
+    contentHash: string;
+    documentId: string;
+    mime: string;
+    bytes: Buffer;
+    charCount: number;
+  }): Promise<void>;
 }
 
 /**

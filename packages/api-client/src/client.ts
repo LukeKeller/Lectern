@@ -23,7 +23,10 @@ import {
   SyncPushRequest,
   SyncPushResponse,
   TagsResponse,
+  TtsSettings,
+  TtsVoicesResponse,
   UpdateDocumentRequest,
+  UpdateTtsSettingsRequest,
   UpdateViewRequest,
   ViewsResponse,
 } from "@lectern/shared";
@@ -164,5 +167,41 @@ export class LecternClient {
   }
   importReadwise(body: ImportReadwiseRequest) {
     return this.request("POST", "/import/readwise", { body, schema: ImportReadwiseResponse });
+  }
+
+  // ---- text-to-speech ("Listen") ----
+  getTtsSettings() {
+    return this.request("GET", "/settings/tts", { schema: TtsSettings });
+  }
+  updateTtsSettings(body: UpdateTtsSettingsRequest) {
+    return this.request("PATCH", "/settings/tts", { body, schema: TtsSettings });
+  }
+  listTtsVoices() {
+    return this.request("GET", "/settings/tts/voices", { schema: TtsVoicesResponse });
+  }
+  /**
+   * Synthesize (or fetch cached) read-aloud audio for a document. Returns the
+   * raw audio bytes plus the server-side content hash. Bespoke (not JSON): the
+   * body is binary audio, so it bypasses the JSON request helper. Fires ONLY on
+   * an explicit Listen action — never speculatively.
+   */
+  async synthesizeAudio(
+    id: string,
+  ): Promise<{ bytes: ArrayBuffer; mime: string; contentHash: string }> {
+    const origin = (globalThis as { location?: { origin?: string } }).location?.origin;
+    const base = /^https?:\/\//.test(this.baseUrl) ? undefined : origin;
+    const url = new URL(`${this.baseUrl}/documents/${id}/audio`, base);
+    const res = await this.doFetch(url, {
+      method: "POST",
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+    });
+    if (!res.ok)
+      throw new LecternApiError(res.status, `POST /documents/${id}/audio -> ${res.status}`);
+    const bytes = await res.arrayBuffer();
+    return {
+      bytes,
+      mime: res.headers.get("content-type") ?? "audio/mpeg",
+      contentHash: res.headers.get("x-tts-content-hash") ?? "",
+    };
   }
 }

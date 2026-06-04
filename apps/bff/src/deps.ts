@@ -3,6 +3,7 @@ import { db } from "./db/client";
 import { MinifluxBackend } from "./backends/miniflux";
 import { ReadeckBackend } from "./backends/readeck";
 import { DrizzleOverlayStore } from "./overlay-store";
+import { ElevenLabsBackend } from "./backends/elevenlabs";
 import { UnificationService } from "./unify";
 import type { AppDeps } from "./app";
 
@@ -24,5 +25,6 @@ export function buildRealDeps(): AppDeps {
   });
   const overlay = new DrizzleOverlayStore(db);
   const unify = new UnificationService(rss, readLater, overlay);
-  return { rss, readLater, overlay, unify };
+  const tts = new ElevenLabsBackend();
+  return { rss, readLater, overlay, unify, tts };
 }

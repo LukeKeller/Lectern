@@ -572,6 +572,44 @@
           "unreadCount"
         ],
         "additionalProperties": false
+      },
+      "TtsSettings": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "voiceId": {
+            "type": "string"
+          },
+          "modelId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "voiceId",
+          "modelId"
+        ],
+        "additionalProperties": false
+      },
+      "TtsVoice": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -4316,6 +4354,186 @@
                 "additionalProperties": false
               }
             }
+          }
+        }
+      }
+    },
+    "/settings/tts": {
+      "get": {
+        "operationId": "getTtsSettings",
+        "summary": "Get text-to-speech settings (never returns the API key)",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get text-to-speech settings (never returns the API key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "voiceId": {
+                      "type": "string"
+                    },
+                    "modelId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "voiceId",
+                    "modelId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateTtsSettings",
+        "summary": "Update text-to-speech settings (set/clear key, voice, model)",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Update text-to-speech settings (set/clear key, voice, model)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "voiceId": {
+                      "type": "string"
+                    },
+                    "modelId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "voiceId",
+                    "modelId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "apiKey": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "voiceId": {
+                    "type": "string"
+                  },
+                  "modelId": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/tts/voices": {
+      "get": {
+        "operationId": "listTtsVoices",
+        "summary": "List the configured account's available voices",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List the configured account's available voices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "voices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "voices"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}/audio": {
+      "post": {
+        "operationId": "synthesizeAudio",
+        "summary": "Synthesize (or return cached) read-aloud audio for a document",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Synthesize (or return cached) read-aloud audio for a document"
           }
         }
       }

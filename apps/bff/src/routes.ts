@@ -24,14 +24,19 @@ import {
   SyncPushRequest,
   SyncPushResponse,
   TagsResponse,
+  TtsSettings,
+  TtsVoicesResponse,
   UpdateDocumentRequest,
   UpdateFeedRequest,
+  UpdateTtsSettingsRequest,
   UpdateViewRequest,
   ViewsResponse,
   type SyncConflict,
 } from "@lectern/shared";
+import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
 import { parseId } from "./ids";
+import { htmlToText } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
 import {
   applyAddHighlight,
@@ -135,17 +140,57 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get<{ Params: { id: string } }>("/documents/:id/content", async (req) => {
     const { id } = req.params;
-    const parsed = requireParsed(id);
-    // DB-first: serve our captured copy if we have it (fast, offline-able,
-    // survives backend loss). On a miss, fetch from the extractor once and own it.
-    const stored = await deps.overlay.getContent(id);
-    if (stored) return DocumentContentResponse.parse({ id, html: stored.html });
-    const html =
-      parsed.source === "readeck"
-        ? await deps.readLater.getContent(parsed.sourceId)
-        : await deps.rss.getEntryContent(parsed.sourceId);
-    await deps.overlay.putContent(id, html);
-    return DocumentContentResponse.parse({ id, html });
+    requireParsed(id);
+    return DocumentContentResponse.parse({ id, html: await loadContentHtml(deps, id) });
+  });
+
+  // ---- text-to-speech ("Listen") -----------------------------------------
+  app.get("/settings/tts", async () => ttsSettings(deps));
+
+  app.patch<{ Body: unknown }>("/settings/tts", async (req) => {
+    const body = UpdateTtsSettingsRequest.parse(req.body);
+    await deps.overlay.setTtsConfig(body);
+    return ttsSettings(deps);
+  });
+
+  app.get("/settings/tts/voices", async (_req, reply) => {
+    const cfg = await deps.overlay.getTtsConfig();
+    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    return TtsVoicesResponse.parse({ voices: await deps.tts.listVoices(cfg.apiKey) });
+  });
+
+  // Synthesis fires ONLY here, on an explicit client Listen action. Cache-first
+  // by content hash so re-listens and queue replays never re-bill ElevenLabs.
+  app.post<{ Params: { id: string } }>("/documents/:id/audio", async (req, reply) => {
+    const { id } = req.params;
+    requireParsed(id);
+    const cfg = await deps.overlay.getTtsConfig();
+    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    const text = htmlToText(await loadContentHtml(deps, id));
+    if (!text) return reply.code(422).send({ error: "no readable text for this document" });
+    const contentHash = createHash("sha256")
+      .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
+      .digest("hex");
+    let audio = await deps.overlay.getCachedAudio(contentHash);
+    if (!audio) {
+      const bytes = await deps.tts.synthesize(text, {
+        apiKey: cfg.apiKey,
+        voiceId: cfg.voiceId,
+        modelId: cfg.modelId,
+      });
+      audio = { mime: "audio/mpeg", bytes };
+      await deps.overlay.putCachedAudio({
+        contentHash,
+        documentId: id,
+        mime: audio.mime,
+        bytes,
+        charCount: text.length,
+      });
+    }
+    reply.header("content-type", audio.mime);
+    reply.header("x-tts-content-hash", contentHash);
+    reply.header("cache-control", "private, max-age=31536000, immutable");
+    return reply.send(audio.bytes);
   });
 
   app.get("/search", async (req) => {
@@ -352,6 +397,33 @@ async function loadDocument(deps: AppDeps, id: string): Promise<Card> {
   const card = await deps.overlay.getIndexedCard(id);
   if (!card) throw new NotFoundError(`document not found: ${id}`);
   return card;
+}
+
+/**
+ * DB-first article HTML: serve our captured copy if present (fast, offline-able,
+ * survives backend loss); on a miss fetch from the extractor once and own it.
+ * Shared by the content endpoint and TTS synthesis so they read identical text.
+ */
+async function loadContentHtml(deps: AppDeps, id: string): Promise<string> {
+  const parsed = requireParsed(id);
+  const stored = await deps.overlay.getContent(id);
+  if (stored) return stored.html;
+  const html =
+    parsed.source === "readeck"
+      ? await deps.readLater.getContent(parsed.sourceId)
+      : await deps.rss.getEntryContent(parsed.sourceId);
+  await deps.overlay.putContent(id, html);
+  return html;
+}
+
+/** Public TTS settings view (never leaks the API key — only whether one is set). */
+async function ttsSettings(deps: AppDeps) {
+  const cfg = await deps.overlay.getTtsConfig();
+  return TtsSettings.parse({
+    configured: !!cfg.apiKey,
+    voiceId: cfg.voiceId,
+    modelId: cfg.modelId,
+  });
 }
 
 export { NotFoundError };

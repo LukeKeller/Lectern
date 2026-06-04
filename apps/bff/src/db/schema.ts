@@ -106,6 +106,26 @@ export const syncCursors = pgTable("sync_cursors", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Generic single-user app settings (jsonb blob per key). Used for TTS config
+ * (ElevenLabs key + voice/model) so the key lives server-side, never in the SPA. */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Synthesized read-aloud audio, cached by content hash (text+voice+model) so
+ * re-listens and queue replays never re-bill ElevenLabs. Audio is base64 text
+ * (driver-agnostic; single-user scale). */
+export const ttsAudio = pgTable("tts_audio", {
+  contentHash: text("content_hash").primaryKey(),
+  documentId: text("document_id").notNull(),
+  mime: text("mime").notNull(),
+  audioBase64: text("audio_base64").notNull(),
+  charCount: integer("char_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Append-only ingestion audit log for observability/debugging of sync runs. */
 export const ingestionLog = pgTable("ingestion_log", {
   id: serial("id").primaryKey(),
@@ -123,3 +143,5 @@ export type RssHighlightRow = typeof rssHighlights.$inferSelect;
 export type NewRssHighlightRow = typeof rssHighlights.$inferInsert;
 export type DocumentContentRow = typeof documentContent.$inferSelect;
 export type NewDocumentContentRow = typeof documentContent.$inferInsert;
+export type AppSettingRow = typeof appSettings.$inferSelect;
+export type TtsAudioRow = typeof ttsAudio.$inferSelect;

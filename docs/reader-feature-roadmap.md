@@ -94,6 +94,13 @@ extension, native mobile apps, Daily Digest.
   show folders/categories, and let each category expand to its feeds (nested
   disclosure). Data is already there (`FeedsResponse` folders + feeds, feed
   `folderId`/`folderTitle`); needs a tree UI + persisted expand state.
+- **Swipe actions on list cards (mobile).** On small/touch screens, replace the
+  per-card action buttons with horizontal swipe gestures à la Readwise Reader
+  mobile: swipe one direction to triage/move (e.g. archive / later), the other
+  to toggle read/unread. More concise and a better small-screen UX. Should reuse
+  the existing triage mutations (`setLocation`, `markRead`); keep the buttons as
+  the desktop/pointer affordance and progressively enhance for touch. Needs
+  gesture handling + reveal animation + an undo affordance for destructive moves.
 
 ## Proposed build order
 1. **Reading view overhaul (P0):** 3-pane shell (TOC | article | Info/Notebook) +

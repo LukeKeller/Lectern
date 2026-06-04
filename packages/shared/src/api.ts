@@ -131,6 +131,31 @@ export const ImportReadwiseResponse = z.object({
 });
 export type ImportReadwiseResponse = z.infer<typeof ImportReadwiseResponse>;
 
+// ---- Text-to-speech (ElevenLabs "Listen") ----------------------------------
+
+/** TTS config exposed to the client. The API key is write-only and NEVER read
+ * back — only whether one is configured. */
+export const TtsSettings = z.object({
+  configured: z.boolean(),
+  voiceId: z.string(),
+  modelId: z.string(),
+});
+export type TtsSettings = z.infer<typeof TtsSettings>;
+
+/** Partial update. `apiKey` omitted = leave unchanged; null/"" = clear it. */
+export const UpdateTtsSettingsRequest = z.object({
+  apiKey: z.string().nullable().optional(),
+  voiceId: z.string().optional(),
+  modelId: z.string().optional(),
+});
+export type UpdateTtsSettingsRequest = z.infer<typeof UpdateTtsSettingsRequest>;
+
+export const TtsVoice = z.object({ id: z.string(), name: z.string() });
+export type TtsVoice = z.infer<typeof TtsVoice>;
+
+export const TtsVoicesResponse = z.object({ voices: z.array(TtsVoice) });
+export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponse>;
+
 // ---- Endpoint registry ------------------------------------------------------
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -373,6 +398,42 @@ export const endpoints: Endpoint[] = [
     response: ImportReadwiseResponse,
     status: 200,
   },
+  {
+    method: "GET",
+    path: "/settings/tts",
+    operationId: "getTtsSettings",
+    summary: "Get text-to-speech settings (never returns the API key)",
+    tags: ["tts"],
+    response: TtsSettings,
+    status: 200,
+  },
+  {
+    method: "PATCH",
+    path: "/settings/tts",
+    operationId: "updateTtsSettings",
+    summary: "Update text-to-speech settings (set/clear key, voice, model)",
+    tags: ["tts"],
+    body: UpdateTtsSettingsRequest,
+    response: TtsSettings,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/settings/tts/voices",
+    operationId: "listTtsVoices",
+    summary: "List the configured account's available voices",
+    tags: ["tts"],
+    response: TtsVoicesResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/documents/:id/audio",
+    operationId: "synthesizeAudio",
+    summary: "Synthesize (or return cached) read-aloud audio for a document",
+    tags: ["tts"],
+    status: 200,
+  },
 ];
 
 // ---- OpenAPI 3.1 document ----------------------------------------------------
@@ -415,6 +476,8 @@ const NAMED_SCHEMAS: Record<string, z.ZodType> = {
   Tag,
   SavedView,
   Feed,
+  TtsSettings,
+  TtsVoice,
 };
 
 export function buildOpenApiDocument(): JsonSchema {
