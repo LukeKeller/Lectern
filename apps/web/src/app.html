@@ -5,26 +5,23 @@
 		<title>Lectern</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
-		<!-- Status bar matches the app surface. Two media-scoped tags cover the
-		     default `auto` theme natively (no JS, no first-paint flash); the inline
-		     script below overrides both when the reader forces light/dark. Colours
-		     mirror `--bg` in app.css. -->
-		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ee" />
-		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1815" />
+		<!-- Status bar / system-chrome colour. A SINGLE theme-color tag (not two
+		     media-scoped ones): in a standalone PWA window the browser does NOT
+		     re-evaluate media-scoped theme-color tags after the app forces a theme,
+		     so it stays stuck on the launch colour. One tag we set imperatively —
+		     here pre-paint, then kept in sync by reader-settings — actually tracks
+		     the active theme. `auto` resolves against the OS scheme. Mirrors `--bg`. -->
+		<meta name="theme-color" content="#f6f4ee" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<meta name="apple-mobile-web-app-title" content="Lectern" />
-		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
 		<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
 		<link rel="manifest" href="/manifest.webmanifest" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<script>
-			// Apply the saved theme + matching status-bar colour before first paint
-			// so the PWA chrome (top status bar) never flashes the wrong colour.
-			// `auto` leaves each media-scoped theme-color tag at its scheme-natural
-			// value (handled natively by the browser); a forced theme overrides both
-			// tags so whichever one the OS matches shows the forced colour.
+			// Apply the saved theme + matching system-chrome colour before first paint
+			// so the PWA status/nav bars never flash (or stick on) the wrong colour.
 			(function () {
 				try {
 					var LIGHT = '#f6f4ee',
@@ -32,11 +29,12 @@
 					var raw = localStorage.getItem('lectern.reader');
 					var t = raw ? JSON.parse(raw).theme || 'auto' : 'auto';
 					if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-					var metas = document.querySelectorAll('meta[name="theme-color"]');
-					for (var i = 0; i < metas.length; i++) {
-						var natural = metas[i].media.indexOf('dark') !== -1 ? DARK : LIGHT;
-						metas[i].setAttribute('content', t === 'light' ? LIGHT : t === 'dark' ? DARK : natural);
-					}
+					var dark =
+						t === 'dark' ||
+						(t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+					document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+					var meta = document.querySelector('meta[name="theme-color"]');
+					if (meta) meta.setAttribute('content', dark ? DARK : LIGHT);
 				} catch (e) {}
 			})();
 		</script>

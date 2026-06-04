@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.7.2',
+		date: '2026-06-04',
+		title: 'Status bar matches your theme',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Installed to your home screen, the top status bar and bottom navigation bar now match your light/dark theme instead of staying a mismatched cream colour.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Further hardening for the Android home-screen icon — the app now offers only the bitmap icons Firefox can render.'
+			}
+		]
+	},
+	{
 		version: '0.7.1',
 		date: '2026-06-04',
 		title: 'Android install icon fix',

@@ -36,28 +36,28 @@ class ReaderSettingsStore {
 	}
 
 	/**
-	 * Keep the PWA status-bar colour (`<meta name="theme-color">`) in lockstep
-	 * with the active background so full-screen chrome reads as one surface
-	 * instead of a two-tone top/bottom. Two media-scoped tags (set in app.html)
-	 * track the OS scheme natively for `auto`; a forced light/dark theme overrides
-	 * both tags so whichever one the OS matches shows the forced colour. Colours
-	 * mirror `--bg` in app.css.
+	 * Keep the PWA system-chrome colour (`<meta name="theme-color">`) in lockstep
+	 * with the active background so the standalone status/nav bars read as one
+	 * surface instead of a two-tone top/bottom. A single tag (see app.html) set
+	 * imperatively — standalone windows ignore media-scoped theme-color tags after
+	 * a forced theme, so we resolve the effective scheme ourselves. `color-scheme`
+	 * is set alongside so native form controls / overscroll match. Mirrors `--bg`.
 	 */
 	private syncThemeColor(): void {
 		if (!browser) return;
 		const LIGHT = '#f6f4ee';
 		const DARK = '#1a1815';
 		const t = this.current.theme;
-		for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-			const natural = meta.media.includes('dark') ? DARK : LIGHT;
-			meta.content = t === 'light' ? LIGHT : t === 'dark' ? DARK : natural;
-		}
+		const dark =
+			t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+		document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+		const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+		if (meta) meta.content = dark ? DARK : LIGHT;
 	}
 
 	/**
-	 * While theme is `auto` the media-scoped tags follow the OS natively, but a
-	 * forced theme pins both tags — so re-sync on scheme changes to keep the
-	 * (now OS-matched) tag showing the forced colour.
+	 * For `auto`, the effective colour depends on the OS scheme — re-sync when it
+	 * changes so the bars follow the system without a reload.
 	 */
 	private ensureSchemeListener(): void {
 		if (!browser || this.schemeListenerBound) return;
