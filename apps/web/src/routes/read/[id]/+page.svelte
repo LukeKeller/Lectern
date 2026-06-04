@@ -481,6 +481,14 @@
 		window.addEventListener('keydown', onFindKey);
 		(async () => {
 			const initial = id ? await db.cards.get(id) : undefined;
+			// Mark RSS items seen on open (Readwise behaviour): flip MiniFlux read
+			// state so the item leaves the unread feed / newspaper edition.
+			if (initial && initial.source === 'miniflux' && initial.readState !== 'finished') {
+				const seen = getSync();
+				void seen
+					.enqueue({ type: 'markRead', id: initial.id, read: true })
+					.then(() => seen.flush());
+			}
 			try {
 				if (!id) throw new Error('Missing document id');
 				const content = await getClient().getContent(id);

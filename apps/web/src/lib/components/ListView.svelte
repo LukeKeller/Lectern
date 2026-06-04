@@ -91,12 +91,18 @@
 		let queued = false;
 		for (const card of cards) {
 			if (card.readState === 'finished') continue;
-			void sync.enqueue({
-				type: 'setReadingProgress',
-				id: card.id,
-				readingProgress: 1,
-				readAnchor: null
-			});
+			// RSS items need their MiniFlux read flag flipped (markRead); saved
+			// articles have no read flag, so fall back to completing progress.
+			if (card.source === 'miniflux') {
+				void sync.enqueue({ type: 'markRead', id: card.id, read: true });
+			} else {
+				void sync.enqueue({
+					type: 'setReadingProgress',
+					id: card.id,
+					readingProgress: 1,
+					readAnchor: null
+				});
+			}
 			queued = true;
 		}
 		if (queued) void sync.flush();

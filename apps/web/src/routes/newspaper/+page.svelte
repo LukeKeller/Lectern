@@ -73,12 +73,9 @@
 		let queued = false;
 		for (const c of [edition.lead, ...edition.sections.flatMap((s) => s.cards)]) {
 			if (!c) continue;
-			void sync.enqueue({
-				type: 'setReadingProgress',
-				id: c.id,
-				readingProgress: 1,
-				readAnchor: null
-			});
+			// Edition items are RSS entries; markRead flips MiniFlux read state so the
+			// edition actually empties (setReadingProgress alone never did).
+			void sync.enqueue({ type: 'markRead', id: c.id, read: true });
 			queued = true;
 		}
 		if (queued) void sync.flush();

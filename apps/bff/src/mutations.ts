@@ -89,6 +89,20 @@ export async function applyRemoveHighlight(
   if (!ok) throw new Error(`highlight not found: ${highlightId}`);
 }
 
+export async function applyMarkRead(
+  deps: MutationDeps,
+  parsed: ParsedId,
+  id: string,
+  read: boolean,
+): Promise<void> {
+  // RSS read-state lives in MiniFlux; mirror it into the index so the unread
+  // feed/newspaper reflect "seen" immediately, before the next backend poll.
+  if (parsed.source === "miniflux") {
+    await deps.rss.setRead(parsed.sourceId, read);
+  }
+  await deps.overlay.markIndexedRead(id, read);
+}
+
 /** Apply a single queued offline mutation to its owning store. */
 export async function applyMutation(deps: MutationDeps, m: Mutation): Promise<void> {
   const parsed = parseId(m.id);
@@ -117,5 +131,7 @@ export async function applyMutation(deps: MutationDeps, m: Mutation): Promise<vo
       return;
     case "removeHighlight":
       return applyRemoveHighlight(deps, parsed, m.highlightId);
+    case "markRead":
+      return applyMarkRead(deps, parsed, m.id, m.read);
   }
 }

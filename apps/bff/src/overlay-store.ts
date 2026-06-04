@@ -185,6 +185,19 @@ export class DrizzleOverlayStore implements OverlayStore {
       });
   }
 
+  async markIndexedRead(id: string, read: boolean): Promise<void> {
+    const [row] = await this.db.select().from(documents).where(eq(documents.id, id));
+    const meta = (row?.metadata ?? null) as { card?: Card } | null;
+    if (!meta?.card) return;
+    // Patch the stored backend card's read state and bump updatedAt so the
+    // change rides the next sync delta out to clients.
+    const card: Card = { ...meta.card, readState: read ? "finished" : "unopened" };
+    await this.db
+      .update(documents)
+      .set({ metadata: { ...meta, card }, updatedAt: new Date() })
+      .where(eq(documents.id, id));
+  }
+
   async deleteDocument(id: string): Promise<void> {
     await this.db.delete(rssHighlights).where(eq(rssHighlights.documentId, id));
     await this.db.delete(documents).where(eq(documents.id, id));

@@ -63,6 +63,8 @@ export function applyMutation(card: Card | undefined, mutation: Mutation): Card 
 			return { ...card, highlightCount: card.highlightCount + 1, updatedAt };
 		case 'removeHighlight':
 			return { ...card, highlightCount: Math.max(0, card.highlightCount - 1), updatedAt };
+		case 'markRead':
+			return { ...card, readState: mutation.read ? 'finished' : 'unopened', updatedAt };
 		case 'delete':
 			return undefined;
 	}

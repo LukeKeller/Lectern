@@ -64,13 +64,21 @@ public **share bundles**/links + highlight-as-image, e-ink mode, browser
 extension, native mobile apps, Daily Digest.
 
 ## Captured ideas (logged, not scheduled)
-- **"Listen" — per-article read-aloud (TTS).** A Listen action in the reader view
-  (alongside `H` highlight) that reads the current article aloud, ideally with
-  play/pause + paragraph follow. Candidate engine: **ElevenLabs** — the owner has
-  an account + API key ready to try. Revisits the MVP-deferred TTS line above with
-  a concrete provider; route audio through the BFF (keep the key server-side, never
-  ship it to the SPA) and consider caching synthesized audio per document. Not
-  started — picking up later.
+- **"Listen" — per-article read-aloud (TTS) + listen queue.** A Listen action on
+  *every* item (card menu + reader view, alongside `H`) using **ElevenLabs**
+  ([API ref](https://elevenlabs.io/docs/api-reference/introduction); owner has an
+  account + key). Hard requirements:
+  - **Cost control:** NEVER call ElevenLabs implicitly. Synthesis fires *only* on
+    an explicit Listen click — no prefetch, no hover, no background warming.
+  - **Queue:** allow queueing multiple articles ("Add to queue") and a queue
+    manager (reorder, remove, clear, autoplay next, now-playing + up-next).
+  - **Architecture:** route TTS through the BFF — key stays server-side, never in
+    the SPA. Cache synthesized audio per document (content hash) so re-listens and
+    queue replays don't re-bill. Stream/seek playback; persist queue + playback
+    position offline (Dexie). Pick voice/model + chunk long articles by paragraph
+    so playback can start before the whole piece renders (and to bound spend).
+  Revisits the MVP-deferred TTS line above. Build only AFTER the current
+  flip-through/reader/library work is shipped (owner's call).
 
 ## Proposed build order
 1. **Reading view overhaul (P0):** 3-pane shell (TOC | article | Info/Notebook) +

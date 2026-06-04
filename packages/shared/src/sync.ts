@@ -29,6 +29,7 @@ export const Mutation = z.discriminatedUnion("type", [
     endOffset: z.number().int().nonnegative(),
   }),
   z.object({ type: z.literal("removeHighlight"), id: z.string(), highlightId: z.string() }),
+  z.object({ type: z.literal("markRead"), id: z.string(), read: z.boolean().default(true) }),
 ]);
 export type Mutation = z.infer<typeof Mutation>;
 

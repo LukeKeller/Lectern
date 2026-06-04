@@ -190,6 +190,8 @@ export interface OverlayStore {
   upsertIndex(card: Card): Promise<void>;
   /** Index from a backend poll: refresh backend-truth columns, PRESERVE overlay. */
   indexFromBackend(card: Card): Promise<void>;
+  /** Flip the read state on the indexed backend card (RSS "mark seen" on open). */
+  markIndexedRead(id: string, read: boolean): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */
   deleteDocument(id: string): Promise<void>;
   /**

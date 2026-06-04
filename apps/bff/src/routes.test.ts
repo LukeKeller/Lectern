@@ -48,6 +48,7 @@ class FakeRssBackend implements RssBackend {
   entries = new Map<string, Card>();
   content = new Map<string, string>();
   feeds: Feed[] = [];
+  reads = new Map<string, boolean>();
   folders: FeedFolder[] = [];
   refreshed = 0;
   imported: string[] = [];
@@ -58,7 +59,9 @@ class FakeRssBackend implements RssBackend {
   async getEntryContent(sourceId: string): Promise<string> {
     return this.content.get(sourceId) ?? "<article>rss</article>";
   }
-  async setRead(): Promise<void> {}
+  async setRead(sourceId: string, read: boolean): Promise<void> {
+    this.reads.set(sourceId, read);
+  }
   async setStarred(): Promise<void> {}
   async refresh(): Promise<void> {
     this.refreshed++;
@@ -301,6 +304,10 @@ class FakeOverlayStore implements OverlayStore {
   async indexFromBackend(card: Card): Promise<void> {
     this.index.set(card.id, card);
     this.deleted.delete(card.id);
+  }
+  async markIndexedRead(id: string, read: boolean): Promise<void> {
+    const base = this.index.get(id);
+    if (base) this.index.set(id, { ...base, readState: read ? "finished" : "unopened" });
   }
   async deleteDocument(id: string): Promise<void> {
     this.index.delete(id);
@@ -815,6 +822,27 @@ describe("sync", () => {
     expect(res.json().applied).toBe(2);
     expect(res.json().conflicts).toHaveLength(1);
     expect(res.json().conflicts[0].id).toBe("miniflux:2");
+    await a.close();
+  });
+
+  it("markRead flags an RSS entry read in MiniFlux and the index", async () => {
+    harness.deps.rss.entries.set(
+      "5",
+      makeCard({ id: "miniflux:5", source: "miniflux", readState: "unopened" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/sync",
+      headers: auth,
+      payload: { mutations: [{ type: "markRead", id: "miniflux:5", read: true }] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().applied).toBe(1);
+    expect(harness.deps.rss.reads.get("5")).toBe(true);
+    const card = await harness.deps.overlay.getIndexedCard("miniflux:5");
+    expect(card?.readState).toBe("finished");
     await a.close();
   });
 
