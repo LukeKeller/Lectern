@@ -12,6 +12,7 @@
 	predicate={later}
 	{baseQuery}
 	empty="Nothing saved for later yet."
+	emptyHint="Send articles here to read when you have time. Use Read later on any card, or swipe right on mobile."
 	emptyIcon="clock"
 	actions={[
 		{ label: 'Shortlist', location: 'shortlist' },

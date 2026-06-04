@@ -12,6 +12,7 @@
 	predicate={archive}
 	{baseQuery}
 	empty="Nothing archived yet."
+	emptyHint="Items you file away land here. Archive from any list — or swipe left on a card — to keep your inbox clear."
 	emptyIcon="archive"
 	actions={[
 		{ label: 'Later', location: 'later' },

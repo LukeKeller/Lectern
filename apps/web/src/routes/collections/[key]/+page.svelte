@@ -11,6 +11,7 @@
 		title={view.label}
 		predicate={view.predicate}
 		empty="Nothing here yet."
+		emptyHint="Items matching this collection will appear here automatically as you read and save."
 		emptyIcon={view.icon}
 	/>
 {:else}

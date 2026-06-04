@@ -12,6 +12,7 @@
 	predicate={inbox}
 	{baseQuery}
 	empty="Inbox zero. Nothing new to triage."
+	emptyHint="New items from your feeds and saved articles land here. Sort them into Later, Shortlist, or Archive to keep it clear."
 	actions={[
 		{ label: 'Later', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' },

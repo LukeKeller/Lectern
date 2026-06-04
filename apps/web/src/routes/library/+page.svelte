@@ -18,6 +18,7 @@
 	predicate={library}
 	{baseQuery}
 	empty="Your library is empty."
+	emptyHint="Saved articles and bookmarks live here. Save a page from the web or pull one in from your feeds to start your collection."
 	emptyIcon="book"
 	actions={[
 		{ label: 'Later', location: 'later' },
