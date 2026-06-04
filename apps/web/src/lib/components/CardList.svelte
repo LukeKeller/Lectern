@@ -194,6 +194,7 @@
 					<article
 						class="card swipe-front"
 						class:unread={card.readState !== 'finished'}
+						class:menu-open={menuOpenId === card.id}
 						onmouseenter={() => onselect?.(i)}
 					>
 						<span class="lead">
@@ -479,6 +480,12 @@
 	}
 	.card.unread {
 		border-left-color: var(--accent);
+	}
+	/* While the overflow menu is open, let it escape the card's overflow clip and
+	   paint above sibling cards (each .swipe-front establishes a z-index:1 context). */
+	.card.menu-open {
+		overflow: visible;
+		z-index: 30;
 	}
 	li.selected .card {
 		background: var(--accent-soft);

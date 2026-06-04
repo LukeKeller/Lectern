@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.8',
+		date: '2026-06-04',
+		title: 'Card menu fix',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The three-dot menu on list cards now opens above the cards below it, so all of its options are visible again.'
+			}
+		]
+	},
+	{
 		version: '0.6.7',
 		date: '2026-06-04',
 		title: 'Resume listening anywhere',
