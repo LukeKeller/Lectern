@@ -14,8 +14,8 @@ name = "Configuration"
         [main.newsletters.imap_host]
         ask = "IMAP host"
         type = "string"
-        example = "localhost"
-        help = "Use 'localhost' if the mailbox lives on this server."
+        example = "mail.example.com"
+        help = "Use the mail server's certificate hostname (e.g. your mail domain), NOT 'localhost' — a TLS connection to 'localhost' fails the certificate name check even on the same server."
         optional = true
 
         [main.newsletters.imap_port]
