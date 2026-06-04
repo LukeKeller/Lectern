@@ -14,6 +14,7 @@ import {
   progressToReadeck,
   readeckLocationFromArchived,
 } from "../unify";
+import { safeHttpUrl } from "../cover";
 
 /**
  * Readeck read-later adapter. Bearer-token API; normalizes bookmarks into
@@ -38,6 +39,8 @@ export interface ReadeckBookmark {
   read_anchor?: string | null;
   word_count: number | null;
   reading_time: number | null;
+  /** Readeck-extracted media (subset). Used for the card cover thumbnail. */
+  resources?: { image?: { src?: string }; thumbnail?: { src?: string } };
 }
 
 export interface ReadeckAnnotation {
@@ -88,6 +91,7 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     author: bookmark.authors?.[0] ?? null,
     siteName: bookmark.site_name ?? null,
     url: bookmark.url,
+    coverImage: safeHttpUrl(bookmark.resources?.image?.src ?? bookmark.resources?.thumbnail?.src),
     wordCount: bookmark.word_count ?? null,
     readingTimeMinutes: bookmark.reading_time ?? null,
     readingProgress: progressFromReadeck(bookmark.read_progress ?? 0),

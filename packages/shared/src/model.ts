@@ -67,6 +67,7 @@ export const Card = z.object({
   author: z.string().nullable().default(null),
   siteName: z.string().nullable().default(null),
   url: z.url(),
+  coverImage: z.url().nullable().default(null),
   wordCount: z.number().int().nonnegative().nullable().default(null),
   readingTimeMinutes: z.number().int().nonnegative().nullable().default(null),
   readingProgress: z.number().min(0).max(1).default(0),

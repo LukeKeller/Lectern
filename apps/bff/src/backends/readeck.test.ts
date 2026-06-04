@@ -69,6 +69,15 @@ describe("readeckBookmarkToCard", () => {
     expect(card.author).toBeNull();
     expect(card.readAnchor).toBeNull();
   });
+
+  it("maps a cover image from Readeck resources, else null", () => {
+    expect(readeckBookmarkToCard(baseBookmark).coverImage).toBeNull();
+    const withImg = readeckBookmarkToCard({
+      ...baseBookmark,
+      resources: { image: { src: "https://danluu.com/cover.jpg" } },
+    });
+    expect(withImg.coverImage).toBe("https://danluu.com/cover.jpg");
+  });
 });
 
 describe("annotationToHighlight", () => {

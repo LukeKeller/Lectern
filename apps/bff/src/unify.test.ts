@@ -33,6 +33,7 @@ function rssCard(over: Partial<Card> = {}): Card {
     author: null,
     siteName: null,
     url: "https://example.com/a",
+    coverImage: null,
     wordCount: null,
     readingTimeMinutes: 3,
     readingProgress: 0,

@@ -77,6 +77,18 @@ describe("minifluxEntryToCard", () => {
     expect(card.url).toBe("");
     expect(Card.safeParse(card).success).toBe(false);
   });
+
+  it("extracts a cover image from entry content", () => {
+    const card = minifluxEntryToCard({
+      ...baseEntry,
+      content: '<p>intro</p><img src="https://cdn.example.com/cover.jpg">',
+    });
+    expect(card.coverImage).toBe("https://cdn.example.com/cover.jpg");
+  });
+
+  it("leaves coverImage null when the content has no image", () => {
+    expect(minifluxEntryToCard(baseEntry).coverImage).toBeNull();
+  });
 });
 
 describe("minifluxReadState", () => {

@@ -80,6 +80,21 @@ extension, native mobile apps, Daily Digest.
   Revisits the MVP-deferred TTS line above. Build only AFTER the current
   flip-through/reader/library work is shipped (owner's call).
 
+## Requested — do after the current flip/reader/library batch
+- **Sort by published date, as the default.** Order lists by article publish date
+  and make it the default sort (today the default is `updatedAt`). For RSS,
+  publish date ≈ `Card.savedAt` (MiniFlux `published_at`); for saved articles
+  `savedAt` is the save time — so this likely wants a distinct `publishedAt` on
+  `Card` (contract + adapters) rather than overloading `savedAt`, then a new
+  `publishedAt` sort option wired as the `DEFAULT_VIEW`/list default.
+- **Sidebar feed count = UNREAD only.** The "Feed" sidebar badge must show the
+  unread feed count, not total. (Verify what it counts today and scope to
+  `location === 'feed' && readState !== 'finished'`.)
+- **Collapsible feeds-by-category in the sidebar.** Make the Feeds entry expand to
+  show folders/categories, and let each category expand to its feeds (nested
+  disclosure). Data is already there (`FeedsResponse` folders + feeds, feed
+  `folderId`/`folderTitle`); needs a tree UI + persisted expand state.
+
 ## Proposed build order
 1. **Reading view overhaul (P0):** 3-pane shell (TOC | article | Info/Notebook) +
    `[`/`]` toggles → paragraph focus + `Space`/arrow advance + auto-scroll →

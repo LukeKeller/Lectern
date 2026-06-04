@@ -8,6 +8,7 @@ import type {
   RssBackend,
 } from "@lectern/shared";
 import { BackendHttpError } from "../errors";
+import { extractCoverImage } from "../cover";
 
 /**
  * MiniFlux RSS adapter. Talks to `/v1/*`, normalizing entries into `Card`s.
@@ -94,6 +95,9 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
     // `url`; fall back to the feed's canonical link so the card keeps a valid,
     // openable URL and survives `Card` validation on the sync read path.
     url: entry.url || entry.feed?.site_url || entry.feed?.feed_url || "",
+    // No native image on RSS entries — pull og:image / first <img> from the
+    // entry content (best-effort, absolute http(s) only, else null).
+    coverImage: extractCoverImage(entry.content, entry.url || entry.feed?.site_url || ""),
     wordCount: null,
     readingTimeMinutes: entry.reading_time ?? null,
     readingProgress: 0,

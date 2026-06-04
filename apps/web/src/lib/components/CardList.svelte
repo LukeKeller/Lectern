@@ -5,6 +5,7 @@
 	import { getSync } from '$lib/sync';
 	import Icon, { type IconName } from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	interface TriageAction {
 		label: string;
@@ -87,6 +88,9 @@
 	}
 
 	const finished = (card: Card) => card.readingProgress >= 0.99;
+
+	// Cover thumbnails fall back to the source avatar when absent or on load error.
+	let failedCovers = new SvelteSet<string>();
 </script>
 
 {#if !cards}
@@ -105,7 +109,17 @@
 		{#each cards as card, i (card.id)}
 			<li class:selected={i === selectedIndex}>
 				<article class="card" onmouseenter={() => onselect?.(i)}>
-					<SourceAvatar url={card.url} siteName={card.siteName} />
+					{#if card.coverImage && !failedCovers.has(card.id)}
+						<img
+							class="thumb"
+							src={card.coverImage}
+							alt=""
+							loading="lazy"
+							onerror={() => failedCovers.add(card.id)}
+						/>
+					{:else}
+						<SourceAvatar url={card.url} siteName={card.siteName} />
+					{/if}
 					<div class="body">
 						<a class="title" href={resolve('/read/[id]', { id: card.id })}>
 							{card.title || hostname(card.url)}
@@ -169,6 +183,15 @@
 {/if}
 
 <style>
+	.thumb {
+		flex-shrink: 0;
+		width: 30px;
+		height: 30px;
+		border-radius: var(--radius-sm);
+		object-fit: cover;
+		border: 1px solid var(--border);
+		background: var(--surface-alt);
+	}
 	.cards {
 		list-style: none;
 		margin: 0;
