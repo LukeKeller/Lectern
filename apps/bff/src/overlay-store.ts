@@ -10,7 +10,7 @@ import {
   isNull,
   sql as dsql,
 } from "drizzle-orm";
-import { Card } from "@lectern/shared";
+import { Card, PlayerState } from "@lectern/shared";
 import type {
   CreateViewRequest,
   Highlight,
@@ -483,6 +483,23 @@ export class DrizzleOverlayStore implements OverlayStore {
         charCount: row.charCount,
       })
       .onConflictDoNothing({ target: ttsAudio.contentHash });
+  }
+
+  async getPlayerState(): Promise<PlayerState> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "player"));
+    return PlayerState.parse(row?.value ?? {});
+  }
+
+  async setPlayerState(state: PlayerState): Promise<PlayerState> {
+    const next = PlayerState.parse({ ...state, updatedAt: new Date().toISOString() });
+    await this.db
+      .insert(appSettings)
+      .values({ key: "player", value: next, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: next, updatedAt: new Date() } });
+    return next;
   }
 }
 

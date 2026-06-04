@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   Card,
   Feed,
+  PlayerState,
   type BackendPage,
   type BackendListParams,
   type CreateViewRequest,
@@ -411,6 +412,15 @@ class FakeOverlayStore implements OverlayStore {
         charCount: row.charCount,
       });
     }
+  }
+
+  player: PlayerState = PlayerState.parse({});
+  async getPlayerState() {
+    return this.player;
+  }
+  async setPlayerState(state: PlayerState) {
+    this.player = PlayerState.parse({ ...state, updatedAt: "2026-06-04T00:00:00Z" });
+    return this.player;
   }
 }
 
@@ -1255,6 +1265,38 @@ describe("text-to-speech", () => {
       payload: { voiceId: "v" },
     });
     expect(res.statusCode).toBe(409);
+    await a.close();
+  });
+
+  it("saves and returns the cross-device player state", async () => {
+    const a = app();
+    const empty = await a.inject({ method: "GET", url: "/api/v1/settings/player", headers: auth });
+    expect(empty.statusCode).toBe(200);
+    expect((empty.json() as { queue: unknown[] }).queue).toEqual([]);
+
+    const saved = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/settings/player",
+      headers: auth,
+      payload: { queue: [{ id: "miniflux:1", title: "A" }], index: 0, position: 42, rate: 1.5 },
+    });
+    expect(saved.statusCode).toBe(200);
+    const body = saved.json() as {
+      index: number;
+      position: number;
+      rate: number;
+      updatedAt: string;
+    };
+    expect(body.position).toBe(42);
+    expect(body.rate).toBe(1.5);
+    expect(body.updatedAt).toBeTruthy();
+
+    const reloaded = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/player",
+      headers: auth,
+    });
+    expect((reloaded.json() as { queue: { id: string }[] }).queue[0]!.id).toBe("miniflux:1");
     await a.close();
   });
 });

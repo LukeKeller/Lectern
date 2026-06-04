@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.7',
+		date: '2026-06-04',
+		title: 'Resume listening anywhere',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Your Listen queue and position now sync across devices — pause on your phone and pick up on your laptop, and a refresh no longer resets playback.'
+			},
+			{
+				kind: 'improved',
+				text: 'URLs are stripped from articles before they’re read aloud, so the voice no longer recites long web links.'
+			}
+		]
+	},
+	{
 		version: '0.6.6',
 		date: '2026-06-04',
 		title: 'Redesigned cards',

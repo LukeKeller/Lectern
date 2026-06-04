@@ -15,6 +15,7 @@ import {
   HighlightsResponse,
   ListDocumentsQuery,
   ListDocumentsResponse,
+  PlayerState,
   SavedView,
   SaveDocumentRequest,
   SearchResponse,
@@ -178,6 +179,12 @@ export class LecternClient {
   }
   listTtsVoices() {
     return this.request("GET", "/settings/tts/voices", { schema: TtsVoicesResponse });
+  }
+  getPlayerState() {
+    return this.request("GET", "/settings/player", { schema: PlayerState });
+  }
+  savePlayerState(body: PlayerState) {
+    return this.request("PATCH", "/settings/player", { body, schema: PlayerState });
   }
   /**
    * Synthesize (or fetch cached) read-aloud audio for a document. Returns the

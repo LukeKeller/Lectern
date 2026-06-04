@@ -166,6 +166,22 @@ export type TtsPreviewRequest = z.infer<typeof TtsPreviewRequest>;
 export const SynthesizeAudioRequest = z.object({ title: z.string().optional() });
 export type SynthesizeAudioRequest = z.infer<typeof SynthesizeAudioRequest>;
 
+// ---- Listen player state (synced across devices) ---------------------------
+
+export const PlayerQueueItem = z.object({ id: z.string(), title: z.string() });
+export type PlayerQueueItem = z.infer<typeof PlayerQueueItem>;
+
+/** The "Listen" player's cross-device state: queue, current track, position,
+ * speed. `updatedAt` is server-set on each save (last-write-wins). */
+export const PlayerState = z.object({
+  queue: z.array(PlayerQueueItem).default([]),
+  index: z.number().int().default(-1),
+  position: z.number().nonnegative().default(0),
+  rate: z.number().positive().default(1),
+  updatedAt: z.string().nullable().default(null),
+});
+export type PlayerState = z.infer<typeof PlayerState>;
+
 // ---- Endpoint registry ------------------------------------------------------
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -452,6 +468,25 @@ export const endpoints: Endpoint[] = [
     summary: "Synthesize (or return cached) a short sample of a voice",
     tags: ["tts"],
     body: TtsPreviewRequest,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/settings/player",
+    operationId: "getPlayerState",
+    summary: "Get the cross-device Listen player state",
+    tags: ["tts"],
+    response: PlayerState,
+    status: 200,
+  },
+  {
+    method: "PATCH",
+    path: "/settings/player",
+    operationId: "savePlayerState",
+    summary: "Save the cross-device Listen player state",
+    tags: ["tts"],
+    body: PlayerState,
+    response: PlayerState,
     status: 200,
   },
 ];

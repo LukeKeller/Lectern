@@ -6,6 +6,7 @@ import type {
   Highlight,
   Location,
   NewHighlight,
+  PlayerState,
   ReadLaterBackend,
   ReadState,
   RssBackend,
@@ -229,7 +230,11 @@ export interface OverlayStore {
   /** TTS config including the raw API key. Server-internal: NEVER sent to the SPA. */
   getTtsConfig(): Promise<{ apiKey: string | null; voiceId: string; modelId: string }>;
   /** Merge a partial TTS config patch (apiKey === null clears the key). */
-  setTtsConfig(patch: { apiKey?: string | null; voiceId?: string; modelId?: string }): Promise<void>;
+  setTtsConfig(patch: {
+    apiKey?: string | null;
+    voiceId?: string;
+    modelId?: string;
+  }): Promise<void>;
   /** Synthesized audio cached under a content hash, or null on a miss. */
   getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null>;
   /** Persist synthesized audio under its content hash (ignored if it exists). */
@@ -240,6 +245,12 @@ export interface OverlayStore {
     bytes: Buffer;
     charCount: number;
   }): Promise<void>;
+
+  // --- cross-device Listen player state ---
+  /** The player's queue/index/position/rate (defaults when never saved). */
+  getPlayerState(): Promise<PlayerState>;
+  /** Persist the player state; stamps updatedAt and returns the saved value. */
+  setPlayerState(state: PlayerState): Promise<PlayerState>;
 }
 
 /**

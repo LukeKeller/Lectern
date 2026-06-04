@@ -16,6 +16,7 @@ import {
   HighlightsResponse,
   ListDocumentsResponse,
   SaveDocumentRequest,
+  PlayerState,
   SavedView,
   SyncPushRequest,
   SyncPullResponse,
@@ -265,6 +266,7 @@ const mockTts = {
   voiceId: "21m00Tcm4TlvDq8ikWAM",
   modelId: "eleven_flash_v2_5",
 };
+let mockPlayer = PlayerState.parse({});
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
@@ -446,6 +448,13 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     });
     res.end(bytes);
     return;
+  }
+  if (path === "/settings/player" && method === "GET") {
+    return send(res, 200, PlayerState.parse(mockPlayer));
+  }
+  if (path === "/settings/player" && method === "PATCH") {
+    mockPlayer = PlayerState.parse({ ...(body as object), updatedAt: new Date().toISOString() });
+    return send(res, 200, mockPlayer);
   }
 
   const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio)?$/);

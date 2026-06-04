@@ -65,3 +65,18 @@ export function snippet(text: string, max = 280): string | null {
   const lastSpace = cut.lastIndexOf(" ");
   return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
 }
+
+/**
+ * Remove URLs from text destined for speech so the voice doesn't read them out.
+ * Strips http(s) links and bare www. hosts, then tidies the leftover spacing and
+ * any now-empty parentheses/brackets.
+ */
+export function stripUrls(text: string): string {
+  return text
+    .replace(/https?:\/\/[^\s)\]]+/gi, "")
+    .replace(/\bwww\.[^\s)\]]+/gi, "")
+    .replace(/\(\s*\)|\[\s*\]/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.,;:!?])/g, "$1")
+    .trim();
+}

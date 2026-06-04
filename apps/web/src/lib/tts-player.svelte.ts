@@ -36,7 +36,11 @@ class TtsPlayer {
 	private previewEl: HTMLAudioElement | null = null;
 	private previewUrl: string | null = null;
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
+	private serverTimer: ReturnType<typeof setTimeout> | undefined;
 	private restored = false;
+	/** Position (s) to resume the restored track at, applied on its first play. */
+	private resumeAt = 0;
+	private restoreIndex = -1;
 	/** Monotonic token so a slow load can't clobber a newer one. */
 	private loadToken = 0;
 
@@ -54,18 +58,37 @@ class TtsPlayer {
 		return voiceOptions(this.accountVoices, this.voiceId);
 	}
 
-	/** Restore the persisted queue (paused), wire audio, load voice settings. */
 	init(): void {
 		if (this.restored || typeof window === 'undefined') return;
 		this.restored = true;
 		this.ensureAudio();
-		void db.ttsState.get('state').then((s) => {
-			if (!s) return;
-			this.queue = s.queue;
-			this.index = s.index < s.queue.length ? s.index : -1;
-			if (s.rate) this.rate = s.rate;
-		});
+		void this.restore();
 		void this.loadSettings();
+	}
+
+	/**
+	 * Restore the queue + position (paused). Server state wins when it has a queue
+	 * (so you can pause on one device and resume on another); otherwise fall back
+	 * to the local Dexie copy (offline + instant). Never auto-plays.
+	 */
+	private async restore(): Promise<void> {
+		const local = await db.ttsState.get('state').catch(() => undefined);
+		let state = local
+			? { queue: local.queue, index: local.index, position: local.position, rate: local.rate ?? 1 }
+			: null;
+		try {
+			const server = await getClient().getPlayerState();
+			if (server.queue.length > 0) state = server;
+		} catch {
+			/* offline: keep the local copy */
+		}
+		if (!state) return;
+		this.queue = state.queue;
+		this.index = state.index >= 0 && state.index < state.queue.length ? state.index : -1;
+		if (state.rate) this.rate = state.rate;
+		this.resumeAt = state.position ?? 0;
+		this.restoreIndex = this.index;
+		this.currentTime = this.resumeAt;
 	}
 
 	/** Pull the configured voice + model so the player's selector reflects them. */
@@ -148,6 +171,8 @@ class TtsPlayer {
 		});
 		a.addEventListener('pause', () => {
 			if (this.status === 'playing') this.status = 'paused';
+			// Persist promptly so another device can pick up where this one paused.
+			void this.saveServer();
 		});
 		a.addEventListener('ended', () => {
 			void this.next();
@@ -194,6 +219,9 @@ class TtsPlayer {
 	async playIndex(i: number): Promise<void> {
 		if (i < 0 || i >= this.queue.length) return;
 		const item = this.queue[i]!;
+		// One-shot resume: only the restored track at the restored position seeks.
+		const resume = i === this.restoreIndex && this.resumeAt > 0 ? this.resumeAt : 0;
+		this.resumeAt = 0;
 		this.index = i;
 		this.status = 'loading';
 		this.error = undefined;
@@ -209,6 +237,14 @@ class TtsPlayer {
 			a.src = this.objectUrl;
 			a.playbackRate = this.rate;
 			await a.play();
+			if (resume > 0) {
+				try {
+					a.currentTime = resume;
+					this.currentTime = resume;
+				} catch {
+					/* seek may fail before metadata; harmless */
+				}
+			}
 			this.persistSoon();
 		} catch (err) {
 			if (token !== this.loadToken) return;
@@ -318,6 +354,7 @@ class TtsPlayer {
 		this.currentTime = 0;
 		this.duration = 0;
 		this.persistSoon();
+		void this.saveServer();
 	}
 
 	private stopAudio(): void {
@@ -344,6 +381,30 @@ class TtsPlayer {
 				rate: this.rate
 			});
 		}, 500);
+		// Sync to the server on a longer debounce so other devices/refreshes can
+		// resume; pause/stop flush immediately via saveServer().
+		if (this.serverTimer) clearTimeout(this.serverTimer);
+		this.serverTimer = setTimeout(() => void this.saveServer(), 3000);
+	}
+
+	/** Push the current state to the server now (cross-device resume). */
+	private async saveServer(): Promise<void> {
+		if (typeof window === 'undefined') return;
+		if (this.serverTimer) {
+			clearTimeout(this.serverTimer);
+			this.serverTimer = undefined;
+		}
+		try {
+			await getClient().savePlayerState({
+				queue: this.queue,
+				index: this.index,
+				position: this.currentTime,
+				rate: this.rate,
+				updatedAt: null
+			});
+		} catch {
+			/* offline: local Dexie copy still holds the state */
+		}
 	}
 }
 

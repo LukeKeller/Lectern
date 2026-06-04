@@ -14,6 +14,7 @@ import {
   ImportReadwiseResponse,
   ListDocumentsQuery,
   ListDocumentsResponse,
+  PlayerState,
   SaveDocumentRequest,
   SavedView,
   SearchQuery,
@@ -38,7 +39,7 @@ import {
 import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
 import { parseId } from "./ids";
-import { htmlToText } from "./html-text";
+import { htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
 import {
   applyAddHighlight,
@@ -182,7 +183,7 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       const cfg = await deps.overlay.getTtsConfig();
       if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
       const { title } = SynthesizeAudioRequest.parse(req.body ?? {});
-      const body = htmlToText(await loadContentHtml(deps, id));
+      const body = stripUrls(htmlToText(await loadContentHtml(deps, id)));
       if (!body) return reply.code(422).send({ error: "no readable text for this document" });
       // Speak the title first so each article announces itself (e.g. when listening
       // through a whole magazine issue). Baked into the per-article audio so the
@@ -245,6 +246,13 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     reply.header("x-tts-content-hash", contentHash);
     reply.header("cache-control", "private, max-age=31536000, immutable");
     return reply.send(audio.bytes);
+  });
+
+  // Cross-device Listen player state: pause on one device, resume on another.
+  app.get("/settings/player", async () => PlayerState.parse(await deps.overlay.getPlayerState()));
+  app.patch<{ Body: unknown }>("/settings/player", async (req) => {
+    const state = PlayerState.parse(req.body);
+    return deps.overlay.setPlayerState(state);
   });
 
   app.get("/search", async (req) => {

@@ -4661,6 +4661,232 @@
           }
         }
       }
+    },
+    "/settings/player": {
+      "get": {
+        "operationId": "getPlayerState",
+        "summary": "Get the cross-device Listen player state",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get the cross-device Listen player state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "queue": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "index": {
+                      "default": -1,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "position": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "rate": {
+                      "default": 1,
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "updatedAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "index",
+                    "position",
+                    "rate",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "savePlayerState",
+        "summary": "Save the cross-device Listen player state",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Save the cross-device Listen player state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "queue": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "index": {
+                      "default": -1,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "position": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "rate": {
+                      "default": 1,
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "updatedAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "index",
+                    "position",
+                    "rate",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "queue": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "index": {
+                    "default": -1,
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "position": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "rate": {
+                    "default": 1,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "updatedAt": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "queue",
+                  "index",
+                  "position",
+                  "rate",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
