@@ -15,6 +15,12 @@ export interface SmartView {
 
 export const SMART_VIEWS: SmartView[] = [
 	{
+		key: 'newsletters',
+		label: 'Newsletters',
+		icon: 'mail',
+		predicate: (c) => c.category === 'email'
+	},
+	{
 		key: 'continue',
 		label: 'Continue reading',
 		icon: 'book',

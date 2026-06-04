@@ -1,0 +1,36 @@
+version = "1.0"
+
+[main]
+name = "Configuration"
+
+    [main.newsletters]
+    name = "Newsletter ingestion"
+
+        [main.newsletters.newsletters_help]
+        type = "alert"
+        style = "info"
+        ask = "Read email newsletters from a dedicated IMAP mailbox into your library. Subscribe newsletters to a mailbox nothing else reads, then point Lectern at it here. Leave the host empty to turn ingestion off. Lectern checks the mailbox every 5 minutes (background jobs must be enabled)."
+
+        [main.newsletters.imap_host]
+        ask = "IMAP host"
+        type = "string"
+        example = "localhost"
+        help = "Use 'localhost' if the mailbox lives on this server."
+        optional = true
+
+        [main.newsletters.imap_port]
+        ask = "IMAP port"
+        type = "number"
+        default = 993
+        help = "993 for implicit TLS (recommended), 143 for STARTTLS/plain."
+
+        [main.newsletters.imap_user]
+        ask = "IMAP username"
+        type = "string"
+        example = "read@digitallyadrift.com"
+        optional = true
+
+        [main.newsletters.imap_password]
+        ask = "IMAP password"
+        type = "password"
+        optional = true

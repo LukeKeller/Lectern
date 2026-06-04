@@ -66,6 +66,14 @@ chmod 400 "$install_dir/.env"
 chown "$app:$app" "$install_dir/.env"
 
 #=================================================
+# APP LOGO
+#=================================================
+# Drop the app logo into YunoHost's logo folder. The admin UI renders
+# applogos/$app.png directly (the documented "$app.png" customization trick),
+# so this needs no catalog entry. Lock-free file copy — safe inside the script.
+cp -f "$YNH_APP_BASEDIR/conf/lectern.png" /usr/share/yunohost/applogos/lectern.png 2>/dev/null || true
+
+#=================================================
 # SYSTEM CONFIGURATION
 #=================================================
 ynh_script_progression "Adding system configurations..."

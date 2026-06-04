@@ -40,7 +40,8 @@
 		| 'plus'
 		| 'grip'
 		| 'more'
-		| 'refresh';
+		| 'refresh'
+		| 'mail';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -94,7 +95,8 @@
 		grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>',
 		more: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
 		refresh:
-			'<path d="M20 11a8 8 0 0 0-14-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14 4.9l2-1.9"/><path d="M20 20v-4h-4"/>'
+			'<path d="M20 11a8 8 0 0 0-14-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14 4.9l2-1.9"/><path d="M20 20v-4h-4"/>',
+		mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="m4.5 7.5 7.5 5.5 7.5-5.5"/>'
 	};
 </script>
 

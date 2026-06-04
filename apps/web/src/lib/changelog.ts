@@ -33,6 +33,10 @@ export const releases: Release[] = [
 			{
 				kind: 'added',
 				text: 'Subscribe to email newsletters with a dedicated mailbox and each issue arrives straight in your library — a normal article you can read, highlight, and listen to. Lectern checks the mailbox every few minutes; point it at an IMAP account in the server settings to switch it on.'
+			},
+			{
+				kind: 'added',
+				text: 'A Newsletters collection in the sidebar gathers everything that arrived by email, with a live unread-style count.'
 			}
 		]
 	},

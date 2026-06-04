@@ -56,6 +56,9 @@ chown "$app:$app" "$install_dir/.env"
 ynh_config_add_nginx
 ynh_config_add_systemd
 
+# Refresh the app logo (admin UI renders applogos/$app.png directly).
+cp -f "$YNH_APP_BASEDIR/conf/lectern.png" /usr/share/yunohost/applogos/lectern.png 2>/dev/null || true
+
 ynh_script_progression "Starting Lectern..."
 ynh_systemctl --service="$app" --action="start" --wait_until="Lectern BFF listening" --log_path="systemd"
 

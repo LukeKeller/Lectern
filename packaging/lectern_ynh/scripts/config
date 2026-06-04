@@ -1,0 +1,31 @@
+#!/bin/bash
+
+source /usr/share/yunohost/helpers
+
+# Custom apply: after the panel writes the IMAP settings, derive the enable flag
+# (host present => on), re-render .env from the templates, and restart so the
+# change takes effect immediately — no upgrade or SSH needed.
+ynh_app_config_apply() {
+    _ynh_app_config_apply
+
+    imap_host="$(ynh_app_setting_get --key=imap_host)"
+    imap_port="$(ynh_app_setting_get --key=imap_port)"
+    imap_port="${imap_port:-993}"
+    enable_email=""
+    if [ -n "$imap_host" ]; then
+        enable_email="1"
+    fi
+    ynh_app_setting_set --key=imap_port --value="$imap_port"
+    ynh_app_setting_set --key=enable_email --value="$enable_email"
+
+    imap_user="$(ynh_app_setting_get --key=imap_user)"
+    imap_password="$(ynh_app_setting_get --key=imap_password)"
+
+    ynh_config_add --template=".env" --destination="$install_dir/.env"
+    chmod 400 "$install_dir/.env"
+    chown "$app:$app" "$install_dir/.env"
+
+    ynh_systemctl --service="$app" --action="restart"
+}
+
+ynh_app_config_run "$1"
