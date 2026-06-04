@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.9',
+		date: '2026-06-04',
+		title: 'Mark read, Space to skim & re-fetch',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Press “r” on a list to mark the selected article read. It stays in place, faded, until the next refresh — so the list no longer shifts out from under you the moment you mark something.'
+			},
+			{
+				kind: 'added',
+				text: 'Skim a list from the keyboard with Space (Shift+Space to step back), and the selected card now scrolls into view as you move with Space or j/k.'
+			},
+			{
+				kind: 'added',
+				text: 'In the reader, press “r” (or the new refresh button) to re-fetch the full article from the original source — handy when a saved copy came through partial or mis-rendered.'
+			}
+		]
+	},
+	{
 		version: '0.6.8',
 		date: '2026-06-04',
 		title: 'Card menu fix',
