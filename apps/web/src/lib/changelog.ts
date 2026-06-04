@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.8.1',
+		date: '2026-06-04',
+		title: 'Installed-app bar colour',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The installed app’s status and navigation bars now use a dark chrome that no longer clashes with the dark reading themes (Firefox on Android colours those bars from the manifest, not the live page).'
+			}
+		]
+	},
+	{
 		version: '0.8.0',
 		date: '2026-06-04',
 		title: 'Themes & reading comfort',

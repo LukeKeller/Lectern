@@ -11,8 +11,8 @@
   "start_url": "/",
   "scope": "/",
   "orientation": "natural",
-  "theme_color": "#f6f4ee",
-  "background_color": "#f6f4ee",
+  "theme_color": "#1a1815",
+  "background_color": "#1a1815",
   "launch_handler": {
     "client_mode": "navigate-existing"
   },
