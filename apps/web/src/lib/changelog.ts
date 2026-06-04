@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.10.0',
+		date: '2026-06-04',
+		title: 'Newsletters by email',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Subscribe to email newsletters with a dedicated mailbox and each issue arrives straight in your library — a normal article you can read, highlight, and listen to. Lectern checks the mailbox every few minutes; point it at an IMAP account in the server settings to switch it on.'
+			}
+		]
+	},
+	{
 		version: '0.9.0',
 		date: '2026-06-04',
 		title: 'Adaptive accent',

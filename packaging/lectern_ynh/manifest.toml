@@ -5,7 +5,7 @@ id = "lectern"
 name = "Lectern"
 description.en = "Self-hosted RSS + read-later reader (unifies MiniFlux + Readeck)"
 
-version = "0.9.0~ynh1"
+version = "0.10.0~ynh1"
 maintainers = ["lukekeller"]
 
 [upstream]
@@ -52,6 +52,24 @@ ram.runtime = "250M"
     [install.readeck_token]
     ask.en = "Readeck API token (Profile -> API Tokens)"
     type = "password"
+
+    [install.imap_host]
+    ask.en = "Newsletter mailbox IMAP host (optional; leave blank to disable newsletter ingestion)"
+    help.en = "A dedicated mailbox the app reads newsletters from. On this server, use 'localhost'."
+    type = "string"
+    default = ""
+    optional = true
+
+    [install.imap_user]
+    ask.en = "Newsletter mailbox IMAP username (e.g. read@your.domain)"
+    type = "string"
+    default = ""
+    optional = true
+
+    [install.imap_password]
+    ask.en = "Newsletter mailbox IMAP password"
+    type = "password"
+    optional = true
 
 [resources]
     [resources.system_user]

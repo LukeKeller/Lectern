@@ -5,6 +5,12 @@ import { db } from "./db/client";
 import { ingestionLog, syncCursors } from "./db/schema";
 import { MinifluxBackend } from "./backends/miniflux";
 import { ReadeckBackend } from "./backends/readeck";
+import {
+  EmailInbox,
+  formatEmailCursor,
+  messageToSaveInput,
+  parseEmailCursor,
+} from "./backends/email-inbox";
 import { DrizzleOverlayStore } from "./overlay-store";
 
 /**
@@ -19,6 +25,7 @@ import { DrizzleOverlayStore } from "./overlay-store";
 const QUEUE = {
   pollMiniflux: "poll-miniflux",
   pollReadeck: "poll-readeck",
+  pollEmail: "poll-email",
   reconcile: "orphan-reconcile",
   reconcileDeletions: "reconcile-deletions",
   backfillContent: "backfill-content",
@@ -109,6 +116,51 @@ export async function pollReadeck(): Promise<number> {
   await setCursor("readeck", startedAt);
   await logIngestion("readeck", "poll", "ok", `indexed ${indexed} since ${since ?? "epoch"}`);
   return indexed;
+}
+
+/**
+ * Pull new newsletters from the dedicated IMAP mailbox and save each to Readeck
+ * (with the `email` sentinel label) so they become first-class reader documents.
+ * A no-op when IMAP isn't configured. The UID cursor advances after EACH
+ * successful save, so a crash mid-batch never reprocesses saved mail; on the
+ * first save error we stop (leaving that message for the next run) rather than
+ * skipping past it. Readeck dedupes by the synthetic Message-ID URL, so any
+ * replay is idempotent.
+ */
+export async function pollEmail(): Promise<number> {
+  if (!config.IMAP_HOST) return 0;
+  const inbox = new EmailInbox({
+    host: config.IMAP_HOST,
+    port: config.IMAP_PORT,
+    user: config.IMAP_USER,
+    password: config.IMAP_PASSWORD,
+    mailbox: config.IMAP_MAILBOX,
+    secure: config.IMAP_SECURE !== "0",
+  });
+  const readLater = new ReadeckBackend({
+    baseUrl: config.READECK_URL,
+    apiToken: config.READECK_API_TOKEN,
+  });
+  const cursor = parseEmailCursor(await getCursor("email"));
+  const { uidValidity, messages } = await inbox.fetchNew(cursor);
+  let saved = 0;
+  for (const msg of messages) {
+    try {
+      await readLater.save(messageToSaveInput(msg));
+      saved++;
+      await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
+    } catch (err) {
+      await logIngestion(
+        "email",
+        "poll",
+        "error",
+        `uid ${msg.uid}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      break;
+    }
+  }
+  await logIngestion("email", "poll", "ok", `saved ${saved} of ${messages.length}`);
+  return saved;
 }
 
 /** Drop RSS highlights whose owning document is no longer indexed. */
@@ -203,6 +255,11 @@ export async function startJobs(): Promise<PgBoss> {
   await instance.work(QUEUE.pollReadeck, async () => {
     await pollReadeck();
   });
+  if (config.LECTERN_ENABLE_EMAIL && config.IMAP_HOST) {
+    await instance.work(QUEUE.pollEmail, async () => {
+      await pollEmail();
+    });
+  }
   await instance.work(QUEUE.reconcile, async () => {
     await reconcileOrphans();
   });
@@ -215,6 +272,9 @@ export async function startJobs(): Promise<PgBoss> {
 
   await instance.schedule(QUEUE.pollMiniflux, "*/5 * * * *");
   await instance.schedule(QUEUE.pollReadeck, "*/5 * * * *");
+  if (config.LECTERN_ENABLE_EMAIL && config.IMAP_HOST) {
+    await instance.schedule(QUEUE.pollEmail, "*/5 * * * *");
+  }
   await instance.schedule(QUEUE.reconcile, "0 * * * *");
   await instance.schedule(QUEUE.reconcileDeletions, "*/15 * * * *");
   await instance.schedule(QUEUE.backfillContent, "*/10 * * * *");
