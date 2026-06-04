@@ -1,0 +1,407 @@
+<script lang="ts">
+	import type { Card } from '@lectern/shared';
+	import type { Magazine } from '$lib/magazine';
+	import { onMount, tick } from 'svelte';
+	import { resolve } from '$app/paths';
+	import { getSync } from '$lib/sync';
+	import { getArticleHtml } from '$lib/content';
+	import Icon from './Icon.svelte';
+	import SourceAvatar from './SourceAvatar.svelte';
+
+	let {
+		magazine,
+		startId,
+		onclose
+	}: { magazine: Magazine; startId?: string; onclose: () => void } = $props();
+
+	// Per-article fetched HTML and load failures, plus the triage state we apply
+	// locally for instant feedback (the mutation is also queued to sync).
+	let html = $state<Record<string, string>>({});
+	let failed = $state<Record<string, boolean>>({});
+	let marked = $state<Record<string, 'read' | 'archived'>>({});
+
+	const title = $derived(
+		magazine.tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
+	);
+
+	function meta(card: Card): string {
+		const parts: string[] = [];
+		if (card.siteName) parts.push(card.siteName);
+		if (card.author) parts.push(card.author);
+		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
+		return parts.join(' · ');
+	}
+
+	// DOM-id-safe anchor for a unified id ("readeck:abc" → "mag-readeck-abc").
+	function anchor(id: string): string {
+		return 'mag-' + id.replace(/[^a-zA-Z0-9_-]/g, '-');
+	}
+
+	function jump(id: string): void {
+		document.getElementById(anchor(id))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function markRead(card: Card): void {
+		const sync = getSync();
+		void sync.enqueue({ type: 'markRead', id: card.id, read: true }).then(() => sync.flush());
+		marked[card.id] = 'read';
+	}
+
+	function archive(card: Card): void {
+		const sync = getSync();
+		void sync
+			.enqueue({ type: 'setLocation', id: card.id, location: 'archive' })
+			.then(() => sync.flush());
+		marked[card.id] = 'archived';
+	}
+
+	onMount(() => {
+		// Load every article's content up front (memoised + deduped in content.ts)
+		// so the issue reads as one continuous page.
+		for (const card of magazine.cards) {
+			getArticleHtml(card.id)
+				.then((h) => {
+					html[card.id] = h;
+				})
+				.catch(() => {
+					failed[card.id] = true;
+				});
+		}
+		if (startId) {
+			void tick().then(() => jump(startId));
+		}
+	});
+</script>
+
+<section class="mag-reader">
+	<header class="mr-head">
+		<button class="mr-close" type="button" onclick={onclose}>
+			<Icon name="back" size={16} /> All magazines
+		</button>
+		<h1>{title}</h1>
+		<p class="mr-count">{magazine.cards.length} articles</p>
+	</header>
+
+	<nav class="mr-toc" aria-label="Contents">
+		<h2>Contents</h2>
+		<ol>
+			{#each magazine.cards as card, i (card.id)}
+				<li class:done={marked[card.id]}>
+					<button type="button" class="toc-link" onclick={() => jump(card.id)}>
+						<span class="toc-num">{i + 1}</span>
+						<span class="toc-title">{card.title}</span>
+						{#if marked[card.id]}<span class="toc-state">{marked[card.id]}</span>{/if}
+					</button>
+				</li>
+			{/each}
+		</ol>
+	</nav>
+
+	<div class="mr-articles">
+		{#each magazine.cards as card, i (card.id)}
+			<article
+				id={anchor(card.id)}
+				class="mr-article"
+				class:archived={marked[card.id] === 'archived'}
+			>
+				<div class="mr-article-head">
+					<div class="mr-article-meta">
+						<span class="mr-kicker">
+							{i + 1} / {magazine.cards.length}
+							{#if marked[card.id]}· {marked[card.id]}{/if}
+						</span>
+						<h2>
+							<a href={resolve('/read/[id]', { id: card.id })}>{card.title}</a>
+						</h2>
+						<span class="mr-by">
+							<SourceAvatar url={card.url} siteName={card.siteName} size={20} />
+							{#if meta(card)}<span>{meta(card)}</span>{/if}
+						</span>
+					</div>
+					<div class="mr-actions">
+						<button
+							type="button"
+							class:active={marked[card.id] === 'read'}
+							title="Mark as read"
+							aria-label="Mark as read"
+							onclick={() => markRead(card)}
+						>
+							<Icon name="check" size={16} />
+						</button>
+						<button
+							type="button"
+							class:active={marked[card.id] === 'archived'}
+							title="Archive"
+							aria-label="Archive"
+							onclick={() => archive(card)}
+						>
+							<Icon name="archive" size={16} />
+						</button>
+					</div>
+				</div>
+
+				{#if html[card.id]}
+					<!-- content.ts sanitizes with DOMPurify before caching -->
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<div class="mr-body">{@html html[card.id]}</div>
+				{:else if failed[card.id]}
+					<p class="mr-fail">
+						Couldn’t load this article.
+						<a href={resolve('/read/[id]', { id: card.id })}>Open it →</a>
+					</p>
+				{:else}
+					<p class="mr-loading">Loading…</p>
+				{/if}
+
+				<button type="button" class="mr-top" onclick={() => jump(magazine.cards[0]!.id)}>
+					↑ Contents
+				</button>
+			</article>
+		{/each}
+	</div>
+</section>
+
+<style>
+	.mag-reader {
+		max-width: 44rem;
+		margin: 0 auto;
+	}
+	.mr-head {
+		margin-bottom: 1.5rem;
+	}
+	.mr-close {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 0;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		cursor: pointer;
+		padding: 0.2rem 0;
+		margin-bottom: 0.6rem;
+	}
+	.mr-close:hover {
+		color: var(--text);
+	}
+	.mr-head h1 {
+		font-size: var(--text-2xl);
+		margin: 0;
+		text-transform: capitalize;
+	}
+	.mr-count {
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		margin: 0.25rem 0 0;
+	}
+
+	.mr-toc {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: 1rem 1.25rem;
+		margin-bottom: 2.5rem;
+		background: var(--surface);
+	}
+	.mr-toc h2 {
+		font-size: var(--text-2xs);
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		margin: 0 0 0.6rem;
+	}
+	.mr-toc ol {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.toc-link {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		width: 100%;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		text-align: left;
+		cursor: pointer;
+		padding: 0.4rem 0.4rem;
+		border-radius: var(--radius);
+		font-size: var(--text-base);
+	}
+	.toc-link:hover {
+		background: var(--surface-alt);
+	}
+	.toc-num {
+		flex-shrink: 0;
+		width: 1.6rem;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		font-size: var(--text-sm);
+	}
+	.toc-title {
+		flex: 1;
+		min-width: 0;
+	}
+	.toc-state {
+		flex-shrink: 0;
+		font-size: var(--text-2xs);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--accent);
+	}
+	.mr-toc li.done .toc-title {
+		color: var(--text-muted);
+		text-decoration: line-through;
+	}
+
+	.mr-article {
+		padding-bottom: 2.5rem;
+		margin-bottom: 2.5rem;
+		border-bottom: 1px solid var(--border);
+		scroll-margin-top: 1.5rem;
+	}
+	.mr-article.archived {
+		opacity: 0.5;
+	}
+	.mr-article-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1.25rem;
+	}
+	.mr-kicker {
+		font-size: var(--text-2xs);
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.mr-article-head h2 {
+		font-size: var(--text-xl);
+		line-height: 1.2;
+		margin: 0.3rem 0 0.5rem;
+	}
+	.mr-article-head h2 a {
+		color: var(--text);
+		text-decoration: none;
+	}
+	.mr-article-head h2 a:hover {
+		text-decoration: underline;
+	}
+	.mr-by {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+	}
+	.mr-actions {
+		display: flex;
+		gap: 0.3rem;
+		flex-shrink: 0;
+	}
+	.mr-actions button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border: 1px solid var(--border);
+		border-radius: 50%;
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.mr-actions button:hover {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+	.mr-actions button.active {
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.mr-loading,
+	.mr-fail {
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+	}
+
+	/* Article body typography. The HTML is sanitized upstream. */
+	.mr-body {
+		font-size: var(--text-lg);
+		line-height: 1.7;
+		color: var(--text);
+	}
+	.mr-body :global(p) {
+		margin: 0 0 1.1rem;
+	}
+	.mr-body :global(h1),
+	.mr-body :global(h2),
+	.mr-body :global(h3),
+	.mr-body :global(h4) {
+		line-height: 1.25;
+		margin: 1.8rem 0 0.8rem;
+	}
+	.mr-body :global(img),
+	.mr-body :global(figure) {
+		max-width: 100%;
+		height: auto;
+		border-radius: var(--radius);
+		margin: 1.2rem 0;
+	}
+	.mr-body :global(figure img) {
+		margin: 0;
+	}
+	.mr-body :global(figcaption) {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		text-align: center;
+		margin-top: 0.4rem;
+	}
+	.mr-body :global(a) {
+		color: var(--accent);
+	}
+	.mr-body :global(blockquote) {
+		margin: 1.2rem 0;
+		padding-left: 1rem;
+		border-left: 3px solid var(--border-strong, var(--border));
+		color: var(--text-muted);
+	}
+	.mr-body :global(ul),
+	.mr-body :global(ol) {
+		margin: 0 0 1.1rem;
+		padding-left: 1.4rem;
+	}
+	.mr-body :global(li) {
+		margin: 0.3rem 0;
+	}
+	.mr-body :global(pre) {
+		overflow-x: auto;
+		padding: 0.9rem;
+		border-radius: var(--radius);
+		background: var(--surface-alt);
+		font-size: var(--text-sm);
+	}
+	.mr-body :global(code) {
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.9em;
+	}
+
+	.mr-top {
+		display: inline-block;
+		margin-top: 1.5rem;
+		border: 0;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		cursor: pointer;
+	}
+	.mr-top:hover {
+		color: var(--accent);
+	}
+</style>

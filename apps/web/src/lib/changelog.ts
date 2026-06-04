@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.4',
+		date: '2026-06-04',
+		title: 'Magazine reader',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Open a magazine to read the whole issue on one page: every article in sequence with a contents list up top to jump between them.'
+			},
+			{
+				kind: 'added',
+				text: 'Mark each article in an issue as read or archive it as you go — your progress shows in the contents list.'
+			}
+		]
+	},
+	{
 		version: '0.6.3',
 		date: '2026-06-04',
 		title: 'Speed, voices & previews',

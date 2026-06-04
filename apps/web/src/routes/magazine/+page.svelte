@@ -5,10 +5,10 @@
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
 	import { getSync } from '$lib/sync';
-	import { buildMagazines } from '$lib/magazine';
+	import { buildMagazines, type Magazine } from '$lib/magazine';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
-	import FlipReader from '$lib/components/FlipReader.svelte';
+	import MagazineReader from '$lib/components/MagazineReader.svelte';
 
 	const all = liveCards(() => db.cards.toArray());
 	const cards = $derived((all.value ?? []) as Card[]);
@@ -57,18 +57,15 @@
 		return out;
 	}
 
-	// "distributed-systems" -> "Distributed Systems" for the flip-reader masthead.
-	function issueLabel(tag: string): string {
-		return tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-	}
-
-	let flip = $state<{ cards: Card[]; start: number; label: string } | null>(null);
-	// Plain left-click flips through the issue; modified clicks fall through to the
-	// href so the full reader still opens in a new tab.
-	function openFlip(e: MouseEvent, list: Card[], index: number, label: string) {
+	let opened = $state<{ magazine: Magazine; startId?: string } | null>(null);
+	// Plain left-click opens the focused magazine reader (all articles in sequence
+	// with a contents list); modified clicks fall through to the href so the full
+	// single-article reader still opens in a new tab.
+	function openMagazine(e: MouseEvent, magazine: Magazine, startId?: string) {
 		if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
 		e.preventDefault();
-		flip = { cards: list, start: index, label };
+		opened = { magazine, startId };
+		window.scrollTo(0, 0);
 	}
 
 	onMount(() => {
@@ -76,14 +73,14 @@
 	});
 </script>
 
-{#snippet tocEntry(list: Card[], index: number, num: number, folio: number, label: string)}
-	{@const card = list[index]}
+{#snippet tocEntry(magazine: Magazine, index: number, num: number, folio: number)}
+	{@const card = magazine.cards[index]}
 	{#if card}
 		<li>
 			<a
 				class="entry"
 				href={resolve('/read/[id]', { id: card.id })}
-				onclick={(e) => openFlip(e, list, index, label)}
+				onclick={(e) => openMagazine(e, magazine, card.id)}
 			>
 				<span class="num">{pad(num)}</span>
 				<span class="entry-main">
@@ -98,78 +95,82 @@
 	{/if}
 {/snippet}
 
-<section class="page">
-	<header class="head">
-		<h1>Magazines</h1>
-		<p class="lede">
-			Your saved library, bound into themed issues. Each tag shared by two or more articles becomes
-			a collection of related reading.
-		</p>
-	</header>
+{#if opened}
+	<MagazineReader
+		magazine={opened.magazine}
+		startId={opened.startId}
+		onclose={() => (opened = null)}
+	/>
+{:else}
+	<section class="page">
+		<header class="head">
+			<h1>Magazines</h1>
+			<p class="lede">
+				Your saved library, bound into themed issues. Each tag shared by two or more articles
+				becomes a collection of related reading.
+			</p>
+		</header>
 
-	{#if issues.length === 0}
-		<div class="empty">
-			<span class="empty-mark"><Icon name="magazine" size={28} /></span>
-			<p>No magazines yet — tag a few saved articles with the same topic to bind an issue.</p>
-		</div>
-	{:else}
-		{@const featured = issues[0]}
-		{@const lead = featured.cards[0]}
-		{@const featFolios = folios(featured.cards)}
-		{@const rest = issues.slice(1)}
-		{@const featLabel = issueLabel(featured.tag)}
-
-		<section class="hero" style={`--hue:${hue(featured.tag)}`}>
-			<div class="cover hero-cover">
-				<span class="masthead">Lectern</span>
-				<h2 class="cover-title">{featured.tag}</h2>
-				<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
-				<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
-				<ul class="cover-lines" aria-hidden="true">
-					{#each coverLines(featured.cards) as card (card.id)}
-						<li>{card.title}</li>
-					{/each}
-				</ul>
-				<div class="cover-foot">
-					<span class="foil"></span>
-					<span class="cover-foot-row">
-						<span>Lectern Press</span>
-						<span>Self-hosted</span>
-					</span>
-				</div>
+		{#if issues.length === 0}
+			<div class="empty">
+				<span class="empty-mark"><Icon name="magazine" size={28} /></span>
+				<p>No magazines yet — tag a few saved articles with the same topic to bind an issue.</p>
 			</div>
+		{:else}
+			{@const featured = issues[0]}
+			{@const lead = featured.cards[0]}
+			{@const featFolios = folios(featured.cards)}
+			{@const rest = issues.slice(1)}
 
-			<div class="spread">
-				<p class="kicker">In this issue</p>
-				<a
-					class="feature"
-					href={resolve('/read/[id]', { id: lead.id })}
-					onclick={(e) => openFlip(e, featured.cards, 0, featLabel)}
-				>
-					<span class="feature-kicker">Lead story</span>
-					<h3 class="feature-title">{lead.title}</h3>
-					<span class="feature-by">
-						<SourceAvatar url={lead.url} siteName={lead.siteName} size={22} />
-						{#if meta(lead)}<span>{meta(lead)}</span>{/if}
-					</span>
-				</a>
-				{#if featured.cards.length > 1}
-					<p class="kicker also">Also inside</p>
-					<ol class="toc">
-						{#each featured.cards.slice(1) as card, i (card.id)}
-							{@render tocEntry(featured.cards, i + 1, i + 1, featFolios[i + 1], featLabel)}
+			<section class="hero" style={`--hue:${hue(featured.tag)}`}>
+				<div class="cover hero-cover">
+					<span class="masthead">Lectern</span>
+					<h2 class="cover-title">{featured.tag}</h2>
+					<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
+					<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
+					<ul class="cover-lines" aria-hidden="true">
+						{#each coverLines(featured.cards) as card (card.id)}
+							<li>{card.title}</li>
 						{/each}
-					</ol>
-				{/if}
-			</div>
-		</section>
+					</ul>
+					<div class="cover-foot">
+						<span class="foil"></span>
+						<span class="cover-foot-row">
+							<span>Lectern Press</span>
+							<span>Self-hosted</span>
+						</span>
+					</div>
+				</div>
 
-		<div class="shelf">
-			{#each rest as issue (issue.tag)}
-				{@const issueFolios = folios(issue.cards)}
-				<article class="zine" style={`--hue:${hue(issue.tag)}`}>
-					<details class="issue">
-						<summary class="cover">
+				<div class="spread">
+					<p class="kicker">In this issue</p>
+					<a
+						class="feature"
+						href={resolve('/read/[id]', { id: lead.id })}
+						onclick={(e) => openMagazine(e, featured, lead.id)}
+					>
+						<span class="feature-kicker">Lead story</span>
+						<h3 class="feature-title">{lead.title}</h3>
+						<span class="feature-by">
+							<SourceAvatar url={lead.url} siteName={lead.siteName} size={22} />
+							{#if meta(lead)}<span>{meta(lead)}</span>{/if}
+						</span>
+					</a>
+					{#if featured.cards.length > 1}
+						<p class="kicker also">Also inside</p>
+						<ol class="toc">
+							{#each featured.cards.slice(1) as card, i (card.id)}
+								{@render tocEntry(featured, i + 1, i + 1, featFolios[i + 1])}
+							{/each}
+						</ol>
+					{/if}
+				</div>
+			</section>
+
+			<div class="shelf">
+				{#each rest as issue (issue.tag)}
+					<article class="zine" style={`--hue:${hue(issue.tag)}`}>
+						<button class="cover cover-btn" type="button" onclick={(e) => openMagazine(e, issue)}>
 							<span class="masthead">Lectern</span>
 							<h2 class="cover-title">{issue.tag}</h2>
 							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
@@ -182,31 +183,16 @@
 							<div class="cover-foot">
 								<span class="foil"></span>
 								<span class="cover-foot-row">
-									<span class="open-hint">Contents</span>
+									<span class="open-hint">Open issue</span>
 									<span>Lectern</span>
 								</span>
 							</div>
-						</summary>
-						<ol class="toc cover-toc">
-							{#each issue.cards as card, i (card.id)}
-								{@render tocEntry(issue.cards, i, i + 1, issueFolios[i], issueLabel(issue.tag))}
-							{/each}
-						</ol>
-					</details>
-				</article>
-			{/each}
-		</div>
-	{/if}
-</section>
-
-{#if flip}
-	<FlipReader
-		cards={flip.cards}
-		start={flip.start}
-		kind="magazine"
-		label={flip.label}
-		onclose={() => (flip = null)}
-	/>
+						</button>
+					</article>
+				{/each}
+			</div>
+		{/if}
+	</section>
 {/if}
 
 <style>
@@ -501,24 +487,22 @@
 	.zine {
 		min-width: 0;
 	}
-	.issue {
-		min-width: 0;
-	}
-	.issue > summary {
+	/* Shelf cover is now a button that opens the focused reader. */
+	.cover-btn {
+		width: 100%;
+		border: 0;
+		font: inherit;
+		text-align: left;
 		cursor: pointer;
-		list-style: none;
 		transition:
 			transform var(--dur) var(--ease),
 			box-shadow var(--dur) var(--ease);
 	}
-	.issue > summary::-webkit-details-marker {
-		display: none;
-	}
-	.issue > summary:hover {
+	.cover-btn:hover {
 		transform: translateY(-3px);
 		box-shadow: var(--shadow);
 	}
-	.issue > summary:focus-visible {
+	.cover-btn:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 3px;
 	}
@@ -529,46 +513,6 @@
 	.open-hint::after {
 		content: '▸';
 		margin-left: 0.4rem;
-		transition: transform var(--dur) var(--ease);
-	}
-	.issue[open] > summary .open-hint::after {
-		transform: rotate(90deg);
-	}
-	.cover-toc {
-		margin-top: 0.7rem;
-		padding: 0.3rem 0.15rem 0.2rem;
-		animation: toc-in var(--dur) var(--ease);
-	}
-	/* Narrow shelf columns: let titles wrap to two lines and drop the dotted
-	   leader, which only reads well across the wide hero contents. */
-	.cover-toc .entry-row {
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-	.cover-toc .entry-row::after {
-		display: none;
-	}
-	.cover-toc .entry-title {
-		flex: 1 1 auto;
-		white-space: normal;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		font-size: var(--text-base);
-	}
-	.cover-toc .folio {
-		align-self: flex-start;
-	}
-	@keyframes toc-in {
-		from {
-			opacity: 0;
-			transform: translateY(-4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 
 	/* ---- empty state ---- */
