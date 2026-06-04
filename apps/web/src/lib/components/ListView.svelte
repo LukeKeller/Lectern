@@ -28,6 +28,7 @@
 	import { andQueries, tagQuery } from '$lib/views';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
+	import { readingQueue } from '$lib/reading-queue.svelte';
 	import CardList from './CardList.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
@@ -227,8 +228,15 @@
 		if (queued) void sync.flush();
 	}
 
+	/** Snapshot this list's order so the reader can auto-advance after triage. */
+	function snapshotQueue() {
+		readingQueue.set(cards.map((c) => c.id));
+	}
 	function openCard(card: Card | undefined) {
-		if (card) void goto(resolve('/read/[id]', { id: card.id }));
+		if (card) {
+			snapshotQueue();
+			void goto(resolve('/read/[id]', { id: card.id }));
+		}
 	}
 
 	const controller: ListController = {
@@ -421,6 +429,7 @@
 		{selectedIndex}
 		ontriage={triageById}
 		onselect={(i) => (selectedIndex = i)}
+		onopen={snapshotQueue}
 	/>
 </section>
 

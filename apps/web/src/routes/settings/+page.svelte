@@ -200,6 +200,17 @@
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
 				/>
 			</label>
+			<label class="toggle">
+				<input
+					type="checkbox"
+					checked={readerSettings.current.autoAdvance}
+					onchange={(e) => readerSettings.update({ autoAdvance: e.currentTarget.checked })}
+				/>
+				<span>
+					Auto-advance after triage
+					<em>Open the next document in the list when you archive or move the current one.</em>
+				</span>
+			</label>
 		</div>
 		<button type="button" class="btn ghost reset" onclick={() => readerSettings.reset()}>
 			Reset to defaults
@@ -401,6 +412,30 @@
 	.slider input {
 		width: 100%;
 		accent-color: var(--accent);
+	}
+	.toggle {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 0.6rem;
+		cursor: pointer;
+	}
+	.toggle input {
+		margin-top: 0.2rem;
+		width: 1.05rem;
+		height: 1.05rem;
+		flex-shrink: 0;
+		accent-color: var(--accent);
+	}
+	.toggle span {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.toggle em {
+		font-style: normal;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 
 	.ok {

@@ -16,6 +16,8 @@ export interface ReaderSettings {
 	lineHeight: number;
 	/** Article max content width in px. */
 	maxWidth: number;
+	/** After triaging in the reader, jump to the next document in the list. */
+	autoAdvance: boolean;
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -23,7 +25,8 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	fontFamily: 'serif',
 	fontSize: 19,
 	lineHeight: 1.6,
-	maxWidth: 680
+	maxWidth: 680,
+	autoAdvance: true
 };
 
 export const FONT_STACKS: Record<FontFamily, string> = {
@@ -47,7 +50,8 @@ export function normalizeSettings(raw: unknown): ReaderSettings {
 		fontFamily: o.fontFamily && FONTS[o.fontFamily] ? o.fontFamily : DEFAULT_SETTINGS.fontFamily,
 		fontSize: clampNumber(o.fontSize, DEFAULT_SETTINGS.fontSize, 12, 28),
 		lineHeight: clampNumber(o.lineHeight, DEFAULT_SETTINGS.lineHeight, 1.2, 2.2),
-		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 1000)
+		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 1000),
+		autoAdvance: typeof o.autoAdvance === 'boolean' ? o.autoAdvance : DEFAULT_SETTINGS.autoAdvance
 	};
 }
 

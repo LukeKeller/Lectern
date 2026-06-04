@@ -4,14 +4,15 @@
 	import DOMPurify from 'dompurify';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate, beforeNavigate } from '$app/navigation';
 	import { db } from '$lib/db';
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import type { Location, Highlight, NewHighlight } from '@lectern/shared';
 	import { serializeRange, renderHighlights } from '$lib/highlight';
-	import { liveCards } from '$lib/live.svelte';
+	import { liveQuery } from 'dexie';
+	import { readingQueue } from '$lib/reading-queue.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { readerCssVars, type FontFamily, type ThemeMode } from '$lib/typography';
 	import {
@@ -23,10 +24,25 @@
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
-	const id = page.params.id;
+	const id = $derived(page.params.id);
 
-	const liveCard = liveCards(() => (id ? db.cards.get(id) : Promise.resolve(undefined)));
-	const card = $derived<Card | undefined>(liveCard.value);
+	// Re-subscribe a liveQuery per document so `card` stays reactive to optimistic
+	// mutations AND switches when the route id changes (reader→reader nav). The
+	// effect's cleanup tears down the previous subscription.
+	let card = $state<Card | undefined>(undefined);
+	$effect(() => {
+		const current = id;
+		if (!current) {
+			card = undefined;
+			return;
+		}
+		const sub = liveQuery(() => db.cards.get(current)).subscribe({
+			next: (v) => {
+				card = v;
+			}
+		});
+		return () => sub.unsubscribe();
+	});
 
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
@@ -52,7 +68,7 @@
 	let selRect = $state<{ x: number; y: number } | null>(null);
 	let pendingHighlight: NewHighlight | null = null;
 	let noteDraft = $state('');
-	let noteReady = false;
+	let noteSeededFor: string | undefined = undefined;
 	let findOpen = $state(false);
 	let findQuery = $state('');
 	let findHits = $state<HTMLElement[]>([]);
@@ -448,16 +464,18 @@
 	}
 
 	$effect(() => {
-		// Seed the note editor once the card loads, without clobbering edits.
-		if (card && !noteReady) {
+		// Seed the note editor once per document (keyed on the card id), so a
+		// reader→reader switch re-seeds with the new doc's note without clobbering
+		// an in-progress edit on the same doc.
+		if (card && noteSeededFor !== card.id) {
 			noteDraft = card.note ?? '';
-			noteReady = true;
+			noteSeededFor = card.id;
 		}
 	});
 
 	// Keyboard control while reading: j/k (and arrows) scroll, e/l/s/i triage the
-	// current document and return to the list, Esc just goes back. Wired through
-	// the same global key layer the lists use, so the whole app stays navigable.
+	// current document and (per setting) advance to the next queued doc or go
+	// back. Wired through the same global key layer the lists use.
 	const controller: ListController = {
 		move(delta) {
 			// j/k and arrows move the paragraph focus; fall back to scrolling pre-render.
@@ -468,60 +486,105 @@
 		open() {},
 		triage(location: Location) {
 			if (!card) return;
+			const fromId = card.id;
 			const sync = getSync();
-			void sync.enqueue({ type: 'setLocation', id: card.id, location }).then(() => sync.flush());
-			goBack();
+			void sync.enqueue({ type: 'setLocation', id: fromId, location }).then(() => sync.flush());
+			advanceOrBack(fromId);
 		},
 		back: goBack
 	};
 
+	/** After triaging, jump to the next queued document (if enabled) else go back. */
+	function advanceOrBack(fromId: string) {
+		if (readerSettings.current.autoAdvance) {
+			const next = readingQueue.nextAfter(fromId);
+			if (next && next !== fromId) {
+				void goto(resolve('/read/[id]', { id: next }));
+				return;
+			}
+		}
+		goBack();
+	}
+
+	/**
+	 * Load (or reload) the document for the current route id. The reader is a
+	 * single reused component across reader→reader navigation, so this resets all
+	 * per-document state. The `docId !== id` guards bail out of a stale load when
+	 * the user navigates again before this one resolves.
+	 */
+	async function loadDoc() {
+		const docId = id;
+		if (!docId) {
+			error = 'Missing document id';
+			loading = false;
+			return;
+		}
+		loading = true;
+		error = undefined;
+		ready = false;
+		html = '';
+		progress = 0;
+		focusIndex = -1;
+		blocks = [];
+		headings = [];
+		activeHeading = '';
+		highlights = [];
+		selRect = null;
+		pendingHighlight = null;
+		if (findOpen) closeFind();
+		if (timer) {
+			clearTimeout(timer);
+			timer = undefined;
+		}
+		window.scrollTo(0, 0);
+
+		const initial = await db.cards.get(docId);
+		if (docId !== id) return;
+		// Mark RSS items seen on open (Readwise behaviour): flip MiniFlux read
+		// state so the item leaves the unread feed / newspaper edition.
+		if (initial && initial.source === 'miniflux' && initial.readState !== 'finished') {
+			const seen = getSync();
+			void seen.enqueue({ type: 'markRead', id: initial.id, read: true }).then(() => seen.flush());
+		}
+		try {
+			const content = await getClient().getContent(docId);
+			if (docId !== id) return;
+			// Sanitize before rendering untrusted article HTML on the client.
+			html = DOMPurify.sanitize(content.html);
+		} catch (err) {
+			if (docId !== id) return;
+			error = err instanceof Error ? err.message : String(err);
+		} finally {
+			if (docId === id) loading = false;
+		}
+		await tick();
+		if (docId !== id || error) return;
+		restore(initial);
+		const m = scrollMetrics();
+		progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
+		ready = true;
+		collectBlocks();
+		buildToc();
+		try {
+			const hl = (await getClient().listHighlights(docId)).highlights;
+			if (docId !== id) return;
+			highlights = hl;
+			renderHighlights(articleEl as HTMLElement, highlights);
+		} catch {
+			/* offline: highlights load on the next visit */
+		}
+	}
+
 	onMount(() => {
-		let cancelled = false;
 		activeList.set(controller);
+		// Global listeners live for the component's whole life; they no-op while
+		// !ready, so they stay attached across reader→reader reloads.
 		window.addEventListener('keydown', onFindKey);
-		(async () => {
-			const initial = id ? await db.cards.get(id) : undefined;
-			// Mark RSS items seen on open (Readwise behaviour): flip MiniFlux read
-			// state so the item leaves the unread feed / newspaper edition.
-			if (initial && initial.source === 'miniflux' && initial.readState !== 'finished') {
-				const seen = getSync();
-				void seen
-					.enqueue({ type: 'markRead', id: initial.id, read: true })
-					.then(() => seen.flush());
-			}
-			try {
-				if (!id) throw new Error('Missing document id');
-				const content = await getClient().getContent(id);
-				// Sanitize before rendering untrusted article HTML on the client.
-				html = DOMPurify.sanitize(content.html);
-			} catch (err) {
-				error = err instanceof Error ? err.message : String(err);
-			} finally {
-				loading = false;
-			}
-			await tick();
-			if (cancelled || error) return;
-			restore(initial);
-			const m = scrollMetrics();
-			progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
-			ready = true;
-			window.addEventListener('scroll', onScroll, { passive: true });
-			collectBlocks();
-			buildToc();
-			if (id) {
-				try {
-					highlights = (await getClient().listHighlights(id)).highlights;
-					renderHighlights(articleEl as HTMLElement, highlights);
-				} catch {
-					/* offline: highlights load on the next visit */
-				}
-			}
-			window.addEventListener('keydown', onKey);
-			window.addEventListener('resize', updateBar);
-			document.addEventListener('mouseup', onMouseUp);
-		})();
+		window.addEventListener('scroll', onScroll, { passive: true });
+		window.addEventListener('keydown', onKey);
+		window.addEventListener('resize', updateBar);
+		document.addEventListener('mouseup', onMouseUp);
 		return () => {
-			cancelled = true;
 			activeList.clear(controller);
 			capture();
 			if (timer) clearTimeout(timer);
@@ -534,6 +597,13 @@
 			if (findTimer) clearTimeout(findTimer);
 			clearFind();
 		};
+	});
+
+	// Persist the outgoing doc's progress before the route changes, then load the
+	// new doc. afterNavigate also fires once after the initial mount.
+	beforeNavigate(() => capture());
+	afterNavigate(() => {
+		if (page.params.id) void loadDoc();
 	});
 </script>
 

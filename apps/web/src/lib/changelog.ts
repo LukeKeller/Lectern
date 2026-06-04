@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.5.3',
+		date: '2026-06-03',
+		title: 'Auto-advance',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Auto-advance: archive or move a document with the keyboard and the reader jumps straight to the next one in the list — no trip back to the inbox. Toggle it in Settings → Reading.'
+			},
+			{
+				kind: 'improved',
+				text: 'Moving between documents in the reader now fully reloads the article, progress, and notebook — no more stale content when advancing.'
+			}
+		]
+	},
+	{
 		version: '0.5.2',
 		date: '2026-06-03',
 		title: 'Sidebar & sorting',

@@ -19,7 +19,8 @@
 		emptyIcon = 'inbox',
 		selectedIndex = -1,
 		ontriage,
-		onselect
+		onselect,
+		onopen
 	}: {
 		cards: Card[] | undefined;
 		actions?: TriageAction[];
@@ -28,6 +29,8 @@
 		selectedIndex?: number;
 		ontriage?: (id: string, location: Location) => void;
 		onselect?: (index: number) => void;
+		/** Fired just before a card link navigates to the reader (queue snapshot). */
+		onopen?: () => void;
 	} = $props();
 
 	async function defaultTriage(id: string, location: Location) {
@@ -121,7 +124,11 @@
 						<SourceAvatar url={card.url} siteName={card.siteName} />
 					{/if}
 					<div class="body">
-						<a class="title" href={resolve('/read/[id]', { id: card.id })}>
+						<a
+							class="title"
+							href={resolve('/read/[id]', { id: card.id })}
+							onclick={() => onopen?.()}
+						>
 							{card.title || hostname(card.url)}
 						</a>
 						{#if card.note}<p class="dek">{card.note}</p>{/if}
