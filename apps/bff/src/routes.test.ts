@@ -612,6 +612,41 @@ describe("documents", () => {
     await a.close();
   });
 
+  it("re-extracts from the source and overwrites the cache on ?refresh=1", async () => {
+    harness.deps.readLater.content.set("b1", "<article>original capture</article>");
+    const a = app();
+    // First read captures and owns the copy.
+    const first = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(first.json().html).toContain("original capture");
+    // The source now has a better/fuller body; a plain read still serves the cache.
+    harness.deps.readLater.content.set("b1", "<article>fuller fixed body</article>");
+    const cached = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(cached.json().html).toContain("original capture");
+    // refresh=1 bypasses the cache, re-extracts, and overwrites it.
+    const refreshed = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content?refresh=1",
+      headers: auth,
+    });
+    expect(refreshed.json().html).toContain("fuller fixed body");
+    // Subsequent plain reads now serve the refreshed copy.
+    const after = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(after.json().html).toContain("fuller fixed body");
+    await a.close();
+  });
+
   it("full-text searches owned article bodies", async () => {
     harness.deps.readLater.content.set("b1", "<article>the quick brown fox jumps</article>");
     const a = app();

@@ -236,6 +236,12 @@
 					ctrl.triage(action.location);
 				}
 				break;
+			case 'markRead':
+				if (ctrl?.markRead) {
+					event.preventDefault();
+					ctrl.markRead();
+				}
+				break;
 			case 'back':
 				if (ctrl?.back) {
 					event.preventDefault();

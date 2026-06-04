@@ -111,8 +111,16 @@ export class LecternClient {
   deleteDocument(id: string) {
     return this.request<void>("DELETE", `/documents/${id}`);
   }
-  getContent(id: string) {
-    return this.request("GET", `/documents/${id}/content`, { schema: DocumentContentResponse });
+  /**
+   * Fetch a document's article HTML. Pass `refresh` to bypass the stored copy and
+   * re-extract from the original source (overwriting the cache) — used when the
+   * captured content is incomplete or rendered wrong.
+   */
+  getContent(id: string, opts?: { refresh?: boolean }) {
+    return this.request("GET", `/documents/${id}/content`, {
+      query: opts?.refresh ? { refresh: 1 } : undefined,
+      schema: DocumentContentResponse,
+    });
   }
   /** Full-text search over owned article bodies (server-side; online only). */
   search(q: string, limit = 20) {

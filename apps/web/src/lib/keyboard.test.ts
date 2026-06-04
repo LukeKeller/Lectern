@@ -43,6 +43,21 @@ describe('resolveKey', () => {
 		});
 	});
 
+	it('maps r to mark read', () => {
+		expect(resolveKey(null, { key: 'r' }).action).toEqual({ type: 'markRead' });
+	});
+
+	it('maps Space to a forward move and Shift+Space to a backward move', () => {
+		expect(resolveKey(null, { key: ' ' })).toEqual({
+			action: { type: 'move', delta: 1 },
+			pending: null
+		});
+		expect(resolveKey(null, { key: ' ', shiftKey: true })).toEqual({
+			action: { type: 'move', delta: -1 },
+			pending: null
+		});
+	});
+
 	it('maps / to focus search', () => {
 		expect(resolveKey(null, { key: '/' }).action).toEqual({ type: 'focusSearch' });
 	});

@@ -144,11 +144,16 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     return reply.code(204).send();
   });
 
-  app.get<{ Params: { id: string } }>("/documents/:id/content", async (req) => {
-    const { id } = req.params;
-    requireParsed(id);
-    return DocumentContentResponse.parse({ id, html: await loadContentHtml(deps, id) });
-  });
+  app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
+    "/documents/:id/content",
+    async (req) => {
+      const { id } = req.params;
+      requireParsed(id);
+      // `?refresh=1` re-extracts from the original source, overwriting the cache.
+      const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+      return DocumentContentResponse.parse({ id, html: await loadContentHtml(deps, id, refresh) });
+    },
+  );
 
   // ---- text-to-speech ("Listen") -----------------------------------------
   app.get("/settings/tts", async () => ttsSettings(deps));
@@ -466,10 +471,14 @@ async function loadDocument(deps: AppDeps, id: string): Promise<Card> {
  * survives backend loss); on a miss fetch from the extractor once and own it.
  * Shared by the content endpoint and TTS synthesis so they read identical text.
  */
-async function loadContentHtml(deps: AppDeps, id: string): Promise<string> {
+async function loadContentHtml(deps: AppDeps, id: string, refresh = false): Promise<string> {
   const parsed = requireParsed(id);
-  const stored = await deps.overlay.getContent(id);
-  if (stored) return stored.html;
+  // `refresh` forces a re-extract from the source, repairing a bad/partial capture;
+  // otherwise serve the stored copy when present (fast, offline-able).
+  if (!refresh) {
+    const stored = await deps.overlay.getContent(id);
+    if (stored) return stored.html;
+  }
   const html =
     parsed.source === "readeck"
       ? await deps.readLater.getContent(parsed.sourceId)

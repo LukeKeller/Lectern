@@ -39,7 +39,8 @@
 		| 'trash'
 		| 'plus'
 		| 'grip'
-		| 'more';
+		| 'more'
+		| 'refresh';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -91,7 +92,9 @@
 			'<path d="M4 7h16"/><path d="M9.5 7V5h5v2"/><path d="M6.5 7l.9 12.6a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/>',
 		plus: '<path d="M12 5v14M5 12h14"/>',
 		grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>',
-		more: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'
+		more: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+		refresh:
+			'<path d="M20 11a8 8 0 0 0-14-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14 4.9l2-1.9"/><path d="M20 20v-4h-4"/>'
 	};
 </script>
 

@@ -14,12 +14,14 @@ import type { Location } from '@lectern/shared';
  * Supported chords:
  *   j / ↓          move selection down
  *   k / ↑          move selection up
+ *   Space          move selection down (Shift+Space moves up)
  *   o / Enter      open the focused document
  *   Esc            go back (reading view -> list)
  *   e              archive    (setLocation)
  *   l              later      (setLocation)
  *   s              shortlist  (setLocation)
  *   i              inbox      (setLocation)
+ *   r              mark read  (markRead)
  *   /              focus search
  *   g then i/l/s/a/f/b/h   jump to a view
  *   Cmd/Ctrl-K     open the command palette
@@ -40,6 +42,7 @@ export type KeyAction =
 	| { type: 'open' }
 	| { type: 'back' }
 	| { type: 'setLocation'; location: Location }
+	| { type: 'markRead' }
 	| { type: 'focusSearch' }
 	| { type: 'navigate'; path: NavTarget }
 	| { type: 'palette' };
@@ -50,6 +53,7 @@ export interface KeyEventLike {
 	ctrlKey?: boolean;
 	metaKey?: boolean;
 	altKey?: boolean;
+	shiftKey?: boolean;
 }
 
 export interface KeyResolution {
@@ -72,6 +76,7 @@ export const SINGLE_KEYS: Record<string, KeyAction> = {
 	l: { type: 'setLocation', location: 'later' },
 	s: { type: 'setLocation', location: 'shortlist' },
 	i: { type: 'setLocation', location: 'inbox' },
+	r: { type: 'markRead' },
 	'/': { type: 'focusSearch' }
 };
 
@@ -105,6 +110,13 @@ export function resolveKey(pending: string | null, ev: KeyEventLike): KeyResolut
 		const table = PREFIX_KEYS[pending];
 		const action = table?.[ev.key];
 		return action ? { action, pending: null } : { pending: null };
+	}
+
+	// Space steps the selection like j/k (Shift+Space steps back), mirroring the
+	// reader's Space-to-advance one level up at the list. Kept out of SINGLE_KEYS
+	// because its direction depends on the Shift modifier.
+	if (ev.key === ' ') {
+		return { action: { type: 'move', delta: ev.shiftKey ? -1 : 1 }, pending: null };
 	}
 
 	if (PREFIX_KEYS[ev.key]) return { pending: ev.key };

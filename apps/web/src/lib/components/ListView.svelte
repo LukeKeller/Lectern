@@ -9,6 +9,7 @@
 		ViewSortBy
 	} from '@lectern/shared';
 	import { onMount, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
@@ -68,6 +69,18 @@
 	const all = liveCards(() => db.cards.toArray());
 
 	let selectedIndex = $state(0);
+	// Bumped on every keyboard-driven selection move so CardList can scroll the
+	// focused row into view (hover-driven selection leaves this untouched).
+	let scrollNonce = $state(0);
+
+	// Ids marked read while viewing this list. They stay visible but faded instead
+	// of vanishing under the "unread" filter, until a refresh (component remount)
+	// rebuilds the list from current read state. Reactive so the filter recomputes.
+	const stickyRead = new SvelteSet<string>();
+	function noteRead(id: string, read: boolean) {
+		if (read) stickyRead.add(id);
+		else stickyRead.delete(id);
+	}
 
 	// Per-list filter facets. The storage key derives from hideReadKey (so the
 	// feed keeps its existing key) and otherwise falls back to the list title.
@@ -142,7 +155,13 @@
 	// facets are derived from the set produced by the earlier facets, so they only
 	// ever offer choices that can still match.
 	const matched = $derived((all.value ?? []).filter(predicate));
-	const afterRead = $derived(filterByReadState(matched, readFilter));
+	// In the unread view, keep items the user just marked read (stickyRead) in
+	// place — they render faded and only drop out on the next refresh.
+	const afterRead = $derived(
+		readFilter === 'unread'
+			? matched.filter((c) => c.readState !== 'finished' || stickyRead.has(c.id))
+			: filterByReadState(matched, readFilter)
+	);
 	const afterSource = $derived(filterBySource(afterRead, sourceFilter));
 	const afterCategory = $derived(filterByCategory(afterSource, categoryFilter));
 	const afterTag = $derived(filterByTag(afterCategory, tagFilter));
@@ -195,6 +214,21 @@
 		void sync.enqueue({ type: 'setLocation', id, location }).then(() => sync.flush());
 	}
 
+	// Mark one card read. RSS items flip their MiniFlux read flag (markRead); saved
+	// articles have no read flag, so completing their progress stands in. Mirrors
+	// markAllRead's per-source logic. The id is noted so the row stays (faded).
+	function markReadById(card: Card) {
+		const sync = getSync();
+		if (card.source === 'miniflux') {
+			void sync.enqueue({ type: 'markRead', id: card.id, read: true }).then(() => sync.flush());
+		} else {
+			void sync
+				.enqueue({ type: 'setReadingProgress', id: card.id, readingProgress: 1, readAnchor: null })
+				.then(() => sync.flush());
+		}
+		noteRead(card.id, true);
+	}
+
 	// Bulk actions over the currently-visible cards, routed through the sync outbox.
 	function markAllRead() {
 		const sync = getSync();
@@ -213,6 +247,7 @@
 					readAnchor: null
 				});
 			}
+			noteRead(card.id, true);
 			queued = true;
 		}
 		if (queued) void sync.flush();
@@ -243,6 +278,8 @@
 		move(delta) {
 			if (cards.length === 0) return;
 			selectedIndex = Math.min(cards.length - 1, Math.max(0, selectedIndex + delta));
+			// Signal CardList to scroll the (keyboard-)focused row into view.
+			scrollNonce += 1;
 		},
 		open() {
 			openCard(cards[selectedIndex]);
@@ -251,6 +288,11 @@
 			const card = cards[selectedIndex];
 			// Selection index stays put so the next card slides into focus.
 			if (card) triageById(card.id, location);
+		},
+		markRead() {
+			const card = cards[selectedIndex];
+			// Selection index stays put so the next card slides into focus.
+			if (card) markReadById(card);
 		}
 	};
 
@@ -427,7 +469,10 @@
 		{empty}
 		{emptyIcon}
 		{selectedIndex}
+		{scrollNonce}
+		fadedIds={stickyRead}
 		ontriage={triageById}
+		onread={noteRead}
 		onselect={(i) => (selectedIndex = i)}
 		onopen={snapshotQueue}
 	/>

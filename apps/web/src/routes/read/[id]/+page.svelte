@@ -48,6 +48,7 @@
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
+	let refetching = $state(false);
 	let articleEl = $state<HTMLElement | null>(null);
 	let progress = $state(0);
 	let showDisplay = $state(false);
@@ -250,10 +251,10 @@
 
 	function onKey(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
-		if (e.key === ' ') {
-			// Space advances a paragraph (Shift+Space goes back).
-			if (advance(e.shiftKey ? -1 : 1)) e.preventDefault();
-		} else if (e.key === '[') {
+		// Space / Shift+Space (paragraph advance) and j/k flow through the global key
+		// layer to this view's controller.move — handled there, not here, so they stay
+		// unified with the lists and never double-fire.
+		if (e.key === '[') {
 			tocOpen = !tocOpen;
 			e.preventDefault();
 		} else if (e.key === ']') {
@@ -270,6 +271,10 @@
 			}
 		} else if (e.key === 'f' || e.key === 'F') {
 			toggleFocusMode();
+			e.preventDefault();
+		} else if (e.key === 'r' || e.key === 'R') {
+			// Re-extract the article from the original source (incomplete/broken capture).
+			void refetchContent();
 			e.preventDefault();
 		}
 	}
@@ -513,7 +518,19 @@
 	 * per-document state. The `docId !== id` guards bail out of a stale load when
 	 * the user navigates again before this one resolves.
 	 */
-	async function loadDoc() {
+	/** Re-extract the current article from its original source, replacing the cached
+	 *  copy. For when the stored capture is partial or mis-rendered. */
+	async function refetchContent() {
+		if (refetching || !id) return;
+		refetching = true;
+		try {
+			await loadDoc(true);
+		} finally {
+			refetching = false;
+		}
+	}
+
+	async function loadDoc(refresh = false) {
 		const docId = id;
 		if (!docId) {
 			error = 'Missing document id';
@@ -548,7 +565,7 @@
 			void seen.enqueue({ type: 'markRead', id: initial.id, read: true }).then(() => seen.flush());
 		}
 		try {
-			const content = await getClient().getContent(docId);
+			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
 			if (docId !== id) return;
 			// Sanitize before rendering untrusted article HTML on the client.
 			html = DOMPurify.sanitize(content.html);
@@ -660,6 +677,17 @@
 				<Icon name="headphones" size={16} />
 			</button>
 		{/if}
+		<button
+			type="button"
+			class="rail-btn rail-refetch"
+			class:spin={refetching}
+			onclick={refetchContent}
+			disabled={refetching}
+			title="Re-fetch full content from original ( r )"
+			aria-label="Re-fetch full content from original"
+		>
+			<Icon name="refresh" size={16} />
+		</button>
 		{#if card}
 			<!-- card.url is an external absolute URL, not an internal route -->
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
@@ -1275,6 +1303,22 @@
 		color: var(--accent);
 		background: var(--accent-soft);
 	}
+	.rail-btn:disabled {
+		cursor: default;
+	}
+	.rail-btn.spin :global(svg) {
+		animation: rail-spin 0.8s linear infinite;
+	}
+	@keyframes rail-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.rail-btn.spin :global(svg) {
+			animation: none;
+		}
+	}
 
 	.reader {
 		display: flex;
@@ -1357,7 +1401,7 @@
 		text-decoration: underline;
 	}
 	@media (max-width: 979px) {
-		.rail-btn:not(.rail-listen) {
+		.rail-btn:not(.rail-listen):not(.rail-refetch) {
 			display: none;
 		}
 	}

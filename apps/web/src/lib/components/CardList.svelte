@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Card, Location } from '@lectern/shared';
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
@@ -20,7 +21,10 @@
 		empty = 'Nothing here.',
 		emptyIcon = 'inbox',
 		selectedIndex = -1,
+		scrollNonce = 0,
+		fadedIds,
 		ontriage,
+		onread,
 		onselect,
 		onopen
 	}: {
@@ -29,11 +33,28 @@
 		empty?: string;
 		emptyIcon?: IconName;
 		selectedIndex?: number;
+		/** Bumped by the parent on keyboard moves to scroll the focused row in view. */
+		scrollNonce?: number;
+		/** Ids to render faded (e.g. read-but-kept items awaiting a refresh). */
+		fadedIds?: ReadonlySet<string>;
 		ontriage?: (id: string, location: Location) => void;
+		/** Fired when a card's read state is toggled here (swipe), so the parent can track it. */
+		onread?: (id: string, read: boolean) => void;
 		onselect?: (index: number) => void;
 		/** Fired just before a card link navigates to the reader (queue snapshot). */
 		onopen?: () => void;
 	} = $props();
+
+	// Scroll the keyboard-focused row into view. Depends only on scrollNonce (which
+	// the parent bumps on j/k/Space), so hover-driven selection never scrolls.
+	let listEl = $state<HTMLUListElement | null>(null);
+	$effect(() => {
+		void scrollNonce;
+		untrack(() => {
+			const li = listEl?.children[selectedIndex] as HTMLElement | undefined;
+			li?.scrollIntoView({ block: 'nearest' });
+		});
+	});
 
 	async function defaultTriage(id: string, location: Location) {
 		const sync = getSync();
@@ -132,6 +153,7 @@
 		const read = card.readState !== 'finished';
 		const sync = getSync();
 		void sync.enqueue({ type: 'markRead', id: card.id, read }).then(() => sync.flush());
+		onread?.(card.id, read);
 	}
 
 	let undo = $state<{ id: string; from: Location } | null>(null);
@@ -177,9 +199,9 @@
 		<p>{empty}</p>
 	</div>
 {:else}
-	<ul class="cards">
+	<ul class="cards" bind:this={listEl}>
 		{#each cards as card, i (card.id)}
-			<li class:selected={i === selectedIndex}>
+			<li class:selected={i === selectedIndex} class:faded={fadedIds?.has(card.id)}>
 				<div class="swipe" use:swipeable={{ onCommit: (dir) => onSwipe(card, dir) }}>
 					<div class="swipe-bg" aria-hidden="true">
 						<span class="swipe-action read">
@@ -486,6 +508,16 @@
 	.card.menu-open {
 		overflow: visible;
 		z-index: 30;
+	}
+	/* Read-but-kept rows: dimmed in place until the next refresh drops them. The
+	   selected/hover states still read clearly because they raise opacity back. */
+	li.faded .card {
+		opacity: 0.5;
+		transition: opacity var(--dur-fast) var(--ease);
+	}
+	li.faded .card:hover,
+	li.faded.selected .card {
+		opacity: 0.8;
 	}
 	li.selected .card {
 		background: var(--accent-soft);
