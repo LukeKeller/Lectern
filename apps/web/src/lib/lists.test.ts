@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { Card, type QueryNode } from '@lectern/shared';
-import { collectTags, filterByReadState, filterByTag, matchesQuery, sortCards } from './lists';
+import {
+	collectCategories,
+	collectSources,
+	collectTags,
+	filterByCategory,
+	filterByReadState,
+	filterBySource,
+	filterByTag,
+	filterByText,
+	matchesQuery,
+	sortCards
+} from './lists';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
 	return Card.parse({
@@ -112,6 +123,85 @@ describe('filterByReadState', () => {
 
 	it('passes everything through in all mode', () => {
 		expect(filterByReadState(cards, 'all')).toHaveLength(3);
+	});
+});
+
+describe('filterBySource / collectSources', () => {
+	const cards = [
+		makeCard({ id: 'rss', source: 'miniflux' }),
+		makeCard({ id: 'saved', source: 'readeck' }),
+		makeCard({ id: 'rss2', source: 'miniflux' })
+	];
+
+	it('filters to a single source', () => {
+		expect(filterBySource(cards, 'miniflux').map((c) => c.id)).toEqual(['rss', 'rss2']);
+		expect(filterBySource(cards, 'readeck').map((c) => c.id)).toEqual(['saved']);
+	});
+
+	it('passes through for all / null / undefined', () => {
+		expect(filterBySource(cards, 'all')).toHaveLength(3);
+		expect(filterBySource(cards, null)).toHaveLength(3);
+		expect(filterBySource(cards, undefined)).toHaveLength(3);
+	});
+
+	it('collects present sources in canonical order', () => {
+		expect(collectSources(cards)).toEqual(['miniflux', 'readeck']);
+		expect(collectSources([makeCard({ source: 'readeck' })])).toEqual(['readeck']);
+		expect(collectSources([])).toEqual([]);
+	});
+});
+
+describe('filterByCategory / collectCategories', () => {
+	const cards = [
+		makeCard({ id: 'a', category: 'article' }),
+		makeCard({ id: 'r', category: 'rss' }),
+		makeCard({ id: 'p', category: 'pdf' })
+	];
+
+	it('filters to a single category', () => {
+		expect(filterByCategory(cards, 'rss').map((c) => c.id)).toEqual(['r']);
+		expect(filterByCategory(cards, 'pdf').map((c) => c.id)).toEqual(['p']);
+	});
+
+	it('passes through for all / null / undefined', () => {
+		expect(filterByCategory(cards, 'all')).toHaveLength(3);
+		expect(filterByCategory(cards, null)).toHaveLength(3);
+		expect(filterByCategory(cards, undefined)).toHaveLength(3);
+	});
+
+	it('collects present categories in canonical order', () => {
+		expect(collectCategories(cards)).toEqual(['article', 'rss', 'pdf']);
+		expect(collectCategories([makeCard({ category: 'email' })])).toEqual(['email']);
+		expect(collectCategories([])).toEqual([]);
+	});
+});
+
+describe('filterByText', () => {
+	const cards = [
+		makeCard({ id: 'title', title: 'The Quiet Web', siteName: null, author: null }),
+		makeCard({ id: 'site', title: 'Untitled', siteName: 'danluu.com', author: null }),
+		makeCard({ id: 'author', title: 'Untitled', siteName: null, author: 'Jane Doe' })
+	];
+
+	it('matches title, site name and author case-insensitively', () => {
+		expect(filterByText(cards, 'quiet').map((c) => c.id)).toEqual(['title']);
+		expect(filterByText(cards, 'DANLUU').map((c) => c.id)).toEqual(['site']);
+		expect(filterByText(cards, 'jane').map((c) => c.id)).toEqual(['author']);
+	});
+
+	it('matches a substring across multiple fields', () => {
+		expect(filterByText(cards, 'untitled').map((c) => c.id)).toEqual(['site', 'author']);
+	});
+
+	it('passes through for empty / whitespace / null / undefined', () => {
+		expect(filterByText(cards, '')).toHaveLength(3);
+		expect(filterByText(cards, '   ')).toHaveLength(3);
+		expect(filterByText(cards, null)).toHaveLength(3);
+		expect(filterByText(cards, undefined)).toHaveLength(3);
+	});
+
+	it('tolerates null site name and author without matching', () => {
+		expect(filterByText(cards, 'nonexistent')).toHaveLength(0);
 	});
 });
 

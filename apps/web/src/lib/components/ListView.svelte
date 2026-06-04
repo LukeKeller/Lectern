@@ -1,12 +1,30 @@
 <script lang="ts">
-	import type { Card, Location, QueryNode, SortDir, ViewSortBy } from '@lectern/shared';
+	import type {
+		Card,
+		Category,
+		Location,
+		QueryNode,
+		SortDir,
+		Source,
+		ViewSortBy
+	} from '@lectern/shared';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
 	import { getSync } from '$lib/sync';
 	import { liveCards } from '$lib/live.svelte';
-	import { collectTags, filterByTag, filterByReadState, sortCards } from '$lib/lists';
+	import {
+		collectCategories,
+		collectSources,
+		collectTags,
+		filterByCategory,
+		filterByReadState,
+		filterBySource,
+		filterByTag,
+		filterByText,
+		sortCards
+	} from '$lib/lists';
 	import { andQueries, tagQuery } from '$lib/views';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
@@ -34,7 +52,11 @@
 		actions?: TriageAction[];
 		empty?: string;
 		emptyIcon?: IconName;
-		/** When set, show a "hide read" toggle (persisted per key, on by default). */
+		/**
+		 * Opts this list into a default of showing only unread items. The read-state
+		 * control is present on every list regardless; when set, this also names the
+		 * persistence key (otherwise the list title is used).
+		 */
 		hideReadKey?: string;
 		/** The query AST this list represents, enabling "save as view". */
 		baseQuery?: QueryNode;
@@ -44,36 +66,123 @@
 
 	const all = liveCards(() => db.cards.toArray());
 
-	let tagFilter = $state<string | null>(null);
 	let selectedIndex = $state(0);
 
-	// Optional read-state filter (the RSS feed enables it). Persisted per key and
-	// defaulting to 'unread' so the feed shows unread items first.
+	// Per-list filter facets. The storage key derives from hideReadKey (so the
+	// feed keeps its existing key) and otherwise falls back to the list title.
+	const listKey = $derived(hideReadKey ?? title);
+
 	type ReadFilter = 'unread' | 'read' | 'all';
+	type SourceFilter = Source | 'all';
+	type CategoryFilter = Category | 'all';
+
 	const READ_FILTERS: { value: ReadFilter; label: string }[] = [
+		{ value: 'all', label: 'All' },
 		{ value: 'unread', label: 'Unread' },
-		{ value: 'read', label: 'Read' },
-		{ value: 'all', label: 'All' }
+		{ value: 'read', label: 'Read' }
 	];
-	const readFilterStorage = $derived(hideReadKey ? `lectern.readFilter.${hideReadKey}` : null);
+	const SOURCE_LABELS: Record<Source, string> = { miniflux: 'RSS', readeck: 'Saved' };
+	const CATEGORY_LABELS: Record<Category, string> = {
+		article: 'Article',
+		rss: 'RSS',
+		email: 'Email',
+		pdf: 'PDF'
+	};
+
+	// Read-state defaults to 'unread' only on lists that opt in via hideReadKey
+	// (the feed), preserving the prior default; every other list defaults to 'all'
+	// but still gets the always-present control.
+	const defaultRead: ReadFilter = untrack(() => (hideReadKey ? 'unread' : 'all'));
+	const readFilterStorage = $derived(`lectern.readFilter.${listKey}`);
 	let readFilter = $state<ReadFilter>(
 		untrack(() => {
-			if (!hideReadKey || typeof localStorage === 'undefined') return 'unread';
-			const stored = localStorage.getItem(`lectern.readFilter.${hideReadKey}`);
-			return stored === 'read' || stored === 'all' ? stored : 'unread';
+			if (typeof localStorage === 'undefined') return defaultRead;
+			const stored = localStorage.getItem(`lectern.readFilter.${hideReadKey ?? title}`);
+			return stored === 'read' || stored === 'all' || stored === 'unread' ? stored : defaultRead;
 		})
 	);
 	$effect(() => {
-		if (readFilterStorage && typeof localStorage !== 'undefined') {
-			localStorage.setItem(readFilterStorage, readFilter);
-		}
+		if (typeof localStorage !== 'undefined') localStorage.setItem(readFilterStorage, readFilter);
 	});
 
+	// The remaining facets persist together as one JSON blob, SSR-guarded.
+	interface StoredFilters {
+		source?: SourceFilter;
+		category?: CategoryFilter;
+		tag?: string | null;
+		text?: string;
+	}
+	const filterStorage = $derived(`lectern.filters.${listKey}`);
+	const storedFilters: StoredFilters = untrack(() => {
+		if (typeof localStorage === 'undefined') return {};
+		try {
+			const raw = localStorage.getItem(`lectern.filters.${hideReadKey ?? title}`);
+			return raw ? (JSON.parse(raw) as StoredFilters) : {};
+		} catch {
+			return {};
+		}
+	});
+	let sourceFilter = $state<SourceFilter>(storedFilters.source ?? 'all');
+	let categoryFilter = $state<CategoryFilter>(storedFilters.category ?? 'all');
+	let tagFilter = $state<string | null>(storedFilters.tag ?? null);
+	let textFilter = $state(storedFilters.text ?? '');
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		const payload: StoredFilters = {
+			source: sourceFilter,
+			category: categoryFilter,
+			tag: tagFilter,
+			text: textFilter
+		};
+		localStorage.setItem(filterStorage, JSON.stringify(payload));
+	});
+
+	// Compose the facets in a fixed pipeline. The option lists for the dependent
+	// facets are derived from the set produced by the earlier facets, so they only
+	// ever offer choices that can still match.
 	const matched = $derived((all.value ?? []).filter(predicate));
-	// Apply the read-state filter only when this list opts in via hideReadKey.
-	const afterRead = $derived(hideReadKey ? filterByReadState(matched, readFilter) : matched);
-	const tags = $derived(collectTags(afterRead));
-	const cards = $derived(sortCards(filterByTag(afterRead, tagFilter), sortBy, sortDir));
+	const afterRead = $derived(filterByReadState(matched, readFilter));
+	const afterSource = $derived(filterBySource(afterRead, sourceFilter));
+	const afterCategory = $derived(filterByCategory(afterSource, categoryFilter));
+	const afterTag = $derived(filterByTag(afterCategory, tagFilter));
+	const sources = $derived(collectSources(afterRead));
+	const categories = $derived(collectCategories(afterSource));
+	const tags = $derived(collectTags(afterCategory));
+	const cards = $derived(sortCards(filterByText(afterTag, textFilter), sortBy, sortDir));
+
+	const activeCount = $derived(
+		(readFilter !== defaultRead ? 1 : 0) +
+			(sourceFilter !== 'all' ? 1 : 0) +
+			(categoryFilter !== 'all' ? 1 : 0) +
+			(tagFilter ? 1 : 0) +
+			(textFilter.trim() ? 1 : 0)
+	);
+	function clearFilters() {
+		readFilter = defaultRead;
+		sourceFilter = 'all';
+		categoryFilter = 'all';
+		tagFilter = null;
+		textFilter = '';
+	}
+
+	// Drop a facet selection once an upstream facet makes it impossible to match,
+	// so a stale dropdown never points at a value with no option. Guarded on a
+	// non-empty upstream set so a persisted facet is not wiped before the cards
+	// have loaded (the upstream set is briefly empty during hydration). None of
+	// these reads feed back into their own option list, so there is no loop.
+	$effect(() => {
+		if (afterRead.length && sourceFilter !== 'all' && !sources.includes(sourceFilter)) {
+			sourceFilter = 'all';
+		}
+	});
+	$effect(() => {
+		if (afterSource.length && categoryFilter !== 'all' && !categories.includes(categoryFilter)) {
+			categoryFilter = 'all';
+		}
+	});
+	$effect(() => {
+		if (afterCategory.length && tagFilter && !tags.includes(tagFilter)) tagFilter = null;
+	});
 
 	// Keep the selection inside the (reactively changing) list bounds.
 	$effect(() => {
@@ -195,20 +304,46 @@
 			>
 				{sortDir === 'asc' ? '↑' : '↓'}
 			</button>
-			{#if hideReadKey}
-				<div class="seg" role="group" aria-label="Filter by read state">
-					{#each READ_FILTERS as opt (opt.value)}
-						<button
-							type="button"
-							class:active={readFilter === opt.value}
-							aria-pressed={readFilter === opt.value}
-							onclick={() => (readFilter = opt.value)}
-						>
-							{opt.label}
-						</button>
-					{/each}
+			<div class="search">
+				<Icon name="search" size={14} />
+				<input
+					bind:value={textFilter}
+					type="search"
+					placeholder="Filter…"
+					autocomplete="off"
+					aria-label="Filter by title, site or author"
+				/>
+			</div>
+			{#if sources.length > 1}
+				<div class="select">
+					<select bind:value={sourceFilter} aria-label="Filter by source">
+						<option value="all">All sources</option>
+						{#each sources as src (src)}<option value={src}>{SOURCE_LABELS[src]}</option>{/each}
+					</select>
 				</div>
 			{/if}
+			{#if categories.length > 1}
+				<div class="select">
+					<select bind:value={categoryFilter} aria-label="Filter by category">
+						<option value="all">All types</option>
+						{#each categories as cat (cat)}
+							<option value={cat}>{CATEGORY_LABELS[cat]}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+			<div class="seg" role="group" aria-label="Filter by read state">
+				{#each READ_FILTERS as opt (opt.value)}
+					<button
+						type="button"
+						class:active={readFilter === opt.value}
+						aria-pressed={readFilter === opt.value}
+						onclick={() => (readFilter = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
 			{#if tags.length}
 				<div class="select">
 					<select bind:value={tagFilter} aria-label="Filter by tag">
@@ -216,6 +351,13 @@
 						{#each tags as tag (tag)}<option value={tag}>{tag}</option>{/each}
 					</select>
 				</div>
+			{/if}
+			{#if activeCount}
+				<button type="button" class="ghost clear" onclick={clearFilters} title="Clear all filters">
+					<Icon name="close" size={14} />
+					Clear
+					<span class="badge">{activeCount}</span>
+				</button>
 			{/if}
 			{#if cards.length}
 				<div class="bulk" role="group" aria-label="Bulk actions">
@@ -296,6 +438,7 @@
 	}
 	.tools {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.4rem;
 	}
@@ -324,6 +467,30 @@
 		background: var(--surface);
 		color: var(--text);
 		cursor: pointer;
+	}
+	.search {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 2rem;
+		padding: 0 0.55rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text-muted);
+		transition: border-color var(--dur-fast) var(--ease);
+	}
+	.search:focus-within {
+		border-color: var(--border-strong);
+	}
+	.search input {
+		width: 7.5rem;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-size: var(--text-sm);
+		color: var(--text);
 	}
 	.icon {
 		display: inline-flex;
@@ -400,6 +567,26 @@
 	.ghost:hover {
 		background: var(--surface-alt);
 		color: var(--text);
+	}
+	.clear {
+		color: var(--accent);
+	}
+	.clear:hover {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.1rem;
+		height: 1.1rem;
+		padding: 0 0.3rem;
+		border-radius: var(--radius-full);
+		background: var(--accent);
+		color: var(--accent-contrast);
+		font-size: var(--text-2xs);
+		font-weight: 600;
 	}
 	.save {
 		display: flex;

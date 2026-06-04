@@ -1,4 +1,4 @@
-import type { Card } from '@lectern/shared';
+import type { Card, Category, Source } from '@lectern/shared';
 import type { QueryNode, SortDir, ViewSortBy } from '@lectern/shared';
 
 /**
@@ -46,11 +46,62 @@ export function filterByReadState(cards: Card[], mode: 'unread' | 'read' | 'all'
 	return cards.filter((c) => (c.readState === 'finished') === finished);
 }
 
+/** Filter to cards from `source`; 'all'/null/undefined is a no-op pass-through. */
+export function filterBySource(cards: Card[], source: Source | 'all' | null | undefined): Card[] {
+	if (!source || source === 'all') return cards;
+	return cards.filter((c) => c.source === source);
+}
+
+/** Filter to cards of `category`; 'all'/null/undefined is a no-op pass-through. */
+export function filterByCategory(
+	cards: Card[],
+	category: Category | 'all' | null | undefined
+): Card[] {
+	if (!category || category === 'all') return cards;
+	return cards.filter((c) => c.category === category);
+}
+
+/**
+ * Case-insensitive substring filter over title, site name and author. An empty
+ * or whitespace-only query is a no-op pass-through. Short-circuits per field so
+ * no combined haystack string is allocated.
+ */
+export function filterByText(cards: Card[], text: string | null | undefined): Card[] {
+	const needle = text?.trim().toLowerCase();
+	if (!needle) return cards;
+	return cards.filter(
+		(c) =>
+			c.title.toLowerCase().includes(needle) ||
+			(c.siteName?.toLowerCase().includes(needle) ?? false) ||
+			(c.author?.toLowerCase().includes(needle) ?? false)
+	);
+}
+
 /** Every distinct tag across the cards, sorted alphabetically. */
 export function collectTags(cards: Card[]): string[] {
 	const seen: Record<string, true> = {};
 	for (const c of cards) for (const t of c.tags) seen[t] = true;
 	return Object.keys(seen).sort((a, b) => a.localeCompare(b));
+}
+
+const CATEGORY_ORDER: readonly Category[] = ['article', 'rss', 'email', 'pdf'];
+const SOURCE_ORDER: readonly Source[] = ['miniflux', 'readeck'];
+
+/**
+ * Categories present in `cards`, in canonical order (article, rss, email, pdf).
+ * Used to populate the category facet only with options that can match.
+ */
+export function collectCategories(cards: Card[]): Category[] {
+	const present = new Set<Category>();
+	for (const c of cards) present.add(c.category);
+	return CATEGORY_ORDER.filter((c) => present.has(c));
+}
+
+/** Distinct sources present in `cards`, in canonical order (miniflux, readeck). */
+export function collectSources(cards: Card[]): Source[] {
+	const present = new Set<Source>();
+	for (const c of cards) present.add(c.source);
+	return SOURCE_ORDER.filter((s) => present.has(s));
 }
 
 function fieldValue(card: Card, field: string): string | number | boolean | null {
