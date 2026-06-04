@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.5.2',
+		date: '2026-06-03',
+		title: 'Sidebar & sorting',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Collapsible feeds in the sidebar — expand Feeds to browse folders, then each folder to its publications; click one to read just that feed. Your expanded state is remembered.'
+			},
+			{
+				kind: 'improved',
+				text: 'Lists now sort by publication date by default, so the freshest writing is up top.'
+			},
+			{
+				kind: 'improved',
+				text: 'The Feed badge now counts only unread items, matching how the new per-feed counts work.'
+			}
+		]
+	},
+	{
 		version: '0.5.1',
 		date: '2026-06-03',
 		title: 'What’s new',

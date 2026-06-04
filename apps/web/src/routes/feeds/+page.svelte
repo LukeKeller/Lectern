@@ -3,12 +3,7 @@
 	import { onMount } from 'svelte';
 	import { getClient } from '$lib/config';
 	import { readOpmlFile } from '$lib/opml';
-
-	interface FeedGroup {
-		id: string | null;
-		title: string;
-		feeds: Feed[];
-	}
+	import { groupFeeds } from '$lib/feeds';
 
 	let feeds = $state<Feed[]>([]);
 	let folders = $state<FeedFolder[]>([]);
@@ -22,31 +17,7 @@
 	let refreshMessage = $state<string | undefined>(undefined);
 	let importMessage = $state<string | undefined>(undefined);
 
-	const grouped = $derived.by<FeedGroup[]>(() => {
-		const byFolder: Record<string, Feed[]> = {};
-		const loose: Feed[] = [];
-		for (const feed of feeds) {
-			if (feed.folderId) (byFolder[feed.folderId] ??= []).push(feed);
-			else loose.push(feed);
-		}
-		const groups: FeedGroup[] = folders.map((folder) => ({
-			id: folder.id,
-			title: folder.title,
-			feeds: byFolder[folder.id] ?? []
-		}));
-		// Surface folders that feeds reference but the folder list omitted.
-		for (const feed of feeds) {
-			if (feed.folderId && !groups.some((g) => g.id === feed.folderId)) {
-				groups.push({
-					id: feed.folderId,
-					title: feed.folderTitle ?? feed.folderId,
-					feeds: byFolder[feed.folderId] ?? []
-				});
-			}
-		}
-		if (loose.length) groups.push({ id: null, title: 'Uncategorized', feeds: loose });
-		return groups.filter((g) => g.feeds.length > 0);
-	});
+	const grouped = $derived(groupFeeds(feeds, folders));
 
 	async function load() {
 		loading = true;

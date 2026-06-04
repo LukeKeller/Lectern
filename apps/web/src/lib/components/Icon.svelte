@@ -29,7 +29,8 @@
 		| 'list'
 		| 'info'
 		| 'newspaper'
-		| 'magazine';
+		| 'magazine'
+		| 'chevron';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -69,7 +70,8 @@
 		newspaper:
 			'<path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H16a1 1 0 0 1 1 1v12.5a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 4 18.5z"/><path d="M17 9h1.5A1.5 1.5 0 0 1 20 10.5V18a2 2 0 0 1-2 2"/><path d="M7 8.5h6M7 11.5h6M7 14.5h4"/>',
 		magazine:
-			'<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 7.5h7"/><path d="M8.5 11h7M8.5 13.5h4.5"/>'
+			'<rect x="5.5" y="3.5" width="13" height="17" rx="1.5"/><path d="M8.5 7.5h7"/><path d="M8.5 11h7M8.5 13.5h4.5"/>',
+		chevron: '<path d="m9 6 6 6-6 6"/>'
 	};
 </script>
 

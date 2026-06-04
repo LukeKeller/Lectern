@@ -97,6 +97,18 @@
             "type": "string",
             "format": "uri"
           },
+          "coverImage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "wordCount": {
             "default": null,
             "anyOf": [
@@ -169,6 +181,17 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "publishedAt": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -182,6 +205,7 @@
           "author",
           "siteName",
           "url",
+          "coverImage",
           "wordCount",
           "readingTimeMinutes",
           "readingProgress",
@@ -190,7 +214,8 @@
           "highlightCount",
           "note",
           "savedAt",
-          "updatedAt"
+          "updatedAt",
+          "publishedAt"
         ],
         "additionalProperties": false
       },
@@ -300,10 +325,28 @@
             "default": false,
             "type": "boolean"
           },
+          "icon": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "sortBy": {
             "default": "savedAt",
             "type": "string",
             "enum": [
+              "publishedAt",
               "savedAt",
               "updatedAt",
               "title",
@@ -331,6 +374,8 @@
           "name",
           "query",
           "pinned",
+          "icon",
+          "position",
           "sortBy",
           "sortDir",
           "createdAt",
@@ -717,6 +762,18 @@
                             "type": "string",
                             "format": "uri"
                           },
+                          "coverImage": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "wordCount": {
                             "default": null,
                             "anyOf": [
@@ -789,6 +846,17 @@
                           },
                           "updatedAt": {
                             "type": "string"
+                          },
+                          "publishedAt": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -802,6 +870,7 @@
                           "author",
                           "siteName",
                           "url",
+                          "coverImage",
                           "wordCount",
                           "readingTimeMinutes",
                           "readingProgress",
@@ -810,7 +879,8 @@
                           "highlightCount",
                           "note",
                           "savedAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "publishedAt"
                         ],
                         "additionalProperties": false
                       }
@@ -930,6 +1000,18 @@
                       "type": "string",
                       "format": "uri"
                     },
+                    "coverImage": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "wordCount": {
                       "default": null,
                       "anyOf": [
@@ -1002,6 +1084,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "publishedAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -1015,6 +1108,7 @@
                     "author",
                     "siteName",
                     "url",
+                    "coverImage",
                     "wordCount",
                     "readingTimeMinutes",
                     "readingProgress",
@@ -1023,7 +1117,8 @@
                     "highlightCount",
                     "note",
                     "savedAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "publishedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -1249,6 +1344,18 @@
                       "type": "string",
                       "format": "uri"
                     },
+                    "coverImage": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "wordCount": {
                       "default": null,
                       "anyOf": [
@@ -1321,6 +1428,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "publishedAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -1334,6 +1452,7 @@
                     "author",
                     "siteName",
                     "url",
+                    "coverImage",
                     "wordCount",
                     "readingTimeMinutes",
                     "readingProgress",
@@ -1342,7 +1461,8 @@
                     "highlightCount",
                     "note",
                     "savedAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "publishedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -1446,6 +1566,18 @@
                       "type": "string",
                       "format": "uri"
                     },
+                    "coverImage": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "wordCount": {
                       "default": null,
                       "anyOf": [
@@ -1518,6 +1650,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "publishedAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -1531,6 +1674,7 @@
                     "author",
                     "siteName",
                     "url",
+                    "coverImage",
                     "wordCount",
                     "readingTimeMinutes",
                     "readingProgress",
@@ -1539,7 +1683,8 @@
                     "highlightCount",
                     "note",
                     "savedAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "publishedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -2050,10 +2195,28 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "icon": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "position": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "sortBy": {
                             "default": "savedAt",
                             "type": "string",
                             "enum": [
+                              "publishedAt",
                               "savedAt",
                               "updatedAt",
                               "title",
@@ -2081,6 +2244,8 @@
                           "name",
                           "query",
                           "pinned",
+                          "icon",
+                          "position",
                           "sortBy",
                           "sortDir",
                           "createdAt",
@@ -2254,10 +2419,28 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "icon": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "position": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "sortBy": {
                       "default": "savedAt",
                       "type": "string",
                       "enum": [
+                        "publishedAt",
                         "savedAt",
                         "updatedAt",
                         "title",
@@ -2285,6 +2468,8 @@
                     "name",
                     "query",
                     "pinned",
+                    "icon",
+                    "position",
                     "sortBy",
                     "sortDir",
                     "createdAt",
@@ -2439,10 +2624,28 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "icon": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "position": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
                   "sortBy": {
                     "default": "savedAt",
                     "type": "string",
                     "enum": [
+                      "publishedAt",
                       "savedAt",
                       "updatedAt",
                       "title",
@@ -2463,6 +2666,8 @@
                   "name",
                   "query",
                   "pinned",
+                  "icon",
+                  "position",
                   "sortBy",
                   "sortDir"
                 ],
@@ -2637,10 +2842,28 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "icon": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "position": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "sortBy": {
                       "default": "savedAt",
                       "type": "string",
                       "enum": [
+                        "publishedAt",
                         "savedAt",
                         "updatedAt",
                         "title",
@@ -2668,6 +2891,8 @@
                     "name",
                     "query",
                     "pinned",
+                    "icon",
+                    "position",
                     "sortBy",
                     "sortDir",
                     "createdAt",
@@ -2822,10 +3047,28 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "icon": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "position": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
                   "sortBy": {
                     "default": "savedAt",
                     "type": "string",
                     "enum": [
+                      "publishedAt",
                       "savedAt",
                       "updatedAt",
                       "title",
@@ -3107,6 +3350,18 @@
                             "type": "string",
                             "format": "uri"
                           },
+                          "coverImage": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "wordCount": {
                             "default": null,
                             "anyOf": [
@@ -3179,6 +3434,17 @@
                           },
                           "updatedAt": {
                             "type": "string"
+                          },
+                          "publishedAt": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -3192,6 +3458,7 @@
                           "author",
                           "siteName",
                           "url",
+                          "coverImage",
                           "wordCount",
                           "readingTimeMinutes",
                           "readingProgress",
@@ -3200,7 +3467,8 @@
                           "highlightCount",
                           "note",
                           "savedAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "publishedAt"
                         ],
                         "additionalProperties": false
                       }
@@ -3506,6 +3774,28 @@
                             "type",
                             "id",
                             "highlightId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "markRead"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "read": {
+                              "default": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "read"
                           ],
                           "additionalProperties": false
                         }

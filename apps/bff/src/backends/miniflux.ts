@@ -107,6 +107,7 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
     note: null,
     savedAt: entry.published_at,
     updatedAt: entry.changed_at,
+    publishedAt: entry.published_at,
   };
 }
 

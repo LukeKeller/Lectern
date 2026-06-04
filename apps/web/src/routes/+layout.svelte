@@ -14,6 +14,9 @@
 	import { SMART_VIEWS } from '$lib/smart-views';
 	import { buildEdition, latestIssueKey, yesterdayKey } from '$lib/newspaper';
 	import { buildMagazines } from '$lib/magazine';
+	import { feedsStore } from '$lib/feeds-store.svelte';
+	import { feedGroupKey } from '$lib/feeds';
+	import { SvelteSet } from 'svelte/reactivity';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
@@ -48,8 +51,7 @@
 		{ id: '/library', label: 'Library', icon: 'book' }
 	] as const satisfies readonly NavItem[];
 	const tools = [
-		{ id: '/search', label: 'Search', icon: 'search' },
-		{ id: '/feeds', label: 'Feeds', icon: 'folder' }
+		{ id: '/search', label: 'Search', icon: 'search' }
 	] as const satisfies readonly NavItem[];
 
 	// Live per-location counts for the nav, mirroring Readwise's sidebar badges.
@@ -59,7 +61,13 @@
 	const counts = $derived.by(() => {
 		const c = { inbox: 0, later: 0, shortlist: 0, archive: 0, feed: 0 };
 		for (const card of (allCards.value ?? []) as Card[]) {
-			if (card.location in c) c[card.location as keyof typeof c] += 1;
+			// Feed mirrors Readwise's "Unseen" badge: count only unread items so the
+			// number tracks what's left to read, not the total ever fetched.
+			if (card.location === 'feed') {
+				if (card.readState !== 'finished') c.feed += 1;
+			} else if (card.location in c) {
+				c[card.location as keyof typeof c] += 1;
+			}
 		}
 		return c;
 	});
@@ -69,6 +77,59 @@
 		const list = (allCards.value ?? []) as Card[];
 		const edition = buildEdition(list, latestIssueKey(list, yesterdayKey()));
 		return { newspaper: edition.total, magazine: buildMagazines(list).length };
+	});
+
+	// Unread feed counts keyed by publication (card.siteName === MiniFlux feed
+	// title), so the per-feed/folder badges in the tree match the top "Feed"
+	// badge and the per-feed list (which filters on the same key). Derived from
+	// the local mirror so the counts work offline; the feeds *structure* still
+	// needs the feeds store.
+	const feedUnread = $derived.by(() => {
+		const m: Record<string, number> = {};
+		for (const card of (allCards.value ?? []) as Card[]) {
+			if (card.location === 'feed' && card.readState !== 'finished' && card.siteName) {
+				m[card.siteName] = (m[card.siteName] ?? 0) + 1;
+			}
+		}
+		return m;
+	});
+	function folderUnread(titles: string[]): number {
+		let n = 0;
+		for (const t of titles) n += feedUnread[t] ?? 0;
+		return n;
+	}
+
+	// Sidebar feed-tree disclosure state, persisted so the tree reopens as the
+	// user left it. Top-level open flag + the set of expanded folder keys.
+	let feedsOpen = $state(loadFeedsOpen());
+	const openFolders = new SvelteSet<string>(loadOpenFolders());
+	function loadFeedsOpen(): boolean {
+		return (
+			typeof localStorage !== 'undefined' && localStorage.getItem('lectern.feedsNav.open') === '1'
+		);
+	}
+	function loadOpenFolders(): string[] {
+		if (typeof localStorage === 'undefined') return [];
+		try {
+			const parsed = JSON.parse(localStorage.getItem('lectern.feedsNav.folders') ?? '[]');
+			return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+		} catch {
+			return [];
+		}
+	}
+	function toggleFolder(key: string) {
+		if (openFolders.has(key)) openFolders.delete(key);
+		else openFolders.add(key);
+	}
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('lectern.feedsNav.open', feedsOpen ? '1' : '0');
+		}
+	});
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('lectern.feedsNav.folders', JSON.stringify([...openFolders]));
+		}
 	});
 
 	function navCount(id: string): number {
@@ -195,6 +256,7 @@
 	onMount(() => {
 		readerSettings.applyTheme();
 		void viewsStore.load();
+		void feedsStore.load();
 		const sync = getSync();
 		sync.start();
 		// Make new deploys reach the user: force a service-worker update check on
@@ -335,6 +397,68 @@
 					</a>
 				</li>
 			{/each}
+			<li class="feeds-row">
+				<a
+					href={resolve('/feeds')}
+					class:active={isActive('/feeds')}
+					aria-current={isActive('/feeds') ? 'page' : undefined}
+				>
+					<Icon name="folder" />
+					<span>Feeds</span>
+				</a>
+				<button
+					type="button"
+					class="disclosure"
+					aria-expanded={feedsOpen}
+					aria-label={feedsOpen ? 'Collapse feeds' : 'Expand feeds'}
+					onclick={() => (feedsOpen = !feedsOpen)}
+				>
+					<span class="chev" class:open={feedsOpen}><Icon name="chevron" size={14} /></span>
+				</button>
+			</li>
+			{#if feedsOpen}
+				{#each feedsStore.grouped as group (feedGroupKey(group))}
+					{@const fkey = feedGroupKey(group)}
+					{@const folderOpen = openFolders.has(fkey)}
+					{@const unread = folderUnread(group.feeds.map((f) => f.title))}
+					<li class="tree-li">
+						<button
+							type="button"
+							class="tree-row"
+							aria-expanded={folderOpen}
+							onclick={() => toggleFolder(fkey)}
+						>
+							<span class="chev" class:open={folderOpen}><Icon name="chevron" size={12} /></span>
+							<span class="tree-label">{group.title}</span>
+							{#if unread > 0}<span class="nav-count">{unread}</span>{/if}
+						</button>
+						{#if folderOpen}
+							<ul class="feed-children">
+								{#each group.feeds as feed (feed.id)}
+									{@const feedCount = feedUnread[feed.title] ?? 0}
+									{@const href = `${resolve('/feed')}?feed=${encodeURIComponent(feed.title)}`}
+									<li>
+										<!-- resolve() owns the path; the query string is appended for the per-feed filter -->
+										<!-- eslint-disable svelte/no-navigation-without-resolve -->
+										<a
+											{href}
+											class:active={page.url.pathname === resolve('/feed') &&
+												page.url.searchParams.get('feed') === feed.title}
+										>
+											<span class="tree-label">{feed.title}</span>
+											{#if feedCount > 0}<span class="nav-count">{feedCount}</span>{/if}
+										</a>
+										<!-- eslint-enable svelte/no-navigation-without-resolve -->
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</li>
+				{/each}
+				{#if feedsStore.loaded && feedsStore.grouped.length === 0}
+					<li class="tree-empty">No feeds yet</li>
+				{/if}
+			{/if}
 		</ul>
 
 		{#if viewsStore.pinned.length}
@@ -567,6 +691,84 @@
 	}
 	nav a.active .nav-count {
 		color: var(--accent);
+	}
+
+	/* Feeds disclosure: the management link sits inline with a chevron toggle. */
+	.feeds-row {
+		display: flex;
+		align-items: center;
+	}
+	.feeds-row a {
+		flex: 1;
+		min-width: 0;
+	}
+	.disclosure {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		flex-shrink: 0;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: background var(--dur-fast) var(--ease);
+	}
+	.disclosure:hover {
+		background: var(--surface-alt);
+		color: var(--text);
+	}
+	.chev {
+		display: inline-flex;
+		transition: transform var(--dur-fast) var(--ease);
+	}
+	.chev.open {
+		transform: rotate(90deg);
+	}
+	/* Folder rows: a button styled like a nav link, indented under Feeds. */
+	.tree-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		width: 100%;
+		padding: 0.4rem 0.55rem 0.4rem 1.35rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		line-height: 1.2;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.tree-row:hover {
+		background: var(--surface-alt);
+		color: var(--text);
+	}
+	.tree-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.tree-row .nav-count {
+		margin-left: auto;
+	}
+	/* Feed leaves: nudged a further step in from their folder. */
+	.feed-children a {
+		padding-left: 2.5rem;
+		font-size: var(--text-sm);
+	}
+	.tree-empty {
+		padding: 0.4rem 0.55rem 0.4rem 1.35rem;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		opacity: 0.7;
 	}
 
 	.foot {

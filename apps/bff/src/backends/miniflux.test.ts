@@ -48,6 +48,7 @@ describe("minifluxEntryToCard", () => {
       highlightCount: 0,
       savedAt: "2026-06-02T22:21:52Z",
       updatedAt: "2026-06-03T02:38:01Z",
+      publishedAt: "2026-06-02T22:21:52Z",
     });
     expect(() => Card.parse(card)).not.toThrow();
   });

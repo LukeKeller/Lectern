@@ -50,8 +50,8 @@ describe("mock server serves the contract", () => {
 
   it("listFeeds returns feeds + folders", async () => {
     const r = await client.listFeeds();
-    expect(r.feeds[0]!.feedUrl).toBe("https://example.com/rss");
-    expect(r.folders).toHaveLength(1);
+    expect(r.feeds[0]!.feedUrl).toBe("https://simonwillison.net/atom/everything/");
+    expect(r.folders).toHaveLength(2);
   });
 
   it("refreshFeeds resolves on an empty-body 202", async () => {

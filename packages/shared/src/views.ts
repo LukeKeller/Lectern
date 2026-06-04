@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { QueryNode } from "./query";
 
-export const ViewSortBy = z.enum(["savedAt", "updatedAt", "title", "wordCount", "readingProgress"]);
+export const ViewSortBy = z.enum([
+  "publishedAt",
+  "savedAt",
+  "updatedAt",
+  "title",
+  "wordCount",
+  "readingProgress",
+]);
 export type ViewSortBy = z.infer<typeof ViewSortBy>;
 
 export const SortDir = z.enum(["asc", "desc"]);

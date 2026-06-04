@@ -321,18 +321,41 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       res,
       200,
       FeedsResponse.parse({
+        // Mirror the publications behind the sample feed cards (matched by
+        // siteName) so the sidebar feed tree shows realistic folders + counts.
         feeds: [
           {
             id: "feed_1",
-            title: "Example Feed",
-            feedUrl: "https://example.com/rss",
-            siteUrl: "https://example.com",
-            folderId: "folder_1",
+            title: "Simon Willison's Weblog",
+            feedUrl: "https://simonwillison.net/atom/everything/",
+            siteUrl: "https://simonwillison.net",
+            folderId: "folder_tech",
             folderTitle: "Tech",
-            unreadCount: 3,
+            unreadCount: 2,
+          },
+          {
+            id: "feed_2",
+            title: "The Pragmatic Engineer",
+            feedUrl: "https://newsletter.pragmaticengineer.com/feed",
+            siteUrl: "https://newsletter.pragmaticengineer.com",
+            folderId: "folder_tech",
+            folderTitle: "Tech",
+            unreadCount: 2,
+          },
+          {
+            id: "feed_3",
+            title: "Increment",
+            feedUrl: "https://increment.com/feed.xml",
+            siteUrl: "https://increment.com",
+            folderId: "folder_design",
+            folderTitle: "Design",
+            unreadCount: 1,
           },
         ],
-        folders: [{ id: "folder_1", title: "Tech", unreadCount: 3 }],
+        folders: [
+          { id: "folder_tech", title: "Tech", unreadCount: 4 },
+          { id: "folder_design", title: "Design", unreadCount: 1 },
+        ],
       }),
     );
   }

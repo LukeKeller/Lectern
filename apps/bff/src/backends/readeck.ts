@@ -29,6 +29,8 @@ export interface ReadeckBookmark {
   authors: string[];
   created: string;
   updated: string;
+  /** Original article publication date when Readeck extracted one. */
+  published?: string | null;
   state: number;
   loaded: boolean;
   has_article: boolean;
@@ -101,6 +103,9 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     note: null,
     savedAt: bookmark.created,
     updatedAt: bookmark.updated,
+    // Readeck may not extract a publish date; fall back to the save time so the
+    // unified publishedAt sort still orders these items sensibly.
+    publishedAt: bookmark.published ?? null,
   };
 }
 

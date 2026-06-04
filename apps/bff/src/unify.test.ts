@@ -43,6 +43,7 @@ function rssCard(over: Partial<Card> = {}): Card {
     note: null,
     savedAt: "2026-06-01T00:00:00Z",
     updatedAt: "2026-06-01T00:00:00Z",
+    publishedAt: null,
     ...over,
   };
 }

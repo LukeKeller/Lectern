@@ -77,5 +77,9 @@ export const Card = z.object({
   note: z.string().nullable().default(null),
   savedAt: z.string(),
   updatedAt: z.string(),
+  // Original article publication date (RSS: MiniFlux published_at; saved
+  // articles: the source's published date when known). Distinct from savedAt
+  // (when the item entered Lectern). Null when the backend has no publish date.
+  publishedAt: z.string().nullable().default(null),
 });
 export type Card = z.infer<typeof Card>;

@@ -44,7 +44,7 @@
 		emptyIcon = 'inbox',
 		hideReadKey = undefined,
 		baseQuery,
-		sortBy = $bindable<ViewSortBy>('updatedAt'),
+		sortBy = $bindable<ViewSortBy>('publishedAt'),
 		sortDir = $bindable<SortDir>('desc')
 	}: {
 		title: string;
@@ -253,6 +253,7 @@
 	});
 
 	const SORT_LABELS: Record<ViewSortBy, string> = {
+		publishedAt: 'Published',
 		savedAt: 'Saved',
 		updatedAt: 'Updated',
 		title: 'Title',

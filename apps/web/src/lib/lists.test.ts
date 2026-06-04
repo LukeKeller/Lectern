@@ -66,6 +66,19 @@ describe('sortCards', () => {
 		expect(sortCards(cards, 'savedAt', 'desc').map((x) => x.id)).toEqual(['b', 'c', 'a']);
 	});
 
+	it('sorts by publishedAt, falling back to savedAt when null', () => {
+		// p has an explicit publishedAt earlier than its savedAt; q/r have none and
+		// fall back to savedAt. Descending order should rank by the effective key.
+		const p = makeCard({
+			id: 'p',
+			savedAt: '2026-05-01T00:00:00Z',
+			publishedAt: '2026-01-15T00:00:00Z'
+		});
+		const q = makeCard({ id: 'q', savedAt: '2026-02-01T00:00:00Z', publishedAt: null });
+		const r = makeCard({ id: 'r', savedAt: '2026-03-01T00:00:00Z', publishedAt: null });
+		expect(sortCards([p, q, r], 'publishedAt', 'desc').map((x) => x.id)).toEqual(['r', 'q', 'p']);
+	});
+
 	it('treats a null wordCount as zero', () => {
 		const n = makeCard({ id: 'n', wordCount: null });
 		expect(sortCards([a, n], 'wordCount', 'asc')[0]!.id).toBe('n');

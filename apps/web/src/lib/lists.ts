@@ -16,6 +16,11 @@ function compareBy(a: Card, b: Card, by: ViewSortBy): number {
 			return (a.wordCount ?? 0) - (b.wordCount ?? 0);
 		case 'readingProgress':
 			return a.readingProgress - b.readingProgress;
+		case 'publishedAt':
+			// Saved articles often lack a publish date; fall back to savedAt so they
+			// still order by when they entered the library rather than sinking to the
+			// bottom as equal-empty keys.
+			return (a.publishedAt ?? a.savedAt).localeCompare(b.publishedAt ?? b.savedAt);
 		case 'savedAt':
 			return a.savedAt.localeCompare(b.savedAt);
 		case 'updatedAt':
