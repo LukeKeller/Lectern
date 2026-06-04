@@ -29,6 +29,7 @@ ynh_app_setting_set --key=imap_host --value="${imap_host:-}"
 ynh_app_setting_set --key=imap_port --value="$imap_port"
 ynh_app_setting_set --key=imap_user --value="${imap_user:-}"
 ynh_app_setting_set --key=imap_password --value="${imap_password:-}"
+ynh_app_setting_set --key=imap_exclude_senders --value="${imap_exclude_senders:-}"
 ynh_app_setting_set --key=enable_email --value="$enable_email"
 
 #=================================================

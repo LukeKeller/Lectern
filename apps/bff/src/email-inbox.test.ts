@@ -4,9 +4,11 @@ import {
   buildReadeckHtml,
   formatEmailCursor,
   fromParsedMail,
+  isExcludedSender,
   messageToSaveInput,
   newsletterUrl,
   parseEmailCursor,
+  parseExcludedSenders,
   sanitizeEmailHtml,
   type ParsedNewsletter,
 } from "./backends/email-inbox";
@@ -20,6 +22,39 @@ const baseMsg: ParsedNewsletter = {
   fromAddress: "hello@dailybyte.com",
   html: "<html><head><title>marketing junk</title></head><body><p>Hi there</p><img src='https://x/y.png'></body></html>",
 };
+
+describe("parseExcludedSenders", () => {
+  it("splits, trims, lowercases and drops blanks", () => {
+    const set = parseExcludedSenders(" Diagnosis@DigitallyAdrift.com , noreply@x.com ,, ");
+    expect(set).toEqual(new Set(["diagnosis@digitallyadrift.com", "noreply@x.com"]));
+  });
+
+  it("returns an empty set for empty/undefined input", () => {
+    expect(parseExcludedSenders("")).toEqual(new Set());
+    expect(parseExcludedSenders(undefined)).toEqual(new Set());
+  });
+});
+
+describe("isExcludedSender", () => {
+  const excluded = parseExcludedSenders("diagnosis@digitallyadrift.com");
+
+  it("matches the excluded address case-insensitively", () => {
+    expect(
+      isExcludedSender({ ...baseMsg, fromAddress: "Diagnosis@DigitallyAdrift.com" }, excluded),
+    ).toBe(true);
+  });
+
+  it("lets other senders through", () => {
+    expect(isExcludedSender({ ...baseMsg, fromAddress: "hello@dailybyte.com" }, excluded)).toBe(
+      false,
+    );
+  });
+
+  it("never excludes a message with no From address", () => {
+    expect(isExcludedSender({ ...baseMsg, fromAddress: "" }, excluded)).toBe(false);
+    expect(isExcludedSender(baseMsg, parseExcludedSenders(""))).toBe(false);
+  });
+});
 
 describe("sanitizeEmailHtml", () => {
   it("strips scripts and inline handlers but keeps images", () => {
