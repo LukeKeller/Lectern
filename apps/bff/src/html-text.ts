@@ -52,3 +52,16 @@ export function htmlToText(html: string): string {
   s = s.replace(/\n{3,}/g, "\n\n").trim();
   return s;
 }
+
+/**
+ * A short single-line preview snippet: collapse whitespace, cut at ~`max` chars
+ * on a word boundary, append an ellipsis. Returns null when empty.
+ */
+export function snippet(text: string, max = 280): string | null {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return null;
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}

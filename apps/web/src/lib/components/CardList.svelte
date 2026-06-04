@@ -68,31 +68,64 @@
 		}
 	}
 
-	/** Compact, de-duplicated metadata line: source · author · reading time. */
+	/** Byline: author · publication · reading time (de-duplicated). */
 	function meta(card: Card): string {
-		const source = card.siteName ?? hostname(card.url);
-		const parts: string[] = [source];
-		if (card.author && card.author !== source) parts.push(card.author);
+		const pub = card.siteName ?? hostname(card.url);
+		const parts: string[] = [];
+		if (card.author) parts.push(card.author);
+		if (pub && pub !== card.author) parts.push(pub);
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
 		return parts.join('  ·  ');
 	}
 
-	/** Absolute publish date + time for the meta row (the year is dropped when it
-	 *  matches the current year to keep recent stamps compact). */
+	/** The kind label shown top-right (Feed / Article / Email / PDF). */
+	function kindLabel(card: Card): string {
+		if (card.location === 'feed' || card.category === 'rss') return 'Feed';
+		if (card.category === 'email') return 'Email';
+		if (card.category === 'pdf') return 'PDF';
+		return 'Article';
+	}
+
+	/** Compact timestamp: time-of-day for today, else date + time. */
 	function publishedStamp(card: Card): string {
 		const t = Date.parse(card.publishedAt ?? card.savedAt);
 		if (Number.isNaN(t)) return '';
 		const d = new Date(t);
-		return d.toLocaleString(undefined, {
+		const now = new Date();
+		const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+		if (d.toDateString() === now.toDateString()) return time;
+		const date = d.toLocaleDateString(undefined, {
 			month: 'short',
 			day: 'numeric',
-			year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
+			year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric'
 		});
+		return `${date}, ${time}`;
 	}
 
 	const finished = (card: Card) => card.readingProgress >= 0.99;
+
+	// Three-dot overflow menu: only one open at a time (window-click closes it).
+	let menuOpenId = $state<string | null>(null);
+	function toggleMenu(id: string) {
+		menuOpenId = menuOpenId === id ? null : id;
+	}
+	function queueTitle(card: Card) {
+		return card.title || hostname(card.url);
+	}
+	function actionIcon(location: Location): IconName {
+		switch (location) {
+			case 'later':
+				return 'clock';
+			case 'shortlist':
+				return 'star';
+			case 'archive':
+				return 'archive';
+			case 'feed':
+				return 'rss';
+			default:
+				return 'inbox';
+		}
+	}
 
 	// ---- Mobile swipe actions (progressive enhancement over the buttons) ----
 	function toggleRead(card: Card) {
@@ -130,6 +163,8 @@
 	let failedCovers = new SvelteSet<string>();
 </script>
 
+<svelte:window onclick={() => (menuOpenId = null)} />
+
 {#if !cards}
 	<ul class="cards" aria-hidden="true">
 		{#each [0, 1, 2, 3] as i (i)}
@@ -156,18 +191,30 @@
 							<Icon name="archive" size={16} />
 						</span>
 					</div>
-					<article class="card swipe-front" onmouseenter={() => onselect?.(i)}>
-						{#if card.coverImage && !failedCovers.has(card.id)}
-							<img
-								class="thumb"
-								src={card.coverImage}
-								alt=""
-								loading="lazy"
-								onerror={() => failedCovers.add(card.id)}
-							/>
-						{:else}
-							<SourceAvatar url={card.url} siteName={card.siteName} />
-						{/if}
+					<article
+						class="card swipe-front"
+						class:unread={card.readState !== 'finished'}
+						onmouseenter={() => onselect?.(i)}
+					>
+						<span class="lead">
+							{#if card.readState !== 'finished'}
+								<span class="unread-dot" aria-hidden="true"></span>
+							{/if}
+							{#if card.coverImage && !failedCovers.has(card.id)}
+								<img
+									class="thumb"
+									src={card.coverImage}
+									alt=""
+									loading="lazy"
+									onerror={() => failedCovers.add(card.id)}
+								/>
+							{:else}
+								<span class="thumb thumb-fallback">
+									<SourceAvatar url={card.url} siteName={card.siteName} size={30} />
+								</span>
+							{/if}
+						</span>
+
 						<div class="body">
 							<a
 								class="title"
@@ -176,76 +223,156 @@
 							>
 								{card.title || hostname(card.url)}
 							</a>
-							{#if card.note}<p class="dek">{card.note}</p>{/if}
-							<div class="meta">
-								<span class="src">{meta(card)}</span>
-								{#if publishedStamp(card)}
-									<span class="dot" aria-hidden="true">·</span>
-									<span class="when">{publishedStamp(card)}</span>
-								{/if}
+							{#if card.excerpt}<p class="snippet">{card.excerpt}</p>{/if}
+							<p class="meta">
+								<span class="byline">{meta(card)}</span>
 								{#if card.highlightCount > 0}
 									<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
 								{/if}
-							</div>
-							{#if card.tags.length}
-								<div class="tags">
-									{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
-								</div>
-							{/if}
+							</p>
+						</div>
+
+						<div class="trail">
+							<span class="kind">
+								<span class="kind-type">{kindLabel(card)} · </span>{publishedStamp(card)}
+							</span>
 							<div class="actions">
-								<button
-									type="button"
-									class="icon-btn"
-									title="Listen"
-									aria-label="Listen"
-									onclick={() =>
-										ttsPlayer.listen({ id: card.id, title: card.title || hostname(card.url) })}
-								>
-									<Icon name="headphones" size={15} />
-								</button>
-								<button
-									type="button"
-									class="icon-btn"
-									title="Add to listen queue"
-									aria-label="Add to listen queue"
-									onclick={() =>
-										ttsPlayer.enqueue({ id: card.id, title: card.title || hostname(card.url) })}
-								>
-									<Icon name="plus" size={15} />
-								</button>
-								{#each actions as action (action.location)}
-									<button type="button" onclick={() => triage(card.id, action.location)}>
-										{action.label}
-									</button>
-								{/each}
-								{#if card.source === 'miniflux'}
+								<div class="menu-wrap">
 									<button
 										type="button"
-										class="primary"
-										onclick={() => saveToLater(card)}
-										disabled={savingId === card.id}
+										class="round"
+										title="More"
+										aria-label="More actions"
+										aria-expanded={menuOpenId === card.id}
+										onclick={(e) => {
+											e.stopPropagation();
+											toggleMenu(card.id);
+										}}
 									>
-										{savingId === card.id ? 'Saving…' : 'Read later'}
+										<Icon name="more" size={18} />
 									</button>
-								{/if}
+									{#if menuOpenId === card.id}
+										<div class="menu" role="menu">
+											<button
+												type="button"
+												role="menuitem"
+												onclick={(e) => {
+													e.stopPropagation();
+													ttsPlayer.listen({ id: card.id, title: queueTitle(card) });
+													menuOpenId = null;
+												}}
+											>
+												<Icon name="headphones" size={15} /> Listen
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												onclick={(e) => {
+													e.stopPropagation();
+													ttsPlayer.enqueue({ id: card.id, title: queueTitle(card) });
+													menuOpenId = null;
+												}}
+											>
+												<Icon name="plus" size={15} /> Add to queue
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												onclick={(e) => {
+													e.stopPropagation();
+													toggleRead(card);
+													menuOpenId = null;
+												}}
+											>
+												<Icon name="check" size={15} /> Mark {card.readState === 'finished'
+													? 'unread'
+													: 'read'}
+											</button>
+											{#each actions as action (action.location)}
+												{#if action.location !== 'later' && action.location !== 'archive'}
+													<button
+														type="button"
+														role="menuitem"
+														onclick={(e) => {
+															e.stopPropagation();
+															triage(card.id, action.location);
+															menuOpenId = null;
+														}}
+													>
+														<Icon name={actionIcon(action.location)} size={15} />
+														{action.label}
+													</button>
+												{/if}
+											{/each}
+											{#if card.source === 'miniflux'}
+												<button
+													type="button"
+													role="menuitem"
+													disabled={savingId === card.id}
+													onclick={(e) => {
+														e.stopPropagation();
+														saveToLater(card);
+														menuOpenId = null;
+													}}
+												>
+													<Icon name="bookmark" size={15} />
+													{savingId === card.id ? 'Saving…' : 'Save to library'}
+												</button>
+											{/if}
+											<!-- eslint-disable svelte/no-navigation-without-resolve -->
+											<a
+												class="menu-link"
+												role="menuitem"
+												href={card.url}
+												target="_blank"
+												rel="noreferrer noopener"
+												onclick={(e) => {
+													e.stopPropagation();
+													menuOpenId = null;
+												}}
+											>
+												<Icon name="external" size={15} /> Open original
+											</a>
+											<!-- eslint-enable svelte/no-navigation-without-resolve -->
+										</div>
+									{/if}
+								</div>
+								<div class="quick">
+									{#if card.location !== 'later'}
+										<button
+											type="button"
+											class="round"
+											title="Read later"
+											aria-label="Read later"
+											onclick={() => triage(card.id, 'later')}
+										>
+											<Icon name="clock" size={17} />
+										</button>
+									{/if}
+									{#if card.location !== 'archive'}
+										<button
+											type="button"
+											class="round"
+											title="Archive"
+											aria-label="Archive"
+											onclick={() => triage(card.id, 'archive')}
+										>
+											<Icon name="archive" size={17} />
+										</button>
+									{/if}
+								</div>
 							</div>
 						</div>
-						<div class="aside">
-							{#if finished(card)}
-								<span class="badge done" title="Finished"><Icon name="check" size={15} /></span>
-							{:else if card.readingProgress > 0}
-								<span
-									class="ring"
-									style={`--p:${Math.round(card.readingProgress * 100)}`}
-									title={`${Math.round(card.readingProgress * 100)}% read`}
-								>
-									<svg viewBox="0 0 36 36" width="26" height="26" aria-hidden="true">
-										<circle class="ring-bg" cx="18" cy="18" r="15.5" pathLength="100" />
-										<circle class="ring-fg" cx="18" cy="18" r="15.5" pathLength="100" />
-									</svg>
-								</span>
-							{/if}
-						</div>
+
+						{#if finished(card)}
+							<span class="progress-bar done" aria-hidden="true"></span>
+						{:else if card.readingProgress > 0}
+							<span
+								class="progress-bar"
+								style={`--p:${Math.round(card.readingProgress * 100)}%`}
+								aria-hidden="true"
+							></span>
+						{/if}
 					</article>
 				</div>
 			</li>
@@ -260,15 +387,6 @@
 {/if}
 
 <style>
-	.thumb {
-		flex-shrink: 0;
-		width: 30px;
-		height: 30px;
-		border-radius: var(--radius-sm);
-		object-fit: cover;
-		border: 1px solid var(--border);
-		background: var(--surface-alt);
-	}
 	.cards {
 		list-style: none;
 		margin: 0;
@@ -345,9 +463,12 @@
 	.card {
 		position: relative;
 		display: flex;
-		gap: 0.85rem;
-		padding: 0.8rem 0.85rem;
+		gap: 0.9rem;
+		align-items: flex-start;
+		padding: 0.85rem 0.9rem 0.95rem;
 		border-radius: var(--radius-lg);
+		border-left: 3px solid transparent;
+		overflow: hidden;
 		transition:
 			background var(--dur-fast) var(--ease),
 			box-shadow var(--dur-fast) var(--ease);
@@ -356,41 +477,60 @@
 		background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
 		box-shadow: var(--shadow-sm);
 	}
+	.card.unread {
+		border-left-color: var(--accent);
+	}
 	li.selected .card {
 		background: var(--accent-soft);
 		box-shadow: var(--shadow-sm);
 	}
-	li.selected .card::before {
-		content: '';
+
+	.lead {
+		position: relative;
+		flex-shrink: 0;
+	}
+	.unread-dot {
 		position: absolute;
-		left: 0;
-		top: 0.7rem;
-		bottom: 0.7rem;
-		width: 3px;
-		border-radius: var(--radius-full);
+		top: -3px;
+		left: -3px;
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
 		background: var(--accent);
+		border: 2px solid var(--bg);
+		z-index: 2;
+	}
+	.thumb,
+	.thumb-fallback {
+		width: 52px;
+		height: 52px;
+		border-radius: var(--radius);
+		border: 1px solid var(--border);
+		background: var(--surface-alt);
+		object-fit: cover;
+		display: block;
+	}
+	.thumb-fallback {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.body {
 		flex: 1;
 		min-width: 0;
 	}
-
 	.title {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
+		display: block;
 		font-size: var(--text-md);
-		font-weight: 620;
-		line-height: 1.34;
+		font-weight: 650;
+		line-height: 1.3;
 		color: var(--text);
 		letter-spacing: -0.01em;
 		transition: color var(--dur-fast) var(--ease);
 	}
-	/* Stretched link: the whole row opens the document, while the action
-	   buttons below sit above this layer and stay independently clickable. */
+	/* Stretched link: the whole card opens the document; the trail actions sit
+	   on a higher layer and stay independently clickable. */
 	.title::after {
 		content: '';
 		position: absolute;
@@ -401,73 +541,67 @@
 	li.selected .title {
 		color: var(--accent);
 	}
-	.dek {
+	.snippet {
 		margin: 0.25rem 0 0;
 		font-size: var(--text-sm);
+		line-height: 1.45;
 		color: var(--text-muted);
-		overflow: hidden;
 		display: -webkit-box;
-		-webkit-line-clamp: 1;
-		line-clamp: 1;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 	.meta {
 		display: flex;
 		align-items: center;
-		gap: 0.45rem;
-		margin-top: 0.35rem;
+		gap: 0.5rem;
+		margin: 0.45rem 0 0;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
 	}
-	.src {
+	.byline {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		min-width: 0;
-	}
-	.dot {
-		opacity: 0.6;
-	}
-	.when {
-		flex-shrink: 0;
-		font-variant-numeric: tabular-nums;
 	}
 	.hl {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
 		flex-shrink: 0;
-		margin-left: auto;
 		font-variant-numeric: tabular-nums;
 	}
-	.tags {
-		margin-top: 0.5rem;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-	}
-	.tag {
-		font-size: var(--text-2xs);
-		letter-spacing: 0.02em;
-		padding: 0.12rem 0.5rem;
-		border-radius: var(--radius-full);
-		background: var(--surface-alt);
-		color: var(--text-muted);
-	}
 
-	.actions {
-		margin-top: 0.65rem;
+	.trail {
+		flex-shrink: 0;
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.5rem;
 		position: relative;
 		z-index: 1;
+	}
+	.kind {
+		font-size: var(--text-2xs);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 		opacity: 0;
 		transition: opacity var(--dur-fast) var(--ease);
 	}
 	.card:hover .actions,
 	li.selected .actions,
-	.card:focus-within .actions {
+	.card:focus-within .actions,
+	.actions:has(.menu) {
 		opacity: 1;
 	}
 	@media (hover: none) {
@@ -475,12 +609,14 @@
 			opacity: 1;
 		}
 	}
-	.actions button {
-		font-size: var(--text-sm);
-		font-weight: 500;
-		padding: 0.25rem 0.65rem;
+	.round {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 50%;
 		border: 1px solid var(--border);
-		border-radius: var(--radius-full);
 		background: var(--surface);
 		color: var(--text-muted);
 		cursor: pointer;
@@ -489,67 +625,94 @@
 			color var(--dur-fast) var(--ease),
 			background var(--dur-fast) var(--ease);
 	}
-	.actions button:hover {
-		border-color: var(--border-strong);
-		color: var(--text);
-	}
-	.actions button.primary:hover {
+	.round:hover {
 		border-color: var(--accent);
 		color: var(--accent);
 		background: var(--accent-soft);
 	}
-	.actions button:disabled {
-		opacity: 0.55;
+	.round:disabled {
+		opacity: 0.5;
 		cursor: default;
 	}
-	.actions button.icon-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.25rem;
-		width: 1.85rem;
-		height: 1.85rem;
-		border-radius: 50%;
-	}
-	.actions button.icon-btn:hover {
-		border-color: var(--accent);
-		color: var(--accent);
-		background: var(--accent-soft);
+	.quick {
+		display: flex;
+		gap: 0.25rem;
 	}
 
-	.aside {
-		flex-shrink: 0;
+	/* Mobile: drop the kind label + quick triage buttons (swipe handles those),
+	   keep just a compact timestamp and the overflow menu so titles get room. */
+	@media (max-width: 640px) {
+		.kind-type {
+			display: none;
+		}
+		.quick {
+			display: none;
+		}
+		.actions {
+			opacity: 1;
+		}
+		.card {
+			gap: 0.7rem;
+			padding: 0.75rem 0.7rem 0.85rem;
+		}
+	}
+
+	.menu-wrap {
+		position: relative;
+	}
+	.menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		z-index: 20;
+		min-width: 12rem;
+		padding: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow-md);
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.menu button,
+	.menu-link {
 		display: flex;
 		align-items: center;
-		min-width: 1.65rem;
-		justify-content: center;
+		gap: 0.55rem;
+		width: 100%;
+		padding: 0.45rem 0.55rem;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		text-align: left;
+		cursor: pointer;
+		border-radius: var(--radius-sm);
+		text-decoration: none;
 	}
-	.ring svg {
-		transform: rotate(-90deg);
-		display: block;
+	.menu button:hover,
+	.menu-link:hover {
+		background: var(--surface-alt);
 	}
-	.ring circle {
-		fill: none;
-		stroke-width: 3.2;
+	.menu button:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
-	.ring-bg {
-		stroke: var(--border-strong);
-		opacity: 0.6;
+
+	.progress-bar {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		height: 2px;
+		width: var(--p, 100%);
+		background: var(--accent);
+		border-radius: 0 var(--radius-full) var(--radius-full) 0;
 	}
-	.ring-fg {
-		stroke: var(--accent);
-		stroke-linecap: round;
-		stroke-dasharray: var(--p) 100;
-	}
-	.badge.done {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.55rem;
-		height: 1.55rem;
-		border-radius: var(--radius-full);
-		background: color-mix(in srgb, var(--ok) 16%, transparent);
-		color: var(--ok);
+	.progress-bar.done {
+		width: 100%;
+		background: var(--ok);
+		opacity: 0.55;
 	}
 
 	.empty {

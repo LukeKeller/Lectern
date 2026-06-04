@@ -64,6 +64,9 @@ export const Card = z.object({
   location: Location,
   readState: ReadState.default("unopened"),
   title: z.string(),
+  // Short plain-text snippet/summary for list previews (RSS: derived from the
+  // entry content; saved articles: the source's description). Null when none.
+  excerpt: z.string().nullable().default(null),
   author: z.string().nullable().default(null),
   siteName: z.string().nullable().default(null),
   url: z.url(),

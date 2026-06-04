@@ -74,6 +74,8 @@ function sampleCards(): Card[] {
   const base = [
     {
       title: "The quiet death of the web we knew",
+      excerpt:
+        "The open web that shaped a generation is being quietly replaced by walled gardens and algorithmic feeds. Here's what we lose, and what we might do about it.",
       siteName: "danluu.com",
       author: "Dan Luu",
       category: "article",
@@ -86,6 +88,8 @@ function sampleCards(): Card[] {
     },
     {
       title: "A Complete Guide to useEffect",
+      excerpt:
+        "Effects are not lifecycle methods. Once you stop fighting the model and start thinking in synchronization, useEffect becomes far more predictable.",
       siteName: "overreacted.io",
       author: "Dan Abramov",
       category: "article",
@@ -98,6 +102,8 @@ function sampleCards(): Card[] {
     },
     {
       title: "Microsoft's new MAI models",
+      excerpt:
+        "Microsoft quietly shipped its first in-house foundation models this week, signalling a shift away from sole reliance on OpenAI for its Copilot stack.",
       siteName: "Simon Willison's Weblog",
       author: "Simon Willison",
       category: "rss",

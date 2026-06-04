@@ -71,6 +71,17 @@
           "title": {
             "type": "string"
           },
+          "excerpt": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "author": {
             "default": null,
             "anyOf": [
@@ -202,6 +213,7 @@
           "location",
           "readState",
           "title",
+          "excerpt",
           "author",
           "siteName",
           "url",
@@ -774,6 +786,17 @@
                           "title": {
                             "type": "string"
                           },
+                          "excerpt": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "author": {
                             "default": null,
                             "anyOf": [
@@ -905,6 +928,7 @@
                           "location",
                           "readState",
                           "title",
+                          "excerpt",
                           "author",
                           "siteName",
                           "url",
@@ -1011,6 +1035,17 @@
                     },
                     "title": {
                       "type": "string"
+                    },
+                    "excerpt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "author": {
                       "default": null,
@@ -1143,6 +1178,7 @@
                     "location",
                     "readState",
                     "title",
+                    "excerpt",
                     "author",
                     "siteName",
                     "url",
@@ -1356,6 +1392,17 @@
                     "title": {
                       "type": "string"
                     },
+                    "excerpt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "author": {
                       "default": null,
                       "anyOf": [
@@ -1487,6 +1534,7 @@
                     "location",
                     "readState",
                     "title",
+                    "excerpt",
                     "author",
                     "siteName",
                     "url",
@@ -1578,6 +1626,17 @@
                     "title": {
                       "type": "string"
                     },
+                    "excerpt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "author": {
                       "default": null,
                       "anyOf": [
@@ -1709,6 +1768,7 @@
                     "location",
                     "readState",
                     "title",
+                    "excerpt",
                     "author",
                     "siteName",
                     "url",
@@ -3362,6 +3422,17 @@
                           "title": {
                             "type": "string"
                           },
+                          "excerpt": {
+                            "default": null,
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "author": {
                             "default": null,
                             "anyOf": [
@@ -3493,6 +3564,7 @@
                           "location",
                           "readState",
                           "title",
+                          "excerpt",
                           "author",
                           "siteName",
                           "url",

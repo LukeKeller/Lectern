@@ -9,6 +9,7 @@ import type {
 } from "@lectern/shared";
 import { BackendHttpError } from "../errors";
 import { extractCoverImage } from "../cover";
+import { htmlToText, snippet } from "../html-text";
 
 /**
  * MiniFlux RSS adapter. Talks to `/v1/*`, normalizing entries into `Card`s.
@@ -89,6 +90,7 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
     location: "feed",
     readState: minifluxReadState(entry.status === "read"),
     title: entry.title,
+    excerpt: snippet(htmlToText(entry.content)),
     author: entry.author || null,
     siteName: entry.feed?.title ?? null,
     // Some MiniFlux entries (e.g. webmention/comment items) carry an empty

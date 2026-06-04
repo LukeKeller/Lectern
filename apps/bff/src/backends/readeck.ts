@@ -15,6 +15,7 @@ import {
   readeckLocationFromArchived,
 } from "../unify";
 import { safeHttpUrl } from "../cover";
+import { snippet } from "../html-text";
 
 /**
  * Readeck read-later adapter. Bearer-token API; normalizes bookmarks into
@@ -25,6 +26,8 @@ export interface ReadeckBookmark {
   id: string;
   url: string;
   title: string;
+  /** Readeck's extracted article summary/description, when available. */
+  description?: string | null;
   site_name: string | null;
   authors: string[];
   created: string;
@@ -90,6 +93,7 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     location: readeckLocationFromArchived(bookmark.is_archived),
     readState: deriveReadeckReadState(bookmark.is_archived, bookmark.read_progress ?? 0),
     title: bookmark.title,
+    excerpt: bookmark.description ? snippet(bookmark.description) : null,
     author: bookmark.authors?.[0] ?? null,
     siteName: bookmark.site_name ?? null,
     url: bookmark.url,

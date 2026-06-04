@@ -38,7 +38,8 @@
 		| 'headphones'
 		| 'trash'
 		| 'plus'
-		| 'grip';
+		| 'grip'
+		| 'more';
 
 	let { name, size = 20, title }: { name: IconName; size?: number; title?: string } = $props();
 
@@ -89,7 +90,8 @@
 		trash:
 			'<path d="M4 7h16"/><path d="M9.5 7V5h5v2"/><path d="M6.5 7l.9 12.6a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/>',
 		plus: '<path d="M12 5v14M5 12h14"/>',
-		grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>'
+		grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>',
+		more: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'
 	};
 </script>
 

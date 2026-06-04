@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.6',
+		date: '2026-06-04',
+		title: 'Redesigned cards',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Reworked list cards: a clear title, a short preview snippet, then author · publication · reading time, with the kind and time tucked top-right.'
+			},
+			{
+				kind: 'improved',
+				text: 'Hover a card for a tidy row of actions — a three-dot menu (Listen, queue, mark read, open original…) plus quick Read-later and Archive buttons.'
+			}
+		]
+	},
+	{
 		version: '0.6.5',
 		date: '2026-06-04',
 		title: 'Listen to a whole issue',

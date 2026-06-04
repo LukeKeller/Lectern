@@ -30,6 +30,7 @@ function rssCard(over: Partial<Card> = {}): Card {
     location: "feed",
     readState: "unopened",
     title: "t",
+    excerpt: null,
     author: null,
     siteName: null,
     url: "https://example.com/a",
