@@ -160,6 +160,12 @@ export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponse>;
 export const TtsPreviewRequest = z.object({ voiceId: z.string() });
 export type TtsPreviewRequest = z.infer<typeof TtsPreviewRequest>;
 
+/** Optional metadata for a document synthesis (returns audio bytes, not JSON).
+ * `title`, when present, is spoken before the body so each article announces
+ * itself — useful when listening through a whole magazine issue. */
+export const SynthesizeAudioRequest = z.object({ title: z.string().optional() });
+export type SynthesizeAudioRequest = z.infer<typeof SynthesizeAudioRequest>;
+
 // ---- Endpoint registry ------------------------------------------------------
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -436,6 +442,7 @@ export const endpoints: Endpoint[] = [
     operationId: "synthesizeAudio",
     summary: "Synthesize (or return cached) read-aloud audio for a document",
     tags: ["tts"],
+    body: SynthesizeAudioRequest,
     status: 200,
   },
   {

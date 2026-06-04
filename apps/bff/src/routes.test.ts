@@ -1178,6 +1178,20 @@ describe("text-to-speech", () => {
     await a.close();
   });
 
+  it("speaks the title before the body when a title is supplied", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+      payload: { title: "A Grand Title" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(harness.deps.tts.calls[0]!.text).toBe("A Grand Title.\n\nrss");
+    await a.close();
+  });
+
   it("lists voices only when configured", async () => {
     const a = app();
     const unset = await a.inject({

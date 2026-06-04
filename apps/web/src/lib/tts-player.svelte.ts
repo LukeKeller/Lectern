@@ -173,6 +173,15 @@ class TtsPlayer {
 		await this.playIndex(i);
 	}
 
+	/** Replace the queue with a list (e.g. a whole magazine issue) and play it
+	 * from the top. Each item is synthesized individually as it becomes current. */
+	async playAll(items: QueueItem[]): Promise<void> {
+		this.init();
+		if (items.length === 0) return;
+		this.queue = [...items];
+		await this.playIndex(0);
+	}
+
 	/** Add to the end of the queue WITHOUT synthesizing (no prefetch / warming). */
 	enqueue(item: QueueItem): void {
 		this.init();
@@ -192,7 +201,7 @@ class TtsPlayer {
 		this.duration = 0;
 		const token = ++this.loadToken;
 		try {
-			const blob = await this.loadAudio(item.id);
+			const blob = await this.loadAudio(item);
 			if (token !== this.loadToken) return; // superseded by a newer play
 			const a = this.ensureAudio();
 			if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
@@ -219,17 +228,19 @@ class TtsPlayer {
 	 * voice + model, so changing the voice re-synthesizes (the server still
 	 * content-hash-caches, so this never re-bills for a voice used before).
 	 */
-	private async loadAudio(id: string): Promise<Blob> {
-		const cached = await db.audio.get(id);
+	private async loadAudio(item: QueueItem): Promise<Blob> {
+		const cached = await db.audio.get(item.id);
 		const fresh =
 			cached &&
 			(!this.voiceId || cached.voiceId === this.voiceId) &&
 			(cached.modelId ?? this.modelId) === this.modelId;
 		if (cached && fresh) return cached.blob;
-		const { bytes, mime, contentHash } = await getClient().synthesizeAudio(id);
+		// Pass the title so the article announces itself; the server bakes it into
+		// the cached per-article audio (reused from the card/reader too).
+		const { bytes, mime, contentHash } = await getClient().synthesizeAudio(item.id, item.title);
 		const blob = new Blob([bytes], { type: mime });
 		await db.audio.put({
-			id,
+			id: item.id,
 			contentHash,
 			mime,
 			blob,

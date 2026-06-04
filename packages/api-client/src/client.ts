@@ -187,13 +187,18 @@ export class LecternClient {
    */
   async synthesizeAudio(
     id: string,
+    title?: string,
   ): Promise<{ bytes: ArrayBuffer; mime: string; contentHash: string }> {
     const origin = (globalThis as { location?: { origin?: string } }).location?.origin;
     const base = /^https?:\/\//.test(this.baseUrl) ? undefined : origin;
     const url = new URL(`${this.baseUrl}/documents/${id}/audio`, base);
     const res = await this.doFetch(url, {
       method: "POST",
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      headers: {
+        "content-type": "application/json",
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      },
+      body: JSON.stringify(title ? { title } : {}),
     });
     if (!res.ok)
       throw new LecternApiError(res.status, `POST /documents/${id}/audio -> ${res.status}`);

@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.5',
+		date: '2026-06-04',
+		title: 'Listen to a whole issue',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Listen to an entire magazine issue — “Listen to issue” queues every article in order, and each one announces its title before it’s read. Each article is also a Listen button of its own.'
+			},
+			{
+				kind: 'improved',
+				text: 'Articles now speak their title before the body, so you always know what you’re hearing.'
+			},
+			{
+				kind: 'fixed',
+				text: 'The Back button in the reader now returns to wherever you came from instead of always jumping to the inbox.'
+			}
+		]
+	},
+	{
 		version: '0.6.4',
 		date: '2026-06-04',
 		title: 'Magazine reader',

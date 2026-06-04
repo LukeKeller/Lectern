@@ -611,10 +611,10 @@
 <div class="progress" aria-hidden="true" style={`--p:${Math.round(progress * 100)}%`}></div>
 
 <nav class="bar">
-	<a class="back" href={resolve('/')} aria-label="Back to inbox">
+	<button class="back" type="button" onclick={goBack} aria-label="Back">
 		<Icon name="back" size={18} />
 		<span>Back</span>
-	</a>
+	</button>
 	<div class="bar-right">
 		<button
 			type="button"

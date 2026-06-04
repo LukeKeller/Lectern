@@ -19,6 +19,7 @@ import {
   SearchQuery,
   SearchResponse,
   SubscribeFeedRequest,
+  SynthesizeAudioRequest,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
@@ -173,37 +174,46 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   // Synthesis fires ONLY here, on an explicit client Listen action. Cache-first
   // by content hash so re-listens and queue replays never re-bill ElevenLabs.
-  app.post<{ Params: { id: string } }>("/documents/:id/audio", async (req, reply) => {
-    const { id } = req.params;
-    requireParsed(id);
-    const cfg = await deps.overlay.getTtsConfig();
-    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
-    const text = htmlToText(await loadContentHtml(deps, id));
-    if (!text) return reply.code(422).send({ error: "no readable text for this document" });
-    const contentHash = createHash("sha256")
-      .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
-      .digest("hex");
-    let audio = await deps.overlay.getCachedAudio(contentHash);
-    if (!audio) {
-      const bytes = await deps.tts.synthesize(text, {
-        apiKey: cfg.apiKey,
-        voiceId: cfg.voiceId,
-        modelId: cfg.modelId,
-      });
-      audio = { mime: "audio/mpeg", bytes };
-      await deps.overlay.putCachedAudio({
-        contentHash,
-        documentId: id,
-        mime: audio.mime,
-        bytes,
-        charCount: text.length,
-      });
-    }
-    reply.header("content-type", audio.mime);
-    reply.header("x-tts-content-hash", contentHash);
-    reply.header("cache-control", "private, max-age=31536000, immutable");
-    return reply.send(audio.bytes);
-  });
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    "/documents/:id/audio",
+    async (req, reply) => {
+      const { id } = req.params;
+      requireParsed(id);
+      const cfg = await deps.overlay.getTtsConfig();
+      if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+      const { title } = SynthesizeAudioRequest.parse(req.body ?? {});
+      const body = htmlToText(await loadContentHtml(deps, id));
+      if (!body) return reply.code(422).send({ error: "no readable text for this document" });
+      // Speak the title first so each article announces itself (e.g. when listening
+      // through a whole magazine issue). Baked into the per-article audio so the
+      // same clip is reused from the card/reader too.
+      const announce = title?.trim();
+      const text = announce ? `${announce}.\n\n${body}` : body;
+      const contentHash = createHash("sha256")
+        .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
+        .digest("hex");
+      let audio = await deps.overlay.getCachedAudio(contentHash);
+      if (!audio) {
+        const bytes = await deps.tts.synthesize(text, {
+          apiKey: cfg.apiKey,
+          voiceId: cfg.voiceId,
+          modelId: cfg.modelId,
+        });
+        audio = { mime: "audio/mpeg", bytes };
+        await deps.overlay.putCachedAudio({
+          contentHash,
+          documentId: id,
+          mime: audio.mime,
+          bytes,
+          charCount: text.length,
+        });
+      }
+      reply.header("content-type", audio.mime);
+      reply.header("x-tts-content-hash", contentHash);
+      reply.header("cache-control", "private, max-age=31536000, immutable");
+      return reply.send(audio.bytes);
+    },
+  );
 
   // Short voice sample for auditioning. Same cache-first machinery (keyed by a
   // "preview" content hash) so re-auditioning a voice never re-bills.

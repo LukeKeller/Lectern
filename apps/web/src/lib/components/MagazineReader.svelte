@@ -7,6 +7,7 @@
 	import { getArticleHtml } from '$lib/content';
 	import Icon from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
+	import { ttsPlayer } from '$lib/tts-player.svelte';
 
 	let {
 		magazine,
@@ -79,7 +80,16 @@
 			<Icon name="back" size={16} /> All magazines
 		</button>
 		<h1>{title}</h1>
-		<p class="mr-count">{magazine.cards.length} articles</p>
+		<div class="mr-head-row">
+			<p class="mr-count">{magazine.cards.length} articles</p>
+			<button
+				type="button"
+				class="mr-listen-all"
+				onclick={() => ttsPlayer.playAll(magazine.cards.map((c) => ({ id: c.id, title: c.title })))}
+			>
+				<Icon name="headphones" size={15} /> Listen to issue
+			</button>
+		</div>
 	</header>
 
 	<nav class="mr-toc" aria-label="Contents">
@@ -119,6 +129,14 @@
 						</span>
 					</div>
 					<div class="mr-actions">
+						<button
+							type="button"
+							title="Listen"
+							aria-label="Listen"
+							onclick={() => ttsPlayer.listen({ id: card.id, title: card.title })}
+						>
+							<Icon name="headphones" size={16} />
+						</button>
 						<button
 							type="button"
 							class:active={marked[card.id] === 'read'}
@@ -193,6 +211,30 @@
 		color: var(--text-muted);
 		font-size: var(--text-sm);
 		margin: 0.25rem 0 0;
+	}
+	.mr-head-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 0.5rem;
+	}
+	.mr-listen-all {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.8rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.mr-listen-all:hover {
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 
 	.mr-toc {
