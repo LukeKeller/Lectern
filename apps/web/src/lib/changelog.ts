@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.7.1',
+		date: '2026-06-04',
+		title: 'Android install icon fix',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Installing Lectern to your home screen from Firefox on Android now shows the real app icon instead of a blank one.'
+			}
+		]
+	},
+	{
 		version: '0.7.0',
 		date: '2026-06-04',
 		title: 'Installs and works offline',
