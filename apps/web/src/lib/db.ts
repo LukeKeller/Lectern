@@ -38,6 +38,7 @@ export interface PlayerStateEntry {
 	queue: QueueItem[];
 	index: number;
 	position: number;
+	rate?: number;
 }
 
 /**

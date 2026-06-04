@@ -24,6 +24,7 @@ import {
   SyncPushRequest,
   SyncPushResponse,
   TagsResponse,
+  TtsPreviewRequest,
   TtsSettings,
   TtsVoicesResponse,
   UpdateDocumentRequest,
@@ -48,6 +49,9 @@ import {
 } from "./mutations";
 
 class NotFoundError extends Error {}
+
+/** Short sample read aloud when auditioning a voice (kept brief to bound cost). */
+const TTS_PREVIEW_TEXT = "This is a preview of how this voice sounds reading your articles aloud.";
 
 function coerceListQuery(raw: Record<string, unknown>): ListDocumentsQuery {
   return ListDocumentsQuery.parse({
@@ -193,6 +197,38 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
         mime: audio.mime,
         bytes,
         charCount: text.length,
+      });
+    }
+    reply.header("content-type", audio.mime);
+    reply.header("x-tts-content-hash", contentHash);
+    reply.header("cache-control", "private, max-age=31536000, immutable");
+    return reply.send(audio.bytes);
+  });
+
+  // Short voice sample for auditioning. Same cache-first machinery (keyed by a
+  // "preview" content hash) so re-auditioning a voice never re-bills.
+  app.post<{ Body: unknown }>("/settings/tts/preview", async (req, reply) => {
+    const cfg = await deps.overlay.getTtsConfig();
+    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    const { voiceId } = TtsPreviewRequest.parse(req.body);
+    const voice = voiceId || cfg.voiceId;
+    const contentHash = createHash("sha256")
+      .update(`preview\n${voice}\n${cfg.modelId}\n${TTS_PREVIEW_TEXT}`)
+      .digest("hex");
+    let audio = await deps.overlay.getCachedAudio(contentHash);
+    if (!audio) {
+      const bytes = await deps.tts.synthesize(TTS_PREVIEW_TEXT, {
+        apiKey: cfg.apiKey,
+        voiceId: voice,
+        modelId: cfg.modelId,
+      });
+      audio = { mime: "audio/mpeg", bytes };
+      await deps.overlay.putCachedAudio({
+        contentHash,
+        documentId: `preview:${voice}`,
+        mime: audio.mime,
+        bytes,
+        charCount: TTS_PREVIEW_TEXT.length,
       });
     }
     reply.header("content-type", audio.mime);

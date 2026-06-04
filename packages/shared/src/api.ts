@@ -156,6 +156,10 @@ export type TtsVoice = z.infer<typeof TtsVoice>;
 export const TtsVoicesResponse = z.object({ voices: z.array(TtsVoice) });
 export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponse>;
 
+/** Request a short spoken sample of a voice (returns audio bytes, not JSON). */
+export const TtsPreviewRequest = z.object({ voiceId: z.string() });
+export type TtsPreviewRequest = z.infer<typeof TtsPreviewRequest>;
+
 // ---- Endpoint registry ------------------------------------------------------
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -432,6 +436,15 @@ export const endpoints: Endpoint[] = [
     operationId: "synthesizeAudio",
     summary: "Synthesize (or return cached) read-aloud audio for a document",
     tags: ["tts"],
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/settings/tts/preview",
+    operationId: "previewTtsVoice",
+    summary: "Synthesize (or return cached) a short sample of a voice",
+    tags: ["tts"],
+    body: TtsPreviewRequest,
     status: 200,
   },
 ];

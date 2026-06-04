@@ -9,6 +9,7 @@
 	import { APP_VERSION } from '$lib/version';
 	import { resolve } from '$app/paths';
 	import { voiceOptions } from '$lib/tts-voices';
+	import { ttsPlayer } from '$lib/tts-player.svelte';
 
 	let token = $state('');
 	let saved = $state(false);
@@ -66,6 +67,12 @@
 			ttsVoiceId = s.voiceId;
 		} catch {
 			/* offline: keep defaults */
+		}
+		try {
+			// Silently surface account voices if the key can list them.
+			accountVoices = (await getClient().listTtsVoices()).voices;
+		} catch {
+			/* key lacks the Voices permission — built-in voices remain available */
 		}
 	}
 
@@ -351,9 +358,30 @@
 							<option value={v.id}>{v.name}</option>
 						{/each}
 					</select>
+					<button
+						type="button"
+						class="btn ghost"
+						title="Preview voice"
+						aria-label="Preview voice"
+						onclick={() => ttsPlayer.previewVoice(ttsVoiceId)}
+					>
+						{ttsPlayer.previewVoiceId === ttsVoiceId ? 'Playing…' : 'Preview'}
+					</button>
 					<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
 						Load my voices
 					</button>
+				</div>
+				<div class="row">
+					<input
+						type="text"
+						placeholder="…or paste an ElevenLabs voice ID"
+						value=""
+						onchange={(e) => {
+							const v = e.currentTarget.value.trim();
+							if (v) saveTtsVoice(v);
+							e.currentTarget.value = '';
+						}}
+					/>
 				</div>
 				{#if ttsVoicesNote}<p class="hint">{ttsVoicesNote}</p>{/if}
 			</label>

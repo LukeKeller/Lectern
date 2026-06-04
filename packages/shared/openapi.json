@@ -4537,6 +4537,41 @@
           }
         }
       }
+    },
+    "/settings/tts/preview": {
+      "post": {
+        "operationId": "previewTtsVoice",
+        "summary": "Synthesize (or return cached) a short sample of a voice",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Synthesize (or return cached) a short sample of a voice"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "voiceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "voiceId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

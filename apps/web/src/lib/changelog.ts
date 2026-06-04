@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.3',
+		date: '2026-06-04',
+		title: 'Speed, voices & previews',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Playback speed control in the player — tap to cycle 1× through 2× (and 0.75×). Your choice is remembered.'
+			},
+			{
+				kind: 'added',
+				text: 'Preview any voice with a short spoken sample, in Settings and in the player. Samples are cached so re-auditioning is free.'
+			},
+			{
+				kind: 'improved',
+				text: 'A larger set of built-in voices, and your own ElevenLabs voices now load automatically when your key permits. You can also paste any voice ID directly.'
+			},
+			{
+				kind: 'added',
+				text: 'Mark an individual newspaper story as read — a subtle check appears on each story.'
+			}
+		]
+	},
+	{
 		version: '0.6.2',
 		date: '2026-06-04',
 		title: 'Listen polish',

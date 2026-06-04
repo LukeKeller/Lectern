@@ -26,9 +26,15 @@ class TtsPlayer {
 	voiceId = $state('');
 	modelId = $state('eleven_flash_v2_5');
 	accountVoices = $state<TtsVoice[]>([]);
+	/** Playback speed multiplier (0.75–2). */
+	rate = $state(1);
+	/** Voice id currently being previewed (drives the preview spinner), if any. */
+	previewVoiceId = $state<string | undefined>(undefined);
 
 	private audio: HTMLAudioElement | null = null;
 	private objectUrl: string | null = null;
+	private previewEl: HTMLAudioElement | null = null;
+	private previewUrl: string | null = null;
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
 	private restored = false;
 	/** Monotonic token so a slow load can't clobber a newer one. */
@@ -57,6 +63,7 @@ class TtsPlayer {
 			if (!s) return;
 			this.queue = s.queue;
 			this.index = s.index < s.queue.length ? s.index : -1;
+			if (s.rate) this.rate = s.rate;
 		});
 		void this.loadSettings();
 	}
@@ -70,6 +77,12 @@ class TtsPlayer {
 		} catch {
 			/* offline: keep defaults; the selector still shows built-in voices */
 		}
+		try {
+			// Best-effort: surfaces the user's own voices when the key can list them.
+			this.accountVoices = (await getClient().listTtsVoices()).voices;
+		} catch {
+			/* key lacks the Voices permission — built-in voices remain available */
+		}
 	}
 
 	/** Change the voice for future synthesis (persisted server-side). */
@@ -80,6 +93,43 @@ class TtsPlayer {
 			await getClient().updateTtsSettings({ voiceId });
 		} catch {
 			/* offline: the change applies on the next successful sync */
+		}
+	}
+
+	/** Set playback speed; applies live and persists. */
+	setRate(rate: number): void {
+		this.rate = rate;
+		if (this.audio) this.audio.playbackRate = rate;
+		this.persistSoon();
+	}
+
+	/**
+	 * Play a short spoken sample of a voice so the user can audition it. Uses a
+	 * separate audio element (the main queue stays put, just paused) and the
+	 * server's cached preview snippet, so repeat auditions don't re-bill.
+	 */
+	async previewVoice(voiceId: string): Promise<void> {
+		if (typeof window === 'undefined') return;
+		this.audio?.pause();
+		if (!this.previewEl) {
+			this.previewEl = new Audio();
+			const done = () => {
+				this.previewVoiceId = undefined;
+			};
+			this.previewEl.addEventListener('ended', done);
+			this.previewEl.addEventListener('error', done);
+		}
+		this.previewVoiceId = voiceId;
+		try {
+			const { bytes, mime } = await getClient().previewVoiceAudio(voiceId);
+			if (this.previewVoiceId !== voiceId) return; // superseded by another preview
+			if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+			this.previewUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+			this.previewEl.src = this.previewUrl;
+			this.previewEl.playbackRate = 1;
+			await this.previewEl.play();
+		} catch {
+			this.previewVoiceId = undefined;
 		}
 	}
 
@@ -148,6 +198,7 @@ class TtsPlayer {
 			if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
 			this.objectUrl = URL.createObjectURL(blob);
 			a.src = this.objectUrl;
+			a.playbackRate = this.rate;
 			await a.play();
 			this.persistSoon();
 		} catch (err) {
@@ -278,7 +329,8 @@ class TtsPlayer {
 				id: 'state',
 				queue: this.queue,
 				index: this.index,
-				position: this.currentTime
+				position: this.currentTime,
+				rate: this.rate
 			});
 		}, 500);
 	}

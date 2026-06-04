@@ -1206,4 +1206,41 @@ describe("text-to-speech", () => {
     expect((res.json() as { voices: unknown[] }).voices).toEqual([]);
     await a.close();
   });
+
+  it("previews a voice once then serves the cached sample", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/v1/settings/tts/preview",
+      headers: auth,
+      payload: { voiceId: "voice-xyz" },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["content-type"]).toContain("audio/mpeg");
+    expect(harness.deps.tts.calls).toHaveLength(1);
+    expect(harness.deps.tts.calls[0]!.voiceId).toBe("voice-xyz");
+
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/v1/settings/tts/preview",
+      headers: auth,
+      payload: { voiceId: "voice-xyz" },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(harness.deps.tts.calls).toHaveLength(1); // cache hit, no re-synth
+    await a.close();
+  });
+
+  it("returns 409 for a preview when no key is configured", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/settings/tts/preview",
+      headers: auth,
+      payload: { voiceId: "v" },
+    });
+    expect(res.statusCode).toBe(409);
+    await a.close();
+  });
 });

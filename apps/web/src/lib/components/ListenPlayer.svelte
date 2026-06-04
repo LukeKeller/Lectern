@@ -13,6 +13,14 @@
 
 	const playing = $derived(ttsPlayer.status === 'playing');
 	const loading = $derived(ttsPlayer.status === 'loading');
+
+	const RATES = [1, 1.25, 1.5, 1.75, 2, 0.75];
+	function cycleRate() {
+		const i = RATES.indexOf(ttsPlayer.rate);
+		ttsPlayer.setRate(RATES[(i + 1) % RATES.length]!);
+	}
+	// Trim trailing ".0" so 1× / 1.5× / 2× read cleanly.
+	const rateLabel = $derived(`${ttsPlayer.rate}×`);
 </script>
 
 {#if ttsPlayer.hasQueue || ttsPlayer.status === 'error'}
@@ -33,6 +41,19 @@
 							<option value={v.id}>{v.name}</option>
 						{/each}
 					</select>
+					<button
+						type="button"
+						class="preview-btn"
+						title="Preview voice"
+						aria-label="Preview voice"
+						onclick={() => ttsPlayer.previewVoice(ttsPlayer.voiceId)}
+					>
+						{#if ttsPlayer.previewVoiceId === ttsPlayer.voiceId}
+							<span class="spinner"></span>
+						{:else}
+							<Icon name="play" size={14} />
+						{/if}
+					</button>
 				</label>
 				<ul>
 					{#each ttsPlayer.queue as item, i (item.id)}
@@ -135,6 +156,10 @@
 				disabled={!ttsPlayer.duration}
 				oninput={(e) => ttsPlayer.seek(Number(e.currentTarget.value))}
 			/>
+
+			<button type="button" class="rate-btn" title="Playback speed" onclick={cycleRate}>
+				{rateLabel}
+			</button>
 
 			<button
 				type="button"
@@ -327,6 +352,37 @@
 		background: var(--surface);
 		color: var(--text);
 		font-size: var(--text-sm);
+	}
+	.preview-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		flex-shrink: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.preview-btn:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	/* Speed toggle in the bar: text, not a fixed-width circle. */
+	.bar > button.rate-btn {
+		width: auto;
+		min-width: 2.1rem;
+		padding: 0 0.4rem;
+		border-radius: var(--radius);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+	}
+	.bar > button.rate-btn:hover {
+		color: var(--text);
 	}
 	.queue ul {
 		list-style: none;

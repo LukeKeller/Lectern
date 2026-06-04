@@ -204,4 +204,25 @@ export class LecternClient {
       contentHash: res.headers.get("x-tts-content-hash") ?? "",
     };
   }
+
+  /** Fetch a short spoken sample of a voice (binary; bypasses the JSON helper). */
+  async previewVoiceAudio(voiceId: string): Promise<{ bytes: ArrayBuffer; mime: string }> {
+    const origin = (globalThis as { location?: { origin?: string } }).location?.origin;
+    const base = /^https?:\/\//.test(this.baseUrl) ? undefined : origin;
+    const url = new URL(`${this.baseUrl}/settings/tts/preview`, base);
+    const res = await this.doFetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      },
+      body: JSON.stringify({ voiceId }),
+    });
+    if (!res.ok)
+      throw new LecternApiError(res.status, `POST /settings/tts/preview -> ${res.status}`);
+    return {
+      bytes: await res.arrayBuffer(),
+      mime: res.headers.get("content-type") ?? "audio/mpeg",
+    };
+  }
 }

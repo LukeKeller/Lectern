@@ -81,6 +81,13 @@
 		if (queued) void sync.flush();
 	}
 
+	// Subtle per-story dismissal: flips one RSS entry's read state so it drops out
+	// of the edition (buildEdition only prints unread items).
+	function markStoryRead(card: Card) {
+		const sync = getSync();
+		void sync.enqueue({ type: 'markRead', id: card.id, read: true }).then(() => sync.flush());
+	}
+
 	function dek(card: Card): string {
 		const parts: string[] = [];
 		if (card.author) parts.push(card.author);
@@ -193,16 +200,27 @@
 		</div>
 	{:else}
 		{#if edition.lead}
-			<a
-				class="lead"
-				href={resolve('/read/[id]', { id: edition.lead.id })}
-				onclick={(e) => openFlip(e, edition.lead)}
-			>
-				<span class="section-tag">{edition.lead.siteName ?? 'Front page'}</span>
-				<h2>{edition.lead.title}</h2>
-				{#if edition.lead.note}<p class="standfirst">{edition.lead.note}</p>{/if}
-				<p class="byline">{dek(edition.lead)}</p>
-			</a>
+			<div class="lead-wrap">
+				<a
+					class="lead"
+					href={resolve('/read/[id]', { id: edition.lead.id })}
+					onclick={(e) => openFlip(e, edition.lead)}
+				>
+					<span class="section-tag">{edition.lead.siteName ?? 'Front page'}</span>
+					<h2>{edition.lead.title}</h2>
+					{#if edition.lead.note}<p class="standfirst">{edition.lead.note}</p>{/if}
+					<p class="byline">{dek(edition.lead)}</p>
+				</a>
+				<button
+					type="button"
+					class="mark"
+					title="Mark as read"
+					aria-label="Mark as read"
+					onclick={() => markStoryRead(edition.lead!)}
+				>
+					<Icon name="check" size={15} />
+				</button>
+			</div>
 		{/if}
 
 		<div class="sections">
@@ -221,6 +239,15 @@
 									{#if i === 0 && card.note}<span class="deck">{card.note}</span>{/if}
 									{#if dek(card)}<span class="meta">{dek(card)}</span>{/if}
 								</a>
+								<button
+									type="button"
+									class="mark"
+									title="Mark as read"
+									aria-label="Mark as read"
+									onclick={() => markStoryRead(card)}
+								>
+									<Icon name="check" size={14} />
+								</button>
 							</li>
 						{/each}
 					</ul>
@@ -386,6 +413,51 @@
 		color: var(--text);
 	}
 
+	/* Per-story "mark as read": a subtle check that surfaces on hover/touch. */
+	.lead-wrap {
+		position: relative;
+	}
+	.col li {
+		position: relative;
+	}
+	.mark {
+		position: absolute;
+		top: 0.4rem;
+		right: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.7rem;
+		height: 1.7rem;
+		border: 0;
+		border-radius: 50%;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		opacity: 0;
+		transition:
+			opacity var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.lead-wrap .mark {
+		top: 0;
+		right: 0;
+	}
+	.lead-wrap:hover .mark,
+	.col li:hover .mark {
+		opacity: 0.55;
+	}
+	.mark:hover {
+		opacity: 1 !important;
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	@media (hover: none) {
+		.mark {
+			opacity: 0.5;
+		}
+	}
 	/* Lead story — the front-page splash, centred above a parting rule. */
 	.lead {
 		display: block;
@@ -475,7 +547,7 @@
 		padding: 0;
 	}
 	.col li {
-		padding: 0.6rem 0;
+		padding: 0.6rem 1.6rem 0.6rem 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.col li:last-child {

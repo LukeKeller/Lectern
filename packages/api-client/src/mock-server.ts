@@ -429,6 +429,18 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }),
     );
   }
+  if (path === "/settings/tts/preview" && method === "POST") {
+    if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
+    const voiceId = (body as { voiceId?: string })?.voiceId ?? mockTts.voiceId;
+    const bytes = Buffer.from(`mock-preview:${voiceId}`);
+    res.writeHead(200, {
+      "content-type": "audio/mpeg",
+      "x-tts-content-hash": `mockpreview_${voiceId}`,
+      ...CORS_HEADERS,
+    });
+    res.end(bytes);
+    return;
+  }
 
   const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio)?$/);
   if (doc) {
