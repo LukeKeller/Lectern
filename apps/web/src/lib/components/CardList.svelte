@@ -7,6 +7,7 @@
 	import SourceAvatar from './SourceAvatar.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
+	import { swipeable, type SwipeDirection } from '$lib/swipe';
 
 	interface TriageAction {
 		label: string;
@@ -93,6 +94,38 @@
 
 	const finished = (card: Card) => card.readingProgress >= 0.99;
 
+	// ---- Mobile swipe actions (progressive enhancement over the buttons) ----
+	function toggleRead(card: Card) {
+		const read = card.readState !== 'finished';
+		const sync = getSync();
+		void sync.enqueue({ type: 'markRead', id: card.id, read }).then(() => sync.flush());
+	}
+
+	let undo = $state<{ id: string; from: Location } | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function onSwipe(card: Card, dir: SwipeDirection) {
+		if (dir === 'right') {
+			toggleRead(card);
+			return;
+		}
+		// Left swipe = archive, offered with a brief undo since it's destructive.
+		const from = card.location;
+		triage(card.id, 'archive');
+		if (from !== 'archive') {
+			undo = { id: card.id, from };
+			if (undoTimer) clearTimeout(undoTimer);
+			undoTimer = setTimeout(() => (undo = null), 6000);
+		}
+	}
+
+	function applyUndo() {
+		if (!undo) return;
+		triage(undo.id, undo.from);
+		undo = null;
+		if (undoTimer) clearTimeout(undoTimer);
+	}
+
 	// Cover thumbnails fall back to the source avatar when absent or on load error.
 	let failedCovers = new SvelteSet<string>();
 </script>
@@ -112,100 +145,118 @@
 	<ul class="cards">
 		{#each cards as card, i (card.id)}
 			<li class:selected={i === selectedIndex}>
-				<article class="card" onmouseenter={() => onselect?.(i)}>
-					{#if card.coverImage && !failedCovers.has(card.id)}
-						<img
-							class="thumb"
-							src={card.coverImage}
-							alt=""
-							loading="lazy"
-							onerror={() => failedCovers.add(card.id)}
-						/>
-					{:else}
-						<SourceAvatar url={card.url} siteName={card.siteName} />
-					{/if}
-					<div class="body">
-						<a
-							class="title"
-							href={resolve('/read/[id]', { id: card.id })}
-							onclick={() => onopen?.()}
-						>
-							{card.title || hostname(card.url)}
-						</a>
-						{#if card.note}<p class="dek">{card.note}</p>{/if}
-						<div class="meta">
-							<span class="src">{meta(card)}</span>
-							{#if savedAgo(card.savedAt)}
-								<span class="dot" aria-hidden="true">·</span>
-								<span class="when">{savedAgo(card.savedAt)}</span>
-							{/if}
-							{#if card.highlightCount > 0}
-								<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
-							{/if}
-						</div>
-						{#if card.tags.length}
-							<div class="tags">
-								{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
-							</div>
+				<div class="swipe" use:swipeable={{ onCommit: (dir) => onSwipe(card, dir) }}>
+					<div class="swipe-bg" aria-hidden="true">
+						<span class="swipe-action read">
+							<Icon name="check" size={16} />
+							{card.readState === 'finished' ? 'Unread' : 'Read'}
+						</span>
+						<span class="swipe-action archive">
+							Archive
+							<Icon name="archive" size={16} />
+						</span>
+					</div>
+					<article class="card swipe-front" onmouseenter={() => onselect?.(i)}>
+						{#if card.coverImage && !failedCovers.has(card.id)}
+							<img
+								class="thumb"
+								src={card.coverImage}
+								alt=""
+								loading="lazy"
+								onerror={() => failedCovers.add(card.id)}
+							/>
+						{:else}
+							<SourceAvatar url={card.url} siteName={card.siteName} />
 						{/if}
-						<div class="actions">
-							<button
-								type="button"
-								class="icon-btn"
-								title="Listen"
-								aria-label="Listen"
-								onclick={() =>
-									ttsPlayer.listen({ id: card.id, title: card.title || hostname(card.url) })}
+						<div class="body">
+							<a
+								class="title"
+								href={resolve('/read/[id]', { id: card.id })}
+								onclick={() => onopen?.()}
 							>
-								<Icon name="headphones" size={15} />
-							</button>
-							<button
-								type="button"
-								class="icon-btn"
-								title="Add to listen queue"
-								aria-label="Add to listen queue"
-								onclick={() =>
-									ttsPlayer.enqueue({ id: card.id, title: card.title || hostname(card.url) })}
-							>
-								<Icon name="plus" size={15} />
-							</button>
-							{#each actions as action (action.location)}
-								<button type="button" onclick={() => triage(card.id, action.location)}>
-									{action.label}
-								</button>
-							{/each}
-							{#if card.source === 'miniflux'}
+								{card.title || hostname(card.url)}
+							</a>
+							{#if card.note}<p class="dek">{card.note}</p>{/if}
+							<div class="meta">
+								<span class="src">{meta(card)}</span>
+								{#if savedAgo(card.savedAt)}
+									<span class="dot" aria-hidden="true">·</span>
+									<span class="when">{savedAgo(card.savedAt)}</span>
+								{/if}
+								{#if card.highlightCount > 0}
+									<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
+								{/if}
+							</div>
+							{#if card.tags.length}
+								<div class="tags">
+									{#each card.tags as tag (tag)}<span class="tag">{tag}</span>{/each}
+								</div>
+							{/if}
+							<div class="actions">
 								<button
 									type="button"
-									class="primary"
-									onclick={() => saveToLater(card)}
-									disabled={savingId === card.id}
+									class="icon-btn"
+									title="Listen"
+									aria-label="Listen"
+									onclick={() =>
+										ttsPlayer.listen({ id: card.id, title: card.title || hostname(card.url) })}
 								>
-									{savingId === card.id ? 'Saving…' : 'Read later'}
+									<Icon name="headphones" size={15} />
 								</button>
+								<button
+									type="button"
+									class="icon-btn"
+									title="Add to listen queue"
+									aria-label="Add to listen queue"
+									onclick={() =>
+										ttsPlayer.enqueue({ id: card.id, title: card.title || hostname(card.url) })}
+								>
+									<Icon name="plus" size={15} />
+								</button>
+								{#each actions as action (action.location)}
+									<button type="button" onclick={() => triage(card.id, action.location)}>
+										{action.label}
+									</button>
+								{/each}
+								{#if card.source === 'miniflux'}
+									<button
+										type="button"
+										class="primary"
+										onclick={() => saveToLater(card)}
+										disabled={savingId === card.id}
+									>
+										{savingId === card.id ? 'Saving…' : 'Read later'}
+									</button>
+								{/if}
+							</div>
+						</div>
+						<div class="aside">
+							{#if finished(card)}
+								<span class="badge done" title="Finished"><Icon name="check" size={15} /></span>
+							{:else if card.readingProgress > 0}
+								<span
+									class="ring"
+									style={`--p:${Math.round(card.readingProgress * 100)}`}
+									title={`${Math.round(card.readingProgress * 100)}% read`}
+								>
+									<svg viewBox="0 0 36 36" width="26" height="26" aria-hidden="true">
+										<circle class="ring-bg" cx="18" cy="18" r="15.5" pathLength="100" />
+										<circle class="ring-fg" cx="18" cy="18" r="15.5" pathLength="100" />
+									</svg>
+								</span>
 							{/if}
 						</div>
-					</div>
-					<div class="aside">
-						{#if finished(card)}
-							<span class="badge done" title="Finished"><Icon name="check" size={15} /></span>
-						{:else if card.readingProgress > 0}
-							<span
-								class="ring"
-								style={`--p:${Math.round(card.readingProgress * 100)}`}
-								title={`${Math.round(card.readingProgress * 100)}% read`}
-							>
-								<svg viewBox="0 0 36 36" width="26" height="26" aria-hidden="true">
-									<circle class="ring-bg" cx="18" cy="18" r="15.5" pathLength="100" />
-									<circle class="ring-fg" cx="18" cy="18" r="15.5" pathLength="100" />
-								</svg>
-							</span>
-						{/if}
-					</div>
-				</article>
+					</article>
+				</div>
 			</li>
 		{/each}
 	</ul>
+	{#if undo}
+		<div class="undo-toast" role="status">
+			<span>Archived</span>
+			<button type="button" onclick={applyUndo}>Undo</button>
+		</div>
+	{/if}
 {/if}
 
 <style>
@@ -225,6 +276,67 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
+	}
+	/* Swipe-to-act: the front (the card) slides over coloured action panels.
+	   pan-y keeps vertical scrolling; the front is only opaque mid-swipe so the
+	   list keeps its flat resting look. */
+	.swipe {
+		position: relative;
+		border-radius: var(--radius-lg);
+		touch-action: pan-y;
+	}
+	.swipe-bg {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		border-radius: inherit;
+		overflow: hidden;
+	}
+	.swipe-action {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0 1.25rem;
+		color: #fff;
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.swipe-action.read {
+		background: var(--accent);
+		justify-content: flex-start;
+	}
+	.swipe-action.archive {
+		background: var(--error, #c0392b);
+		justify-content: flex-end;
+	}
+	.swipe-front {
+		position: relative;
+		z-index: 1;
+	}
+	.undo-toast {
+		position: fixed;
+		left: 50%;
+		bottom: 5.5rem;
+		transform: translateX(-50%);
+		z-index: 70;
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.6rem 0.75rem 0.6rem 1rem;
+		background: var(--text);
+		color: var(--bg);
+		border-radius: var(--radius-full);
+		box-shadow: var(--shadow-md);
+		font-size: var(--text-sm);
+	}
+	.undo-toast button {
+		border: 0;
+		background: transparent;
+		color: var(--accent);
+		font-weight: 700;
+		cursor: pointer;
+		padding: 0.1rem 0.3rem;
 	}
 	.card {
 		position: relative;

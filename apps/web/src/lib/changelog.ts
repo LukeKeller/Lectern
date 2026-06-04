@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.6.1',
+		date: '2026-06-03',
+		title: 'Swipe actions',
+		changes: [
+			{
+				kind: 'added',
+				text: 'On touch screens, swipe a card right to mark it read or unread, or left to archive it (with an Undo). The per-card buttons stay for mouse and keyboard.'
+			}
+		]
+	},
+	{
 		version: '0.6.0',
 		date: '2026-06-03',
 		title: 'Listen (text-to-speech)',
