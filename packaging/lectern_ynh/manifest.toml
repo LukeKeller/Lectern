@@ -103,6 +103,16 @@ ram.runtime = "250M"
     api.auth_header = false
     api.show_tile = false
     api.protected = true
+    # Podcast apps (Apple Podcasts, Pocket Casts, …) can't authenticate through
+    # SSOwat — there's no interactive login — so the feed + episode audio must be
+    # visitor-accessible at the perimeter. The BFF itself gates these routes with
+    # an opaque token baked into the URL. Keep in sync with the /podcast location
+    # in conf/nginx.conf.
+    podcast.url = "/podcast"
+    podcast.allowed = "visitors"
+    podcast.auth_header = false
+    podcast.show_tile = false
+    podcast.protected = true
 
     [resources.ports]
     main.default = 8787
