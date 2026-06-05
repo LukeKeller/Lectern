@@ -477,6 +477,16 @@ class FakeTtsBackend {
       throw new BackendHttpError("elevenlabs", 401, null, "no voices permission");
     return this.voices;
   }
+  usage = {
+    tier: "creator",
+    status: "active",
+    characterCount: 12_345,
+    characterLimit: 100_000,
+    nextResetUnix: 1_750_000_000,
+  };
+  async getUsage() {
+    return this.usage;
+  }
 }
 
 // ---- Test harness ----------------------------------------------------------
@@ -1303,6 +1313,27 @@ describe("text-to-speech", () => {
     });
     expect(res.statusCode).toBe(200);
     expect((res.json() as { voices: unknown[] }).voices).toEqual([]);
+    await a.close();
+  });
+
+  it("reports account usage only when configured, mapping the reset to ISO", async () => {
+    const a = app();
+    const unset = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/tts/usage",
+      headers: auth,
+    });
+    expect(unset.statusCode).toBe(409);
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const ok = await a.inject({ method: "GET", url: "/api/v1/settings/tts/usage", headers: auth });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({
+      tier: "creator",
+      status: "active",
+      characterCount: 12_345,
+      characterLimit: 100_000,
+      nextResetAt: new Date(1_750_000_000 * 1000).toISOString(),
+    });
     await a.close();
   });
 

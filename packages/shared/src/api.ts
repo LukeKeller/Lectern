@@ -156,6 +156,21 @@ export type TtsVoice = z.infer<typeof TtsVoice>;
 export const TtsVoicesResponse = z.object({ voices: z.array(TtsVoice) });
 export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponse>;
 
+/** ElevenLabs account usage/quota for the configured key, surfaced in Settings.
+ * Mirrors `GET /v1/user/subscription`: how many characters the current billing
+ * period has spent against its quota, the plan tier, and when usage resets. */
+export const TtsUsage = z.object({
+  tier: z.string(),
+  status: z.string().nullable().default(null),
+  /** Characters synthesized so far this billing period. */
+  characterCount: z.number().int().nonnegative(),
+  /** Character quota for the period (0 when the plan reports no limit). */
+  characterLimit: z.number().int().nonnegative(),
+  /** ISO timestamp when the period counter resets, or null if unknown. */
+  nextResetAt: z.string().nullable().default(null),
+});
+export type TtsUsage = z.infer<typeof TtsUsage>;
+
 /** Request a short spoken sample of a voice (returns audio bytes, not JSON). */
 export const TtsPreviewRequest = z.object({ voiceId: z.string() });
 export type TtsPreviewRequest = z.infer<typeof TtsPreviewRequest>;
@@ -472,6 +487,15 @@ export const endpoints: Endpoint[] = [
     summary: "List the configured account's available voices",
     tags: ["tts"],
     response: TtsVoicesResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/settings/tts/usage",
+    operationId: "getTtsUsage",
+    summary: "Get the configured ElevenLabs account's usage and quota",
+    tags: ["tts"],
+    response: TtsUsage,
     status: 200,
   },
   {

@@ -88,6 +88,28 @@
 		}
 	}
 
+	// Publish an article to the podcast feed from the overflow menu. Renders audio
+	// server-side (a few seconds on a cache miss) without starting playback. Status
+	// is shown inline on the menu item; only one menu is open at a time, so a single
+	// status value suffices (reset in toggleMenu).
+	let podcastStatus = $state<'idle' | 'busy' | 'done' | 'error'>('idle');
+	async function addToPodcast(card: Card) {
+		if (podcastStatus === 'busy') return;
+		podcastStatus = 'busy';
+		try {
+			await getClient().addToPodcast(card.id, queueTitle(card));
+			podcastStatus = 'done';
+			setTimeout(() => {
+				if (podcastStatus === 'done') {
+					menuOpenId = null;
+					podcastStatus = 'idle';
+				}
+			}, 1200);
+		} catch {
+			podcastStatus = 'error';
+		}
+	}
+
 	function hostname(url: string): string {
 		try {
 			return new URL(url).hostname.replace(/^www\./, '');
@@ -181,6 +203,7 @@
 	let menuOpenId = $state<string | null>(null);
 	function toggleMenu(id: string) {
 		menuOpenId = menuOpenId === id ? null : id;
+		podcastStatus = 'idle';
 	}
 	function queueTitle(card: Card) {
 		return card.title || hostname(card.url);
@@ -381,6 +404,24 @@
 												}}
 											>
 												<Icon name="plus" size={15} /> Add to queue
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												disabled={podcastStatus === 'busy'}
+												onclick={(e) => {
+													e.stopPropagation();
+													addToPodcast(card);
+												}}
+											>
+												<Icon name={podcastStatus === 'done' ? 'check' : 'rss'} size={15} />
+												{podcastStatus === 'busy'
+													? 'Rendering…'
+													: podcastStatus === 'done'
+														? 'Added'
+														: podcastStatus === 'error'
+															? 'Failed — retry'
+															: 'Add to podcast'}
 											</button>
 											<button
 												type="button"

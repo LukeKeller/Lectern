@@ -27,6 +27,7 @@ import {
   SyncPushResponse,
   TagsResponse,
   TtsSettings,
+  TtsUsage,
   TtsVoicesResponse,
   UpdateDocumentRequest,
   UpdateTtsSettingsRequest,
@@ -197,6 +198,11 @@ export class LecternClient {
   }
   listTtsVoices() {
     return this.request("GET", "/settings/tts/voices", { schema: TtsVoicesResponse });
+  }
+  /** ElevenLabs account usage/quota for the configured key (characters spent this
+   * billing period, plan tier, reset date). 409 if no key is configured. */
+  getTtsUsage() {
+    return this.request("GET", "/settings/tts/usage", { schema: TtsUsage });
   }
   getPlayerState() {
     return this.request("GET", "/settings/player", { schema: PlayerState });
