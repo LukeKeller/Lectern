@@ -4,6 +4,8 @@ import { MinifluxBackend } from "./backends/miniflux";
 import { ReadeckBackend } from "./backends/readeck";
 import { DrizzleOverlayStore } from "./overlay-store";
 import { ElevenLabsBackend } from "./backends/elevenlabs";
+import { KokoroBackend } from "./backends/kokoro";
+import { ProviderTtsRouter } from "./backends/tts-router";
 import { UnificationService } from "./unify";
 import type { AppDeps } from "./app";
 
@@ -25,6 +27,9 @@ export function buildRealDeps(): AppDeps {
   });
   const overlay = new DrizzleOverlayStore(db);
   const unify = new UnificationService(rss, readLater, overlay);
-  const tts = new ElevenLabsBackend();
+  const tts = new ProviderTtsRouter({
+    elevenlabs: new ElevenLabsBackend(),
+    kokoro: new KokoroBackend({ baseUrl: config.KOKORO_BASE_URL }),
+  });
   return { rss, readLater, overlay, unify, tts };
 }

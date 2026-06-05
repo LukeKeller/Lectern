@@ -32,6 +32,12 @@ ynh_app_setting_set --key=imap_password --value="${imap_password:-}"
 ynh_app_setting_set --key=imap_exclude_senders --value="${imap_exclude_senders:-}"
 ynh_app_setting_set --key=enable_email --value="$enable_email"
 
+# Text-to-speech (optional). Persist the Kokoro-FastAPI base URL as a setting so
+# the .env template renders and upgrades can re-render it. Defaults to the local
+# Docker sibling container; configurable later from the config panel.
+kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
+ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
+
 #=================================================
 # INSTALL APP FILES (prebuilt artifact)
 #=================================================

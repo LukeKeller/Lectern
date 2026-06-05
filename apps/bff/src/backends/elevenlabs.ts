@@ -1,5 +1,6 @@
 import type { TtsVoice } from "@lectern/shared";
 import { BackendHttpError } from "../errors";
+import { chunkText } from "./chunk";
 
 /**
  * ElevenLabs text-to-speech backend. Stateless w.r.t. credentials: the API key
@@ -27,10 +28,12 @@ export interface TtsUsageInfo {
 export interface TtsBackend {
   /** Synthesize speech for plain text, returning mp3 bytes (chunked + joined). */
   synthesize(text: string, opts: SynthesizeOptions): Promise<Buffer>;
-  /** Voices available to the account behind `apiKey`. */
+  /** Voices available to the account/service behind `apiKey`. */
   listVoices(apiKey: string): Promise<TtsVoice[]>;
-  /** Usage and quota for the account behind `apiKey`. */
-  getUsage(apiKey: string): Promise<TtsUsageInfo>;
+  /** Usage and quota for the account behind `apiKey`. Optional: only hosted
+   * providers with a billed quota implement it (ElevenLabs); self-hosted
+   * engines like Kokoro have none. */
+  getUsage?(apiKey: string): Promise<TtsUsageInfo>;
 }
 
 const API = "https://api.elevenlabs.io/v1";
@@ -128,53 +131,4 @@ export class ElevenLabsBackend implements TtsBackend {
       nextResetUnix: data.next_character_count_reset_unix ?? null,
     };
   }
-}
-
-/**
- * Split text into chunks no longer than `limit` characters, preferring
- * paragraph boundaries and falling back to sentence then hard splits so a single
- * oversized paragraph can't blow the model's per-request limit.
- */
-export function chunkText(text: string, limit: number): string[] {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const chunks: string[] = [];
-  let current = "";
-  const flush = () => {
-    if (current.trim()) chunks.push(current.trim());
-    current = "";
-  };
-  for (const para of paragraphs) {
-    for (const piece of para.length > limit ? splitToLimit(para, limit) : [para]) {
-      if (current && current.length + piece.length + 2 > limit) flush();
-      current = current ? `${current}\n\n${piece}` : piece;
-    }
-  }
-  flush();
-  return chunks;
-}
-
-/** Break an oversized string into ≤limit pieces on sentence then hard bounds. */
-function splitToLimit(text: string, limit: number): string[] {
-  const out: string[] = [];
-  let buf = "";
-  for (const sentence of text.split(/(?<=[.!?])\s+/)) {
-    for (const unit of sentence.length > limit ? hardSplit(sentence, limit) : [sentence]) {
-      if (buf && buf.length + unit.length + 1 > limit) {
-        out.push(buf.trim());
-        buf = "";
-      }
-      buf = buf ? `${buf} ${unit}` : unit;
-    }
-  }
-  if (buf.trim()) out.push(buf.trim());
-  return out;
-}
-
-function hardSplit(text: string, limit: number): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < text.length; i += limit) out.push(text.slice(i, i + limit));
-  return out;
 }

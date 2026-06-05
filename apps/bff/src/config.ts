@@ -37,6 +37,9 @@ const EnvSchema = z.object({
   /** Public origin (scheme + host) used to build absolute podcast feed/enclosure
    * URLs. Empty = derive from the request's forwarded headers (default). */
   LECTERN_PUBLIC_URL: z.string().default(""),
+  /** Base URL of an optional self-hosted Kokoro-FastAPI service (OpenAI-compatible
+   * `/v1/audio/*`). Used only when the TTS provider is set to "kokoro". */
+  KOKORO_BASE_URL: z.string().default("http://127.0.0.1:8880"),
   /** Set to "1" to start the pg-boss polling jobs. */
   LECTERN_ENABLE_JOBS: z.string().default(""),
   /** Set to "1" to enable the newsletter mailbox poll (requires IMAP_* + jobs). */

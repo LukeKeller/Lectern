@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { buildOpenApiDocument } from "@lectern/shared";
 import type { ReadLaterBackend, RssBackend } from "@lectern/shared";
 import type { OverlayStore, UnificationService } from "./unify";
-import type { TtsBackend } from "./backends/elevenlabs";
+import type { TtsRouter } from "./backends/tts-router";
 import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
 import { registerPodcastRoutes } from "./podcast";
@@ -22,7 +22,7 @@ export interface AppDeps {
   readLater: ReadLaterBackend;
   overlay: OverlayStore;
   unify: UnificationService;
-  tts: TtsBackend;
+  tts: TtsRouter;
 }
 
 function statusCodeOf(err: unknown): number | undefined {

@@ -41,3 +41,18 @@ name = "Configuration"
         example = "diagnosis@digitallyadrift.com, noreply@example.com"
         help = "Comma-separated From addresses to skip — handy for internal or system mail (server diagnostics, cron) that lands in this mailbox. Case-insensitive, exact-match."
         optional = true
+
+    [main.tts]
+    name = "Text-to-speech"
+
+        [main.tts.tts_help]
+        type = "alert"
+        style = "info"
+        ask = "Lectern can read articles aloud. ElevenLabs works with an API key set on the in-app Settings > Listen page (no server config needed). For a free self-hosted voice, run Kokoro-FastAPI as a Docker container and put its URL below. Recommended (CPU) container: docker run -d --name kokoro-tts --restart unless-stopped -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest — for an NVIDIA GPU use ghcr.io/remsky/kokoro-fastapi-gpu:latest instead. Then pick 'Kokoro (self-hosted)' as the provider on the in-app Settings > Listen page."
+
+        [main.tts.kokoro_base_url]
+        ask = "Kokoro-FastAPI base URL"
+        type = "string"
+        default = "http://127.0.0.1:8880"
+        help = "Base URL of the self-hosted Kokoro-FastAPI service. Lectern appends OpenAI-compatible paths (/v1/audio/speech, /v1/audio/voices). The default matches the recommended Docker run command, which binds the service to localhost on this server."
+        optional = true

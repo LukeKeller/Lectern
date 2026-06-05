@@ -1,4 +1,4 @@
-import type { TtsVoice } from '@lectern/shared';
+import type { TtsProvider, TtsVoice } from '@lectern/shared';
 
 /**
  * ElevenLabs' classic premade voices. These IDs are public and stable, and work
@@ -31,12 +31,41 @@ export const BUILTIN_VOICES: TtsVoice[] = [
 ];
 
 /**
- * Built-in voices plus any account voices (deduped by id), guaranteeing the
- * currently-selected id is always present so it shows as selected even if it's
- * a custom voice not in the built-in set.
+ * A curated subset of Kokoro's open-weight voices with friendly labels. The
+ * self-hosted Kokoro service can list its full set (merged in on top via
+ * `voiceOptions`); this guarantees sensible options even before that loads.
  */
-export function voiceOptions(account: TtsVoice[], current: string): TtsVoice[] {
-	const out: TtsVoice[] = [...BUILTIN_VOICES];
+export const KOKORO_VOICES: TtsVoice[] = [
+	{ id: 'af_heart', name: 'Heart (US, female)' },
+	{ id: 'af_bella', name: 'Bella (US, female)' },
+	{ id: 'af_nicole', name: 'Nicole (US, female)' },
+	{ id: 'af_sky', name: 'Sky (US, female)' },
+	{ id: 'am_adam', name: 'Adam (US, male)' },
+	{ id: 'am_michael', name: 'Michael (US, male)' },
+	{ id: 'am_onyx', name: 'Onyx (US, male)' },
+	{ id: 'bf_emma', name: 'Emma (UK, female)' },
+	{ id: 'bf_isabella', name: 'Isabella (UK, female)' },
+	{ id: 'bm_george', name: 'George (UK, male)' },
+	{ id: 'bm_lewis', name: 'Lewis (UK, male)' }
+];
+
+/** Default voice for each provider, used when switching providers. */
+export const DEFAULT_VOICE: Record<TtsProvider, string> = {
+	elevenlabs: '21m00Tcm4TlvDq8ikWAM', // Rachel
+	kokoro: 'af_heart'
+};
+
+/**
+ * Built-in voices for the active provider plus any service/account voices
+ * (deduped by id), guaranteeing the currently-selected id is always present so
+ * it shows as selected even if it's a custom voice not in the built-in set.
+ */
+export function voiceOptions(
+	account: TtsVoice[],
+	current: string,
+	provider: TtsProvider = 'elevenlabs'
+): TtsVoice[] {
+	const out: TtsVoice[] = [...(provider === 'kokoro' ? KOKORO_VOICES : BUILTIN_VOICES)];
 	for (const v of account) if (!out.some((o) => o.id === v.id)) out.push(v);
 	if (current && !out.some((o) => o.id === current))
 		out.push({ id: current, name: 'Custom voice' });

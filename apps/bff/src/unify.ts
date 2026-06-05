@@ -14,6 +14,7 @@ import type {
   SearchResult,
   Source,
   Tag,
+  TtsProvider,
   UpdateViewRequest,
 } from "@lectern/shared";
 
@@ -245,9 +246,15 @@ export interface OverlayStore {
 
   // --- text-to-speech config + audio cache (BFF-owned, server-side only) ---
   /** TTS config including the raw API key. Server-internal: NEVER sent to the SPA. */
-  getTtsConfig(): Promise<{ apiKey: string | null; voiceId: string; modelId: string }>;
+  getTtsConfig(): Promise<{
+    provider: TtsProvider;
+    apiKey: string | null;
+    voiceId: string;
+    modelId: string;
+  }>;
   /** Merge a partial TTS config patch (apiKey === null clears the key). */
   setTtsConfig(patch: {
+    provider?: TtsProvider;
     apiKey?: string | null;
     voiceId?: string;
     modelId?: string;

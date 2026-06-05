@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ImportReadwiseResponse, TtsUsage, TtsVoice } from '@lectern/shared';
+	import type { ImportReadwiseResponse, TtsProvider, TtsUsage, TtsVoice } from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
@@ -16,7 +16,7 @@
 	import { buildBookmarklet } from '$lib/bookmarklet';
 	import { APP_VERSION } from '$lib/version';
 	import { resolve } from '$app/paths';
-	import { voiceOptions } from '$lib/tts-voices';
+	import { DEFAULT_VOICE, voiceOptions } from '$lib/tts-voices';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 
 	let token = $state('');
@@ -55,17 +55,22 @@
 	];
 
 	// ---- Listen (text-to-speech) ----
+	const TTS_PROVIDERS: { value: TtsProvider; label: string }[] = [
+		{ value: 'elevenlabs', label: 'ElevenLabs — hosted, needs an API key' },
+		{ value: 'kokoro', label: 'Kokoro — free, self-hosted on your server' }
+	];
 	const TTS_MODELS = [
 		{ value: 'eleven_flash_v2_5', label: 'Flash v2.5 — fast, affordable (default)' },
 		{ value: 'eleven_multilingual_v2', label: 'Multilingual v2 — highest quality' }
 	];
+	let ttsProvider = $state<TtsProvider>('elevenlabs');
 	let ttsConfigured = $state(false);
 	let ttsModel = $state('eleven_flash_v2_5');
 	let ttsVoiceId = $state('');
 	let ttsKey = $state('');
 	let accountVoices = $state<TtsVoice[]>([]);
 	let ttsVoicesNote = $state<string | undefined>(undefined);
-	const voiceList = $derived(voiceOptions(accountVoices, ttsVoiceId));
+	const voiceList = $derived(voiceOptions(accountVoices, ttsVoiceId, ttsProvider));
 	let ttsBusy = $state(false);
 	let ttsMsg = $state<string | undefined>(undefined);
 	let ttsError = $state<string | undefined>(undefined);
@@ -136,6 +141,7 @@
 	async function loadTts() {
 		try {
 			const s = await getClient().getTtsSettings();
+			ttsProvider = s.provider;
 			ttsConfigured = s.configured;
 			ttsModel = s.modelId;
 			ttsVoiceId = s.voiceId;
@@ -143,16 +149,42 @@
 			/* offline: keep defaults */
 		}
 		try {
-			// Silently surface account voices if the key can list them.
+			// Surface the provider's voices (ElevenLabs account voices, or the Kokoro
+			// service's voice list) when reachable.
 			accountVoices = (await getClient().listTtsVoices()).voices;
 		} catch {
-			/* key lacks the Voices permission — built-in voices remain available */
+			/* unavailable — built-in voices remain available */
 		}
 		await loadTtsUsage();
 	}
 
+	/** Switch provider: persist it, reset the voice to that provider's default
+	 * when the current one belongs to the other provider, then reload voices/usage. */
+	async function saveTtsProvider(provider: TtsProvider) {
+		if (provider === ttsProvider) return;
+		ttsProvider = provider;
+		ttsError = undefined;
+		ttsMsg = undefined;
+		accountVoices = [];
+		// Kokoro voice ids contain an underscore (e.g. af_heart); ElevenLabs ids
+		// don't. Swap to the provider's default voice when the current id is foreign.
+		const isKokoroVoice = ttsVoiceId.includes('_');
+		const patch: { provider: TtsProvider; voiceId?: string } = { provider };
+		if (provider === 'kokoro' && !isKokoroVoice) patch.voiceId = DEFAULT_VOICE.kokoro;
+		if (provider === 'elevenlabs' && isKokoroVoice) patch.voiceId = DEFAULT_VOICE.elevenlabs;
+		try {
+			const s = await getClient().updateTtsSettings(patch);
+			ttsConfigured = s.configured;
+			ttsVoiceId = s.voiceId;
+		} catch (err) {
+			ttsError = err instanceof Error ? err.message : 'Failed to switch provider.';
+		}
+		await loadTts();
+	}
+
 	async function loadTtsUsage() {
-		if (!ttsConfigured) {
+		// Usage/quota is an ElevenLabs concept; Kokoro is self-hosted with none.
+		if (ttsProvider !== 'elevenlabs' || !ttsConfigured) {
 			ttsUsage = undefined;
 			return;
 		}
@@ -219,9 +251,16 @@
 			accountVoices = (await getClient().listTtsVoices()).voices;
 			ttsVoicesNote = accountVoices.length
 				? undefined
-				: 'No account voices returned — your key may lack the Voices permission. Built-in voices are available below.';
+				: ttsProvider === 'kokoro'
+					? 'No voices returned — check that the Kokoro server is running and reachable. Built-in voices are available below.'
+					: 'No account voices returned — your key may lack the Voices permission. Built-in voices are available below.';
 		} catch (err) {
-			ttsError = err instanceof Error ? err.message : 'Could not load voices (check the key).';
+			ttsError =
+				err instanceof Error
+					? err.message
+					: ttsProvider === 'kokoro'
+						? 'Could not load voices (is the Kokoro server running?).'
+						: 'Could not load voices (check the key).';
 		} finally {
 			ttsBusy = false;
 		}
@@ -491,38 +530,63 @@
 	<section>
 		<h2>Listen (text-to-speech)</h2>
 		<p class="hint">
-			Read articles aloud with ElevenLabs. Your API key is stored on the server and never sent to
-			the browser; audio is synthesized only when you press Listen and cached so replays are free.
-			Get a key at <span class="mono">elevenlabs.io</span> → Profile → API Keys.
+			Read articles aloud. Audio is synthesized only when you press Listen and cached so replays are
+			free. Choose a provider: <span class="mono">ElevenLabs</span> (hosted, highest quality, needs
+			an API key) or <span class="mono">Kokoro</span> (free, runs on your own server).
 		</p>
-		<form class="row" onsubmit={saveTtsKey}>
-			<input
-				type="password"
-				bind:value={ttsKey}
-				placeholder={ttsConfigured ? '•••••••• (key saved)' : 'ElevenLabs API key'}
-				autocomplete="off"
-			/>
-			<button type="submit" class="btn" disabled={ttsBusy}>Save</button>
-			{#if ttsConfigured}
-				<button
-					type="button"
-					class="btn ghost"
-					disabled={ttsBusy}
-					onclick={() => {
-						ttsKey = '';
-						void getClient()
-							.updateTtsSettings({ apiKey: null })
-							.then((s) => {
-								ttsConfigured = s.configured;
-								ttsMsg = 'API key cleared.';
-								ttsUsage = undefined;
-							});
-					}}
-				>
-					Clear
-				</button>
-			{/if}
-		</form>
+		<label class="field">
+			<span class="flabel">Provider</span>
+			<select
+				value={ttsProvider}
+				onchange={(e) => saveTtsProvider(e.currentTarget.value as TtsProvider)}
+			>
+				{#each TTS_PROVIDERS as p (p.value)}
+					<option value={p.value}>{p.label}</option>
+				{/each}
+			</select>
+		</label>
+
+		{#if ttsProvider === 'elevenlabs'}
+			<p class="hint">
+				Your API key is stored on the server and never sent to the browser. Get a key at
+				<span class="mono">elevenlabs.io</span> → Profile → API Keys.
+			</p>
+			<form class="row" onsubmit={saveTtsKey}>
+				<input
+					type="password"
+					bind:value={ttsKey}
+					placeholder={ttsConfigured ? '•••••••• (key saved)' : 'ElevenLabs API key'}
+					autocomplete="off"
+				/>
+				<button type="submit" class="btn" disabled={ttsBusy}>Save</button>
+				{#if ttsConfigured}
+					<button
+						type="button"
+						class="btn ghost"
+						disabled={ttsBusy}
+						onclick={() => {
+							ttsKey = '';
+							void getClient()
+								.updateTtsSettings({ apiKey: null })
+								.then((s) => {
+									ttsConfigured = s.configured;
+									ttsMsg = 'API key cleared.';
+									ttsUsage = undefined;
+								});
+						}}
+					>
+						Clear
+					</button>
+				{/if}
+			</form>
+		{:else}
+			<p class="hint">
+				Kokoro runs as a separate service on your server (Lectern talks to it over HTTP). Set its
+				URL in the YunoHost admin → Lectern → Config panel (<span class="mono">KOKORO_BASE_URL</span
+				>, default <span class="mono">http://127.0.0.1:8880</span>). No API key or quota — synthesis
+				is free.
+			</p>
+		{/if}
 		{#if ttsMsg}<p class="ok">{ttsMsg}</p>{/if}
 		{#if ttsError}<p class="err">{ttsError}</p>{/if}
 
@@ -571,14 +635,16 @@
 		{/if}
 
 		<div class="stack">
-			<label class="field">
-				<span class="flabel">Model</span>
-				<select value={ttsModel} onchange={(e) => saveTtsModel(e.currentTarget.value)}>
-					{#each TTS_MODELS as m (m.value)}
-						<option value={m.value}>{m.label}</option>
-					{/each}
-				</select>
-			</label>
+			{#if ttsProvider === 'elevenlabs'}
+				<label class="field">
+					<span class="flabel">Model</span>
+					<select value={ttsModel} onchange={(e) => saveTtsModel(e.currentTarget.value)}>
+						{#each TTS_MODELS as m (m.value)}
+							<option value={m.value}>{m.label}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
 			<label class="field">
 				<span class="flabel">Voice</span>
 				<div class="row">
@@ -597,13 +663,15 @@
 						{ttsPlayer.previewVoiceId === ttsVoiceId ? 'Playing…' : 'Preview'}
 					</button>
 					<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
-						Load my voices
+						{ttsProvider === 'kokoro' ? 'Load voices' : 'Load my voices'}
 					</button>
 				</div>
 				<div class="row">
 					<input
 						type="text"
-						placeholder="…or paste an ElevenLabs voice ID"
+						placeholder={ttsProvider === 'kokoro'
+							? '…or type a Kokoro voice id (e.g. af_heart, or af_bella+af_sky)'
+							: '…or paste an ElevenLabs voice ID'}
 						value=""
 						onchange={(e) => {
 							const v = e.currentTarget.value.trim();

@@ -1,4 +1,4 @@
-import type { TtsVoice } from '@lectern/shared';
+import type { TtsProvider, TtsVoice } from '@lectern/shared';
 import { LecternApiError } from '@lectern/api-client';
 import { db, type QueueItem } from './db';
 import { getClient } from './config';
@@ -22,7 +22,8 @@ class TtsPlayer {
 	error = $state<string | undefined>(undefined);
 	currentTime = $state(0);
 	duration = $state(0);
-	/** Current ElevenLabs voice + model (mirrors the server settings). */
+	/** Active TTS provider + current voice/model (mirrors the server settings). */
+	provider = $state<TtsProvider>('elevenlabs');
 	voiceId = $state('');
 	modelId = $state('eleven_flash_v2_5');
 	accountVoices = $state<TtsVoice[]>([]);
@@ -53,9 +54,10 @@ class TtsPlayer {
 	get hasQueue(): boolean {
 		return this.queue.length > 0;
 	}
-	/** Built-in voices merged with any account voices, current always present. */
+	/** Built-in voices for the active provider merged with any service/account
+	 * voices, current always present. */
 	get voices(): TtsVoice[] {
-		return voiceOptions(this.accountVoices, this.voiceId);
+		return voiceOptions(this.accountVoices, this.voiceId, this.provider);
 	}
 
 	init(): void {
@@ -95,6 +97,7 @@ class TtsPlayer {
 	async loadSettings(): Promise<void> {
 		try {
 			const s = await getClient().getTtsSettings();
+			this.provider = s.provider;
 			this.voiceId = s.voiceId;
 			this.modelId = s.modelId;
 		} catch {
@@ -251,7 +254,9 @@ class TtsPlayer {
 			this.status = 'error';
 			this.error =
 				err instanceof LecternApiError && err.status === 409
-					? 'Add your ElevenLabs API key in Settings to listen.'
+					? this.provider === 'kokoro'
+						? 'Start your Kokoro TTS server (and check its URL) to listen.'
+						: 'Add your ElevenLabs API key in Settings to listen.'
 					: err instanceof Error
 						? err.message
 						: 'Could not load audio.';

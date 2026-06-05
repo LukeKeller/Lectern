@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.14.0',
+		date: '2026-06-04',
+		title: 'Free self-hosted text-to-speech, and ElevenLabs usage at a glance',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Listen now works with Kokoro — a free, high-quality speech engine you run on your own server — as an alternative to ElevenLabs. Pick your engine under Settings → Listen: ElevenLabs needs an API key, while Kokoro needs no key and has no usage limits. Set up the Kokoro service once (see the operator docs) and choose from its voices.'
+			},
+			{
+				kind: 'added',
+				text: 'When you use ElevenLabs, Settings → Listen now shows your usage this billing period — characters used, characters remaining, your plan tier, and the date your quota resets — so you can see at a glance how much synthesis you have left.'
+			}
+		]
+	},
+	{
 		version: '0.13.1',
 		date: '2026-06-04',
 		title: 'Add to podcast from the article menu',

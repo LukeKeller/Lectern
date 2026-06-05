@@ -32,6 +32,7 @@ import {
   TtsSettings,
   TtsUsage,
   TtsVoicesResponse,
+  type TtsProvider,
   UpdateDocumentRequest,
   UpdateFeedRequest,
   UpdateTtsSettingsRequest,
@@ -83,19 +84,21 @@ async function synthesizeDocument(
   title: string | undefined,
 ): Promise<{ contentHash: string; mime: string; bytes: Buffer; charCount: number }> {
   const cfg = await deps.overlay.getTtsConfig();
-  if (!cfg.apiKey) throw new HttpError(409, "TTS is not configured");
+  if (!ttsReady(cfg)) throw new HttpError(409, "TTS is not configured");
   const body = stripUrls(htmlToText(await loadContentHtml(deps, id)));
   if (!body) throw new HttpError(422, "no readable text for this document");
   const announce = title?.trim();
   const text = announce ? `${announce}.\n\n${body}` : body;
+  // Voice ids never overlap between providers (ElevenLabs hex ids vs. Kokoro
+  // names), so voice+model already namespaces the cache per provider.
   const contentHash = createHash("sha256")
     .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
     .digest("hex");
   const cached = await deps.overlay.getCachedAudio(contentHash);
   if (cached)
     return { contentHash, mime: cached.mime, bytes: cached.bytes, charCount: text.length };
-  const bytes = await deps.tts.synthesize(text, {
-    apiKey: cfg.apiKey,
+  const bytes = await deps.tts.forProvider(cfg.provider).synthesize(text, {
+    apiKey: cfg.apiKey ?? "",
     voiceId: cfg.voiceId,
     modelId: cfg.modelId,
   });
@@ -107,6 +110,13 @@ async function synthesizeDocument(
     charCount: text.length,
   });
   return { contentHash, mime: "audio/mpeg", bytes, charCount: text.length };
+}
+
+/** Whether the configured provider is ready to synthesize. ElevenLabs needs a
+ * per-user API key; the self-hosted Kokoro service needs none (its URL is server
+ * config), so it's considered ready whenever it's the selected provider. */
+function ttsReady(cfg: { provider: TtsProvider; apiKey: string | null }): boolean {
+  return cfg.provider === "kokoro" || !!cfg.apiKey;
 }
 
 /** Short sample read aloud when auditioning a voice (kept brief to bound cost). */
@@ -236,24 +246,29 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/settings/tts/voices", async (_req, reply) => {
     const cfg = await deps.overlay.getTtsConfig();
-    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    if (!ttsReady(cfg)) return reply.code(409).send({ error: "TTS is not configured" });
     try {
-      return TtsVoicesResponse.parse({ voices: await deps.tts.listVoices(cfg.apiKey) });
+      const voices = await deps.tts.forProvider(cfg.provider).listVoices(cfg.apiKey ?? "");
+      return TtsVoicesResponse.parse({ voices });
     } catch (err) {
       // A key can be valid for synthesis yet lack the "Voices read" permission
-      // (ElevenLabs scoped keys → 401). Don't fail the settings UI with a 502:
-      // return an empty list so the client falls back to its built-in voices.
+      // (ElevenLabs scoped keys → 401), or the Kokoro service may be briefly
+      // unreachable. Don't fail the settings UI with a 502: return an empty list
+      // so the client falls back to its built-in voices.
       app.log.warn({ err }, "listTtsVoices failed; returning empty list");
       return TtsVoicesResponse.parse({ voices: [] });
     }
   });
 
   // ElevenLabs account usage/quota for the configured key (characters spent this
-  // billing period, plan tier, reset date). Read-only and never billed.
+  // billing period, plan tier, reset date). Read-only and never billed. Only the
+  // ElevenLabs provider has a billed quota; 409 for any other provider.
   app.get("/settings/tts/usage", async (_req, reply) => {
     const cfg = await deps.overlay.getTtsConfig();
-    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
-    const usage = await deps.tts.getUsage(cfg.apiKey);
+    const backend = deps.tts.forProvider(cfg.provider);
+    if (cfg.provider !== "elevenlabs" || !cfg.apiKey || !backend.getUsage)
+      return reply.code(409).send({ error: "usage is unavailable for this provider" });
+    const usage = await backend.getUsage(cfg.apiKey);
     return TtsUsage.parse({
       tier: usage.tier,
       status: usage.status,
@@ -345,7 +360,7 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // "preview" content hash) so re-auditioning a voice never re-bills.
   app.post<{ Body: unknown }>("/settings/tts/preview", async (req, reply) => {
     const cfg = await deps.overlay.getTtsConfig();
-    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    if (!ttsReady(cfg)) return reply.code(409).send({ error: "TTS is not configured" });
     const { voiceId } = TtsPreviewRequest.parse(req.body);
     const voice = voiceId || cfg.voiceId;
     const contentHash = createHash("sha256")
@@ -353,8 +368,8 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       .digest("hex");
     let audio = await deps.overlay.getCachedAudio(contentHash);
     if (!audio) {
-      const bytes = await deps.tts.synthesize(TTS_PREVIEW_TEXT, {
-        apiKey: cfg.apiKey,
+      const bytes = await deps.tts.forProvider(cfg.provider).synthesize(TTS_PREVIEW_TEXT, {
+        apiKey: cfg.apiKey ?? "",
         voiceId: voice,
         modelId: cfg.modelId,
       });
@@ -611,7 +626,10 @@ async function loadContentHtml(deps: AppDeps, id: string, refresh = false): Prom
 async function ttsSettings(deps: AppDeps) {
   const cfg = await deps.overlay.getTtsConfig();
   return TtsSettings.parse({
-    configured: !!cfg.apiKey,
+    provider: cfg.provider,
+    // Kokoro needs no key (server-configured URL), so it's "configured" whenever
+    // selected; ElevenLabs is configured once a key is saved.
+    configured: ttsReady(cfg),
     voiceId: cfg.voiceId,
     modelId: cfg.modelId,
   });
