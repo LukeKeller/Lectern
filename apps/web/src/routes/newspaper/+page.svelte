@@ -268,9 +268,35 @@
 {/if}
 
 <style>
+	/* The whole edition is a sheet of newsprint laid on the desk: a paper surface
+	   lifted off the warm ground by a hairline, a top-edge sheen and a soft contact
+	   shadow, with a faint grain so it reads as stock rather than a flat panel. */
 	.paper {
+		position: relative;
 		max-width: 70rem;
 		margin: 0 auto;
+		padding: clamp(1.5rem, 3.2vw, 3rem) clamp(1.25rem, 4.5vw, 3.75rem) clamp(2rem, 4vw, 3.5rem);
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		box-shadow: var(--edge-hi), var(--shadow-paper);
+	}
+	.paper::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		border-radius: inherit;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	/* Keep the masthead, lead and columns above the grain. */
+	.paper > * {
+		position: relative;
+		z-index: 1;
 	}
 
 	/* Masthead — a hairline over the nameplate, a heavy double rule under it, then

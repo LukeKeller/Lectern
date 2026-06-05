@@ -3,7 +3,9 @@
 	import { onMount, untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { getArticleHtml, prefetchArticles } from '$lib/content';
+	import { getSync } from '$lib/sync';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
 
@@ -77,15 +79,27 @@
 		onclose: () => void;
 	} = $props();
 
-	let index = $state(untrack(() => Math.max(0, Math.min(start, cards.length - 1))));
+	// Snapshot the cards once. Marking a story read mutates the live edition, which
+	// would otherwise reshuffle this array under the reader mid-flip — the reading
+	// session is fixed to the issue you opened.
+	const pages = untrack(() => cards.slice());
+
+	let index = $state(untrack(() => Math.max(0, Math.min(start, pages.length - 1))));
 	let dir = $state(1);
 	let html = $state('');
 	let loading = $state(true);
 	let error = $state<string | undefined>(undefined);
 	let stageEl = $state<HTMLElement | null>(null);
 
-	const current = $derived(cards[index]);
-	const total = $derived(cards.length);
+	// Read state we apply locally for instant feedback; the markRead mutation is
+	// also queued to sync. Seeded from anything already finished.
+	const readIds = new SvelteSet(
+		untrack(() => pages.filter((c) => c.readState === 'finished').map((c) => c.id))
+	);
+
+	const current = $derived(pages[index]);
+	const total = $derived(pages.length);
+	const currentRead = $derived(current ? readIds.has(current.id) : false);
 	const bands = $derived(
 		kind === 'newspaper' && !loading && !error && html ? splitBands(html) : null
 	);
@@ -117,15 +131,27 @@
 				error = e instanceof Error ? e.message : String(e);
 				loading = false;
 			});
-		prefetchArticles([cards[index + 1]?.id, cards[index - 1]?.id]);
+		prefetchArticles([pages[index + 1]?.id, pages[index - 1]?.id]);
 		return () => {
 			cancelled = true;
 		};
 	});
 
+	// Mark a story read/unread: optimistic local set + queued sync mutation.
+	function setRead(card: Card | undefined, read: boolean) {
+		if (!card) return;
+		if (read) readIds.add(card.id);
+		else readIds.delete(card.id);
+		const sync = getSync();
+		void sync.enqueue({ type: 'markRead', id: card.id, read }).then(() => sync.flush());
+	}
+
 	function go(delta: number) {
 		const next = index + delta;
 		if (next < 0 || next >= total) return;
+		// Turning forward marks the story you're leaving as read — the natural
+		// "I've read this" signal. Turning back never un-reads.
+		if (delta > 0) setRead(pages[index], true);
 		dir = delta;
 		index = next;
 		stageEl?.scrollTo({ top: 0 });
@@ -179,9 +205,23 @@
 			<Icon name="close" size={18} />
 		</button>
 		<span class="issue">{label}</span>
-		<span class="folio" aria-label={`Page ${index + 1} of ${total}`}>
-			{index + 1}<span class="sep">/</span>{total}
-		</span>
+		<div class="rightset">
+			<button
+				type="button"
+				class="readtoggle"
+				class:active={currentRead}
+				aria-pressed={currentRead}
+				title={currentRead ? 'Marked read — undo' : 'Mark as read'}
+				aria-label={currentRead ? 'Mark as unread' : 'Mark as read'}
+				onclick={() => setRead(current, !currentRead)}
+			>
+				<Icon name="check" size={15} />
+				<span class="readtoggle-label">{currentRead ? 'Read' : 'Mark read'}</span>
+			</button>
+			<span class="folio" aria-label={`Page ${index + 1} of ${total}`}>
+				{index + 1}<span class="sep">/</span>{total}
+			</span>
+		</div>
 	</header>
 
 	<div
@@ -216,6 +256,9 @@
 					{:else if bands}
 						<div class="fr-body fr-bands">
 							{#each bands as band, i (i)}
+								{#if i > 0 && band.kind === 'flow' && bands[i - 1].kind === 'flow'}
+									<div class="fr-break" aria-hidden="true">❧</div>
+								{/if}
 								{#if band.kind === 'full'}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									<div class="fr-full">{@html band.html}</div>
@@ -230,9 +273,15 @@
 						<div class="fr-body">{@html html}</div>
 					{/if}
 
+					{#if !loading && !error}
+						<p class="endmark" aria-hidden="true">∎</p>
+					{/if}
+
 					<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
 						Open in full reader <Icon name="back" size={13} />
 					</a>
+
+					<footer class="runfoot" aria-hidden="true">{index + 1}</footer>
 				</article>
 			{/key}
 		{/if}
@@ -265,9 +314,36 @@
 		z-index: 60;
 		display: flex;
 		flex-direction: column;
-		background: var(--bg);
+		/* A faint reading-light wash at the top fading into the warm ground gives the
+		   full-bleed surface some depth before the grain is even applied. */
+		background:
+			radial-gradient(
+				135% 90% at 50% -5%,
+				color-mix(in srgb, var(--surface) 70%, transparent),
+				transparent 58%
+			),
+			var(--bg);
 		padding-top: env(safe-area-inset-top);
 		padding-bottom: env(safe-area-inset-bottom);
+	}
+	/* A paper grain laid over the whole reading surface — tactile, not glassy.
+	   Static, theme-agnostic via a soft-light blend, and never intercepts input. */
+	.flip::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	/* Keep the chrome and reading column above the grain. */
+	.flipbar,
+	.stage {
+		position: relative;
+		z-index: 1;
 	}
 
 	.flipbar {
@@ -301,17 +377,57 @@
 		text-align: center;
 		font-family: var(--font-serif);
 		font-size: var(--text-sm);
-		letter-spacing: 0.02em;
+		font-variant-caps: small-caps;
+		letter-spacing: 0.08em;
 		color: var(--text-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.folio {
+	.rightset {
 		justify-self: end;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	/* Read toggle in the running head — reflects (and overrides) the auto-mark that
+	   fires when you turn the page. Mirrors the pill controls elsewhere. */
+	.readtoggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.26rem 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		background: var(--surface);
+		color: var(--text-muted);
+		font-family: var(--font-ui);
+		font-size: var(--text-xs);
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			color var(--dur-fast) var(--ease),
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.readtoggle:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+	.readtoggle.active {
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+	.folio {
 		font-variant-numeric: tabular-nums;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+	@media (max-width: 560px) {
+		.readtoggle-label {
+			display: none;
+		}
 	}
 	.folio .sep {
 		margin: 0 0.2rem;
@@ -402,11 +518,13 @@
 		margin-top: 0.4em;
 	}
 	.fr-body :global(blockquote) {
-		margin: 1.2em 0;
-		padding-left: 1em;
-		border-left: 3px solid var(--border-strong);
-		color: var(--text-muted);
+		margin: 1.4em 0;
+		padding-left: 1.1em;
+		border-left: 1px solid var(--border-strong);
+		color: var(--text);
 		font-style: italic;
+		font-size: 1.06em;
+		line-height: 1.5;
 	}
 	.fr-body :global(pre) {
 		font-family: var(--font-mono);
@@ -437,12 +555,31 @@
 		text-align: justify;
 		hyphens: auto;
 	}
-	/* A true full-bleed hairline plus breathing room separates one band from the
-	   next, reading as a restrained editorial rule (not an accent stripe). */
+	/* Breathing room between consecutive bands; the floret rule (.fr-break) carries
+	   the visible separation, so no border is needed when bands sit back-to-back. */
 	.fr-band + .fr-band {
 		margin-top: 1.6em;
-		padding-top: 1.6em;
-		border-top: 1px solid var(--border);
+	}
+	/* An editorial floret between two flowing bands — a centered ornament flanked by
+	   hairlines, reading as a quiet section break rather than a hard rule. */
+	.fr-break {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-4);
+		margin: 1.8em 0;
+		color: var(--text-muted);
+		font-family: var(--font-serif);
+		font-size: var(--text-lg);
+		line-height: 1;
+		user-select: none;
+	}
+	.fr-break::before,
+	.fr-break::after {
+		content: '';
+		width: 2.5rem;
+		height: 1px;
+		background: var(--border);
 	}
 	/* Full-width dividers: headings, media, quotes, tables. Generous margins make
 	   them read as section breaks between the column bands. */
@@ -460,10 +597,45 @@
 	/* Drop cap on the very first paragraph of the first band only. */
 	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-letter {
 		float: left;
+		font-family: var(--font-serif);
 		font-weight: 800;
 		font-size: 3.1em;
 		line-height: 0.72;
 		padding: 0.06em 0.08em 0 0;
+	}
+	/* Small-caps lead-in on the opening line — the classic newspaper entry. */
+	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-line {
+		font-variant-caps: small-caps;
+		letter-spacing: 0.03em;
+	}
+
+	/* End-of-article mark and a running foot folio give each page a printed
+	   beginning-middle-end, the depth a real leaf carries. */
+	.endmark {
+		margin: 1.6rem 0 0;
+		text-align: right;
+		color: var(--text-muted);
+		font-size: 1.15rem;
+		line-height: 1;
+	}
+	.runfoot {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-4);
+		margin-top: 2.4rem;
+		font-family: var(--font-ui);
+		font-size: var(--text-xs);
+		letter-spacing: 0.12em;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.runfoot::before,
+	.runfoot::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: var(--border);
 	}
 
 	/* Magazine — a single generous measure with a feature drop cap. */
@@ -488,6 +660,10 @@
 		line-height: 0.7;
 		padding: 0.04em 0.1em 0 0;
 		color: var(--accent);
+	}
+	.flip.magazine .fr-body :global(p:first-of-type)::first-line {
+		font-variant-caps: small-caps;
+		letter-spacing: 0.02em;
 	}
 
 	.open-full {
@@ -539,6 +715,7 @@
 	.turn {
 		position: fixed;
 		top: 50%;
+		z-index: 2;
 		transform: translateY(-50%);
 		display: inline-flex;
 		align-items: center;

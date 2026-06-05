@@ -34,6 +34,16 @@ export async function getArticleHtml(id: string): Promise<string> {
 	return p;
 }
 
+/**
+ * Dev-only: prime the cache with mock article HTML so seeded cards read without
+ * a backend. Sanitized on the way in, so the sanitize-once contract still holds.
+ */
+export function primeArticleCache(entries: Record<string, string>): void {
+	for (const [id, raw] of Object.entries(entries)) {
+		if (!cache.has(id)) cache.set(id, DOMPurify.sanitize(raw));
+	}
+}
+
 /** Warm the cache for upcoming pages; failures are ignored (best-effort). */
 export function prefetchArticles(ids: (string | undefined)[]): void {
 	for (const id of ids) {

@@ -181,6 +181,7 @@
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					<div class="mr-body">{@html html[card.id]}</div>
+					<p class="mr-end" aria-hidden="true">∎</p>
 				{:else if failed[card.id]}
 					<p class="mr-fail">
 						Couldn’t load this article.
@@ -203,8 +204,29 @@
 
 <style>
 	.mag-reader {
+		position: relative;
 		max-width: 44rem;
 		margin: 0 auto;
+	}
+	/* A faint paper grain beneath the whole issue — the article sits on a sheet,
+	   not a flat panel. Confined to the column (the reader shares the page chrome)
+	   and never intercepts input. */
+	.mag-reader::before {
+		content: '';
+		position: absolute;
+		inset: -1.5rem 0;
+		z-index: 0;
+		pointer-events: none;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	.mr-head,
+	.mr-toc,
+	.mr-articles {
+		position: relative;
+		z-index: 1;
 	}
 	.mr-head {
 		margin-bottom: var(--space-6);
@@ -461,6 +483,11 @@
 		padding: 0.02em 0.08em 0 0;
 		color: var(--accent);
 	}
+	/* Small-caps lead-in on the opening line, paired with the drop cap. */
+	.mr-body :global(p:first-of-type)::first-line {
+		font-variant-caps: small-caps;
+		letter-spacing: 0.02em;
+	}
 	.mr-body :global(h1),
 	.mr-body :global(h2),
 	.mr-body :global(h3),
@@ -487,11 +514,29 @@
 	.mr-body :global(a) {
 		color: var(--accent);
 	}
+	/* Pull-quote treatment: a hanging open-quote and a hairline, set in emphatic
+	   serif italic — editorial, not the heavy accent stripe. */
 	.mr-body :global(blockquote) {
-		margin: 1.2rem 0;
-		padding-left: 1rem;
-		border-left: 3px solid var(--border-strong, var(--border));
-		color: var(--text-muted);
+		position: relative;
+		margin: 1.8rem 0;
+		padding-left: 1.4rem;
+		border-left: 1px solid var(--border-strong);
+		font-family: var(--font-serif);
+		font-style: italic;
+		font-size: 1.12em;
+		line-height: 1.5;
+		color: var(--text);
+	}
+	.mr-body :global(blockquote)::before {
+		content: '\201C';
+		position: absolute;
+		left: 0.5rem;
+		top: -0.35rem;
+		font-family: var(--font-serif);
+		font-size: 2.2em;
+		line-height: 1;
+		color: var(--border-strong);
+		pointer-events: none;
 	}
 	.mr-body :global(ul),
 	.mr-body :global(ol) {
@@ -511,6 +556,15 @@
 	.mr-body :global(code) {
 		font-family: var(--font-mono, ui-monospace, monospace);
 		font-size: 0.9em;
+	}
+
+	/* End-of-article mark — a small printed full stop to the feature. */
+	.mr-end {
+		margin: 1.4rem 0 0;
+		text-align: right;
+		color: var(--text-muted);
+		font-size: 1.15rem;
+		line-height: 1;
 	}
 
 	.mr-top {
