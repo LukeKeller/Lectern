@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.15.0',
+		date: '2026-06-05',
+		title: 'Richer newspaper and magazine reading',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'The Newspaper and Magazine now read like real print. The edition sits on a sheet of newsprint with a faint paper grain; the Magazine opens like a spread, with the contents on a printed leaf beside the cover. Reading a story gains drop caps, small-cap openings, editorial section breaks and an end-of-article mark.'
+			},
+			{
+				kind: 'added',
+				text: 'You can now mark stories as read while reading through the Newspaper. Turning to the next story quietly marks the last one read, and a Read toggle in the header lets you set it either way.'
+			}
+		]
+	},
+	{
 		version: '0.14.0',
 		date: '2026-06-04',
 		title: 'Free self-hosted text-to-speech, and ElevenLabs usage at a glance',

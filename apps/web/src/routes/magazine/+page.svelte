@@ -222,11 +222,30 @@
 
 <style>
 	.page {
+		position: relative;
 		max-width: 72rem;
 		margin: 0 auto;
 	}
+	/* A faint grain over the whole rack so the paper has tooth behind the covers. */
+	.page::before {
+		content: '';
+		position: absolute;
+		inset: -1rem -1.5rem;
+		z-index: 0;
+		pointer-events: none;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	.page > * {
+		position: relative;
+		z-index: 1;
+	}
 	.head {
 		margin-bottom: 1.8rem;
+		padding-bottom: 1.1rem;
+		border-bottom: 1px solid var(--border);
 	}
 	h1 {
 		font-size: var(--text-2xl);
@@ -258,8 +277,8 @@
 	.hero {
 		display: grid;
 		grid-template-columns: minmax(0, 22rem) 1fr;
-		gap: clamp(1.4rem, 3.5vw, 3rem);
-		align-items: start;
+		gap: clamp(1.2rem, 2.8vw, 2.2rem);
+		align-items: stretch;
 		margin-bottom: clamp(2rem, 5vw, 3.5rem);
 	}
 
@@ -426,9 +445,18 @@
 		font-size: clamp(1.45rem, 4vw, 1.95rem);
 	}
 
-	/* ---- featured "in this issue" column ---- */
+	/* ---- featured "in this issue" column ----
+	   The contents sit on a paper leaf beside the cover, so the hero reads as an
+	   open magazine: glossy cover on the left, printed contents page on the right. */
 	.spread {
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		padding: clamp(1.1rem, 2.2vw, 1.9rem) clamp(1.2rem, 2.4vw, 2.1rem);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--edge-hi), var(--shadow-paper);
 	}
 	.feature {
 		display: block;

@@ -274,6 +274,12 @@
 
 	onMount(() => {
 		readerSettings.applyTheme();
+		// Dev-only: populate the local store with mock cards when it's empty so the
+		// views have content without a backend. Dynamically imported + DEV-guarded so
+		// it's stripped from production builds.
+		if (import.meta.env.DEV) {
+			void import('$lib/dev-seed').then((m) => m.seedMockData());
+		}
 		void viewsStore.load();
 		void feedsStore.load();
 		ttsPlayer.init();
