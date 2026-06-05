@@ -26,4 +26,9 @@
 		{ label: 'Save', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' }
 	]}
+	bulkDelete={{
+		scope: 'read-feed',
+		label: 'Delete all read',
+		confirm: "Delete all read articles from your feeds? This can't be undone."
+	}}
 />

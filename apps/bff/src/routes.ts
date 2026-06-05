@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import {
+  BulkDeleteRequest,
+  BulkDeleteResponse,
   Card,
   CreateHighlightRequest,
   CreateViewRequest,
+  ForceSyncResponse,
   DocumentContentResponse,
   Feed,
   FeedsResponse,
@@ -63,12 +66,14 @@ import {
 } from "./push";
 import {
   applyAddHighlight,
+  applyDelete,
   applyLocation,
   applyMutation,
   applyNote,
   applyProgress,
   applyTags,
 } from "./mutations";
+import { pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
 
 class NotFoundError extends Error {}
 
@@ -220,9 +225,35 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.delete<{ Params: { id: string } }>("/documents/:id", async (req, reply) => {
     const { id } = req.params;
-    requireParsed(id);
-    await deps.overlay.deleteDocument(id);
+    const parsed = requireParsed(id);
+    // Full delete: remove at the source (so the poll can't re-add it) then
+    // tombstone locally (so the deletion syncs to other devices).
+    await applyDelete(deps, parsed, id);
     return reply.code(204).send();
+  });
+
+  // Bulk delete: empty the archive, or delete all read feed items. Removes each
+  // item at the source (so the poll can't re-add it) then tombstones the index
+  // rows so the deletions ride the next /sync delta out to other devices.
+  app.post<{ Body: unknown }>("/documents/bulk-delete", async (req) => {
+    const { scope } = BulkDeleteRequest.parse(req.body);
+    const targets =
+      scope === "archive"
+        ? await deps.overlay.listByLocation("archive")
+        : await deps.overlay.listReadBySource("miniflux");
+
+    // Batch MiniFlux into one `removed` PUT; delete Readeck bookmarks per-id with
+    // modest concurrency so a large archive doesn't open hundreds of sockets.
+    const minifluxIds = targets.filter((t) => t.source === "miniflux").map((t) => t.sourceId);
+    const readeckIds = targets.filter((t) => t.source === "readeck");
+    await deps.rss.setRemoved(minifluxIds);
+    const concurrency = 5;
+    for (let i = 0; i < readeckIds.length; i += concurrency) {
+      await Promise.all(readeckIds.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)));
+    }
+
+    await deps.overlay.softDelete(targets.map((t) => t.id));
+    return BulkDeleteResponse.parse({ deleted: targets.length });
   });
 
   app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
@@ -627,6 +658,16 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       }
     }
     return SyncPushResponse.parse({ applied, conflicts });
+  });
+
+  // On-demand sync: run both backend polls then the deletion reconcile NOW,
+  // instead of waiting for the 5-minute schedule. Polls are quick; await all so
+  // the response reflects the freshly-reconciled state. The jobs construct their
+  // own backend deps internally (safe standalone).
+  app.post("/sync/force", async () => {
+    const [miniflux, readeck] = await Promise.all([pollMiniflux(), pollReadeck()]);
+    const tombstoned = await reconcileDeletions();
+    return ForceSyncResponse.parse({ miniflux, readeck, tombstoned });
   });
 }
 

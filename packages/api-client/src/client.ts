@@ -6,6 +6,9 @@ import {
   ImportOpmlResponse,
   ImportReadwiseRequest,
   ImportReadwiseResponse,
+  BulkDeleteRequest,
+  BulkDeleteResponse,
+  ForceSyncResponse,
   SubscribeFeedRequest,
   UpdateFeedRequest,
   CreateHighlightRequest,
@@ -119,6 +122,24 @@ export class LecternClient {
   }
   deleteDocument(id: string) {
     return this.request<void>("DELETE", `/documents/${id}`);
+  }
+  /**
+   * Bulk-delete documents by scope ("archive" empties the archive; "read-feed"
+   * removes read RSS/feed items). Returns how many were deleted. The deletions
+   * are tombstoned server-side, so a subsequent sync pull drops them locally.
+   */
+  bulkDelete(scope: BulkDeleteRequest["scope"]) {
+    return this.request("POST", "/documents/bulk-delete", {
+      body: { scope },
+      schema: BulkDeleteResponse,
+    });
+  }
+  /**
+   * Force a full sync/reconcile on the server (re-index sources, prune deletions).
+   * Returns per-source counts plus how many tombstones were created.
+   */
+  forceSync() {
+    return this.request("POST", "/sync/force", { schema: ForceSyncResponse });
   }
   /**
    * Fetch a document's article HTML. Pass `refresh` to bypass the stored copy and

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type {
+		BulkDeleteScope,
 		Card,
 		Category,
 		Location,
@@ -8,6 +9,7 @@
 		Source,
 		ViewSortBy
 	} from '@lectern/shared';
+	import { getClient } from '$lib/config';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
@@ -47,6 +49,7 @@
 		emptyIcon = 'inbox',
 		hideReadKey = undefined,
 		baseQuery,
+		bulkDelete,
 		sortBy = $bindable<ViewSortBy>('publishedAt'),
 		sortDir = $bindable<SortDir>('desc')
 	}: {
@@ -65,6 +68,12 @@
 		hideReadKey?: string;
 		/** The query AST this list represents, enabling "save as view". */
 		baseQuery?: QueryNode;
+		/**
+		 * Opts this list into a destructive bulk-delete action in the overflow menu
+		 * (e.g. "Empty Archive", "Delete all read"). The scope is sent to the server;
+		 * `confirm` is the message shown before it runs.
+		 */
+		bulkDelete?: { scope: BulkDeleteScope; label: string; confirm: string };
 		sortBy?: ViewSortBy;
 		sortDir?: SortDir;
 	} = $props();
@@ -106,10 +115,10 @@
 		pdf: 'PDF'
 	};
 
-	// Read-state defaults to 'unread' only on lists that opt in via hideReadKey
-	// (the feed), preserving the prior default; every other list defaults to 'all'
-	// but still gets the always-present control.
-	const defaultRead: ReadFilter = untrack(() => (hideReadKey ? 'unread' : 'all'));
+	// Every list defaults to showing unread only; a stored per-list choice (below)
+	// still overrides, and the always-present control lets the user switch to
+	// All/Read at any time.
+	const defaultRead: ReadFilter = 'unread';
 	const readFilterStorage = $derived(`lectern.readFilter.${listKey}`);
 	let readFilter = $state<ReadFilter>(
 		untrack(() => {
@@ -311,6 +320,31 @@
 			}
 			void s.flush();
 		});
+	}
+
+	// ---- Server-side bulk delete (irreversible) ----
+	// Unlike the reversible bulk actions above, this permanently removes items from
+	// the source. After the server deletes + tombstones them, a sync pull drops the
+	// matching rows from the local mirror so the live list updates on its own.
+	let bulkDeleting = $state(false);
+	let bulkDeleteResult = $state<string | null>(null);
+	let bulkDeleteTimer: ReturnType<typeof setTimeout> | undefined;
+	async function runBulkDelete() {
+		if (!bulkDelete || bulkDeleting) return;
+		if (!confirm(bulkDelete.confirm)) return;
+		bulkDeleting = true;
+		bulkDeleteResult = null;
+		try {
+			const { deleted } = await getClient().bulkDelete(bulkDelete.scope);
+			await getSync().pull();
+			bulkDeleteResult = `Deleted ${deleted} item${deleted === 1 ? '' : 's'}`;
+		} catch (err) {
+			bulkDeleteResult = err instanceof Error ? err.message : 'Bulk delete failed';
+		} finally {
+			bulkDeleting = false;
+			if (bulkDeleteTimer) clearTimeout(bulkDeleteTimer);
+			bulkDeleteTimer = setTimeout(() => (bulkDeleteResult = null), 5000);
+		}
 	}
 
 	/** Snapshot this list's order so the reader can auto-advance after triage. */
@@ -516,7 +550,7 @@
 				</div>
 			{/if}
 
-			{#if cards.length || baseQuery}
+			{#if cards.length || baseQuery || bulkDelete}
 				<div class="pop-wrap">
 					<button
 						type="button"
@@ -569,6 +603,23 @@
 									<Icon name="bookmark" size={15} /> Save as view
 								</button>
 							{/if}
+							{#if bulkDelete}
+								<div class="menu-sep" role="separator"></div>
+								<button
+									type="button"
+									role="menuitem"
+									class="danger"
+									aria-label={bulkDelete.label}
+									disabled={bulkDeleting || cards.length === 0}
+									onclick={() => {
+										menuOpen = false;
+										runBulkDelete();
+									}}
+								>
+									<Icon name="trash" size={15} />
+									{bulkDeleting ? 'Deleting…' : bulkDelete.label}
+								</button>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -606,6 +657,12 @@
 		<div class="undo-toast" role="status">
 			<span>{bulkUndo.label}</span>
 			<button type="button" onclick={applyBulkUndo}>Undo</button>
+		</div>
+	{/if}
+
+	{#if bulkDeleteResult}
+		<div class="undo-toast" role="status">
+			<span>{bulkDeleteResult}</span>
 		</div>
 	{/if}
 </section>
@@ -811,6 +868,21 @@
 	}
 	.menu button:hover {
 		background: var(--surface-alt);
+	}
+	.menu button:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.menu-sep {
+		height: 1px;
+		margin: 0.2rem 0.25rem;
+		background: var(--border);
+	}
+	.menu button.danger {
+		color: var(--error);
+	}
+	.menu button.danger:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--error) 12%, transparent);
 	}
 
 	.ghost {

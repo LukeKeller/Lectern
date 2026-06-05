@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
 	import { getSync } from '$lib/sync';
+	import { db } from '$lib/db';
 	import Icon, { type IconName } from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -110,6 +111,29 @@
 		}
 	}
 
+	// Permanently delete one item from the source. Optimistically drop it from the
+	// local mirror so the row vanishes at once (the list reads live from db.cards);
+	// on failure, re-insert the card and surface a brief error on the menu item.
+	let deletingId = $state<string | null>(null);
+	let deleteError = $state(false);
+	async function deleteCard(card: Card) {
+		if (deletingId) return;
+		if (!confirm('Delete this permanently? This removes it from the source too.')) return;
+		deletingId = card.id;
+		deleteError = false;
+		try {
+			await getClient().deleteDocument(card.id);
+			await db.cards.delete(card.id);
+			menuOpenId = null;
+		} catch {
+			// Rollback: restore the row (it was never removed locally on failure) and
+			// keep the menu open so the user can retry.
+			deleteError = true;
+		} finally {
+			deletingId = null;
+		}
+	}
+
 	function hostname(url: string): string {
 		try {
 			return new URL(url).hostname.replace(/^www\./, '');
@@ -204,6 +228,7 @@
 	function toggleMenu(id: string) {
 		menuOpenId = menuOpenId === id ? null : id;
 		podcastStatus = 'idle';
+		deleteError = false;
 	}
 	function queueTitle(card: Card) {
 		return card.title || hostname(card.url);
@@ -482,6 +507,25 @@
 												<Icon name="external" size={15} /> Open original
 											</a>
 											<!-- eslint-enable svelte/no-navigation-without-resolve -->
+											<div class="menu-sep" role="separator"></div>
+											<button
+												type="button"
+												role="menuitem"
+												class="danger"
+												aria-label="Delete permanently"
+												disabled={deletingId === card.id}
+												onclick={(e) => {
+													e.stopPropagation();
+													deleteCard(card);
+												}}
+											>
+												<Icon name="trash" size={15} />
+												{deletingId === card.id
+													? 'Deleting…'
+													: deleteError
+														? 'Failed — retry'
+														: 'Delete'}
+											</button>
 										</div>
 									{/if}
 								</div>
@@ -874,6 +918,17 @@
 	.menu button:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+	.menu-sep {
+		height: 1px;
+		margin: 0.2rem 0.25rem;
+		background: var(--border);
+	}
+	.menu button.danger {
+		color: var(--error);
+	}
+	.menu button.danger:hover {
+		background: color-mix(in srgb, var(--error) 12%, transparent);
 	}
 
 	/* In-progress meter only. Finished cards carry no bar — doneness reads from the

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Card, Category, Highlight, HighlightColor, Location, Source, Tag } from "./model";
 import { Feed, FeedFolder } from "./feeds";
 import { SyncPullResponse, SyncPushRequest, SyncPushResponse } from "./sync";
+import { BulkDeleteRequest, BulkDeleteResponse, ForceSyncResponse } from "./maintenance";
 import { SavedView } from "./views";
 
 /**
@@ -303,6 +304,16 @@ export const endpoints: Endpoint[] = [
     status: 204,
   },
   {
+    method: "POST",
+    path: "/documents/bulk-delete",
+    operationId: "bulkDeleteDocuments",
+    summary: "Bulk delete documents (empty archive or delete read feed items)",
+    tags: ["documents"],
+    body: BulkDeleteRequest,
+    response: BulkDeleteResponse,
+    status: 200,
+  },
+  {
     method: "GET",
     path: "/documents/:id/content",
     operationId: "getDocumentContent",
@@ -402,6 +413,15 @@ export const endpoints: Endpoint[] = [
     tags: ["sync"],
     body: SyncPushRequest,
     response: SyncPushResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/sync/force",
+    operationId: "forceSync",
+    summary: "Run backend polls + deletion reconcile now",
+    tags: ["sync"],
+    response: ForceSyncResponse,
     status: 200,
   },
   {

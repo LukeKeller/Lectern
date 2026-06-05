@@ -18,4 +18,9 @@
 		{ label: 'Later', location: 'later' },
 		{ label: 'Shortlist', location: 'shortlist' }
 	]}
+	bulkDelete={{
+		scope: 'archive',
+		label: 'Empty Archive',
+		confirm: 'Delete all archived items permanently?'
+	}}
 />

@@ -89,6 +89,23 @@ export async function applyRemoveHighlight(
   if (!ok) throw new Error(`highlight not found: ${highlightId}`);
 }
 
+/**
+ * Full delete of a document: remove it AT THE SOURCE so the 5-minute poll can't
+ * re-add it (and `indexFromBackend` can't clear the tombstone), then tombstone
+ * the local index row so the deletion propagates to other devices via `/sync`.
+ *   - Readeck: `DELETE /api/bookmarks/{id}` (404 treated as already-gone).
+ *   - MiniFlux: set the entry `removed` (no hard delete exists); the poll excludes
+ *     `removed` entries so it won't reappear.
+ */
+export async function applyDelete(deps: MutationDeps, parsed: ParsedId, id: string): Promise<void> {
+  if (parsed.source === "readeck") {
+    await deps.readLater.delete(parsed.sourceId);
+  } else if (parsed.source === "miniflux") {
+    await deps.rss.setRemoved([parsed.sourceId]);
+  }
+  await deps.overlay.softDelete([id]);
+}
+
 export async function applyMarkRead(
   deps: MutationDeps,
   parsed: ParsedId,
@@ -117,7 +134,7 @@ export async function applyMutation(deps: MutationDeps, m: Mutation): Promise<vo
     case "setNote":
       return applyNote(deps, parsed, m.id, m.note);
     case "delete":
-      return deps.overlay.deleteDocument(m.id);
+      return applyDelete(deps, parsed, m.id);
     case "addHighlight":
       await applyAddHighlight(deps, parsed, m.id, {
         text: m.text,
