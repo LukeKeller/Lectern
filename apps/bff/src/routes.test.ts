@@ -325,6 +325,9 @@ class FakeOverlayStore implements OverlayStore {
     this.index.set(card.id, card);
     this.deleted.delete(card.id);
   }
+  async isIndexed(id: string): Promise<boolean> {
+    return this.index.has(id);
+  }
   async markIndexedRead(id: string, read: boolean): Promise<void> {
     const base = this.index.get(id);
     if (base) this.index.set(id, { ...base, readState: read ? "finished" : "unopened" });

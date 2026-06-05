@@ -44,8 +44,25 @@ const EnvSchema = z.object({
   LECTERN_ENABLE_JOBS: z.string().default(""),
   /** Set to "1" to enable the newsletter mailbox poll (requires IMAP_* + jobs). */
   LECTERN_ENABLE_EMAIL: z.string().default(""),
+  /** Set to "1" to enable Web Push notifications (also requires both VAPID keys). */
+  LECTERN_ENABLE_PUSH: z.string().default(""),
+  /** VAPID public key (sent to the SPA so it can subscribe). */
+  LECTERN_VAPID_PUBLIC_KEY: z.string().default(""),
+  /** VAPID private key (signs push requests; never leaves the server). */
+  LECTERN_VAPID_PRIVATE_KEY: z.string().default(""),
+  /** VAPID `sub` contact (mailto: or https: URL) per the Web Push spec. */
+  LECTERN_VAPID_SUBJECT: z.string().default("mailto:admin@example.com"),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
 
 export const config: Config = EnvSchema.parse(process.env);
+
+/**
+ * Web Push is live only when explicitly enabled AND both VAPID keys are present.
+ * A missing keypair (e.g. an upgrade from a pre-push install) silently no-ops
+ * rather than crashing the server.
+ */
+export function pushEnabled(cfg: Config = config): boolean {
+  return Boolean(cfg.LECTERN_ENABLE_PUSH) && !!cfg.LECTERN_VAPID_PUBLIC_KEY && !!cfg.LECTERN_VAPID_PRIVATE_KEY;
+}

@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.16.0',
+		date: '2026-06-05',
+		title: 'Push notifications for the feeds you care about',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Lectern can now push a notification to your phone when new stories land in feeds you pick. Add Lectern to your home screen, switch on notifications under Settings, then tap the bell beside any feed on the Feeds page. New articles are batched into a single quiet notification per feed, and tapping it opens your feed.'
+			}
+		]
+	},
+	{
 		version: '0.15.0',
 		date: '2026-06-05',
 		title: 'Richer newspaper and magazine reading',

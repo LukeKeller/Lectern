@@ -50,6 +50,24 @@ chmod -R o-rwx "$install_dir"
 chown -R "$app:$app" "$install_dir"
 
 #=================================================
+# GENERATE THE WEB PUSH VAPID KEYPAIR
+#=================================================
+# Web Push needs a VAPID keypair (public key sent to the browser to subscribe,
+# private key signs the pushes). Generate it once with the bundled web-push lib
+# now that node_modules is in place, and persist it as settings so it survives
+# upgrades (re-keying would invalidate every existing browser subscription).
+ynh_script_progression "Generating Web Push (VAPID) keys..."
+vapid_keys=$(cd "$install_dir/server" && node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log(k.publicKey+'\n'+k.privateKey)")
+vapid_public_key=$(echo "$vapid_keys" | sed -n '1p')
+vapid_private_key=$(echo "$vapid_keys" | sed -n '2p')
+vapid_subject="mailto:admin@$domain"
+enable_push="1"
+ynh_app_setting_set --key=vapid_public_key --value="$vapid_public_key"
+ynh_app_setting_set --key=vapid_private_key --value="$vapid_private_key"
+ynh_app_setting_set --key=vapid_subject --value="$vapid_subject"
+ynh_app_setting_set --key=enable_push --value="$enable_push"
+
+#=================================================
 # DATABASE SCHEMA
 #=================================================
 ynh_script_progression "Applying the database schema..."

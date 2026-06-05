@@ -159,6 +159,29 @@ export const documentAccent = pgTable("document_accent", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Browser Web Push subscriptions (single-user, but one row per browser/device).
+ * Keyed by endpoint so re-subscribing the same browser upserts rather than
+ * duplicates. The p256dh/auth keys are the subscription's encryption material.
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  endpoint: text("endpoint").primaryKey(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Per-feed notification preference: whether a batched Web Push fires when the
+ * poll indexes genuinely-new entries for this feed. `feed_id` is the stringified
+ * MiniFlux feed id (matches the `id` returned by GET /feeds). Default enabled.
+ */
+export const feedNotificationPrefs = pgTable("feed_notification_prefs", {
+  feedId: text("feed_id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Append-only ingestion audit log for observability/debugging of sync runs. */
 export const ingestionLog = pgTable("ingestion_log", {
   id: serial("id").primaryKey(),
@@ -180,3 +203,6 @@ export type AppSettingRow = typeof appSettings.$inferSelect;
 export type TtsAudioRow = typeof ttsAudio.$inferSelect;
 export type PodcastEpisodeRow = typeof podcastEpisodes.$inferSelect;
 export type NewPodcastEpisodeRow = typeof podcastEpisodes.$inferInsert;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscriptionRow = typeof pushSubscriptions.$inferInsert;
+export type FeedNotificationPrefRow = typeof feedNotificationPrefs.$inferSelect;

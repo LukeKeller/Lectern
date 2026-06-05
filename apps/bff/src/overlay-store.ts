@@ -200,6 +200,14 @@ export class DrizzleOverlayStore implements OverlayStore {
       });
   }
 
+  async isIndexed(id: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(eq(documents.id, id));
+    return !!row;
+  }
+
   async markIndexedRead(id: string, read: boolean): Promise<void> {
     const [row] = await this.db.select().from(documents).where(eq(documents.id, id));
     const meta = (row?.metadata ?? null) as { card?: Card } | null;

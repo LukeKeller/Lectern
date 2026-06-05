@@ -1,6 +1,7 @@
 export * from "./model";
 export * from "./query";
 export * from "./feeds";
+export * from "./push";
 export * from "./views";
 export * from "./sync";
 export * from "./adapters";

@@ -1,7 +1,8 @@
 import { PgBoss } from "pg-boss";
 import { eq, sql as dsql } from "drizzle-orm";
-import { config } from "./config";
+import { config, pushEnabled } from "./config";
 import { db } from "./db/client";
+import { getFeedPref, sendPush } from "./push";
 import { ingestionLog, syncCursors } from "./db/schema";
 import { MinifluxBackend } from "./backends/miniflux";
 import { ReadeckBackend } from "./backends/readeck";
@@ -79,20 +80,75 @@ export async function pollMiniflux(): Promise<number> {
   const startedAt = new Date().toISOString();
   let cursor: string | null | undefined;
   let indexed = 0;
+
+  // Push is off in the common case: keep the original blind-upsert path so there
+  // is ZERO behavior change and zero extra DB queries when notifications are
+  // disabled.
+  if (!pushEnabled()) {
+    do {
+      const page = await rss.listEntries({
+        updatedAfter: since,
+        cursor: cursor ?? undefined,
+        pageSize: POLL_PAGE_SIZE,
+      });
+      for (const card of page.items) {
+        await store.indexFromBackend(card);
+        indexed++;
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    await setCursor("miniflux", startedAt);
+    await logIngestion("miniflux", "poll", "ok", `indexed ${indexed} since ${since ?? "epoch"}`);
+    return indexed;
+  }
+
+  // Push enabled: tally genuinely-new, unread entries per flagged feed, then fire
+  // one batched push per feed after the walk. `feedId` is the stringified MiniFlux
+  // feed id (== the id GET /feeds returns), pulled from the raw entry since the
+  // unified Card has no feed field. We MUST check isIndexed BEFORE indexing (the
+  // upsert would otherwise create the row and make every entry look "seen").
+  const tally = new Map<string, { count: number; title: string }>();
+  const prefCache = new Map<string, boolean>();
   do {
-    const page = await rss.listEntries({
+    const page = await rss.listEntriesWithFeed({
       updatedAfter: since,
       cursor: cursor ?? undefined,
       pageSize: POLL_PAGE_SIZE,
     });
-    for (const card of page.items) {
-      await store.indexFromBackend(card);
+    for (const item of page.items) {
+      const isNew = !(await store.isIndexed(item.card.id));
+      if (isNew && item.unread) {
+        let enabled = prefCache.get(item.feedId);
+        if (enabled === undefined) {
+          enabled = await getFeedPref(item.feedId);
+          prefCache.set(item.feedId, enabled);
+        }
+        if (enabled) {
+          const prev = tally.get(item.feedId);
+          tally.set(item.feedId, {
+            count: (prev?.count ?? 0) + 1,
+            title: item.feedTitle ?? prev?.title ?? "New articles",
+          });
+        }
+      }
+      await store.indexFromBackend(item.card);
       indexed++;
     }
     cursor = page.nextCursor;
   } while (cursor);
+
   await setCursor("miniflux", startedAt);
   await logIngestion("miniflux", "poll", "ok", `indexed ${indexed} since ${since ?? "epoch"}`);
+
+  for (const [feedId, { count, title }] of tally) {
+    if (count <= 0) continue;
+    await sendPush({
+      title,
+      body: `${count} new article${count === 1 ? "" : "s"}`,
+      url: "/feed",
+      tag: `feed-${feedId}`,
+    });
+  }
   return indexed;
 }
 
