@@ -576,7 +576,7 @@
 	.mark {
 		width: 1.1rem;
 		height: 1.1rem;
-		border-radius: 5px;
+		border-radius: var(--radius-sm);
 		background:
 			linear-gradient(var(--accent), var(--accent)) center / 1.6px 70% no-repeat,
 			var(--accent-soft);
@@ -594,8 +594,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: env(safe-area-inset-top) 0.5rem 0;
-		background: color-mix(in srgb, var(--bg) 88%, transparent);
-		backdrop-filter: blur(10px);
+		background: var(--bg);
 		border-bottom: 1px solid var(--border);
 	}
 	.topbar .brand {

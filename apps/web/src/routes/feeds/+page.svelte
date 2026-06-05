@@ -346,7 +346,7 @@
 		color: var(--accent-contrast);
 	}
 	.btn.primary:hover {
-		background: color-mix(in srgb, var(--accent) 88%, #000);
+		background: var(--accent-deep);
 	}
 	.btn.danger:hover {
 		border-color: var(--error);

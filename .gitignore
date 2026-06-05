@@ -12,3 +12,10 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Impeccable design skill: tooling/machinery stays local; keep the design docs
+# (PRODUCT.md, DESIGN.md, .impeccable/design.json) tracked.
+.claude/skills/impeccable/
+.github/skills/impeccable/
+.impeccable/live/
+.impeccable/critique/

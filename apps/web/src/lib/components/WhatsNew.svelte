@@ -87,7 +87,6 @@
 		inset: 0;
 		z-index: 70;
 		background: color-mix(in srgb, var(--bg) 55%, transparent);
-		backdrop-filter: blur(2px);
 		border: 0;
 	}
 	.sheet {
@@ -234,6 +233,6 @@
 		cursor: pointer;
 	}
 	.ok:hover {
-		background: color-mix(in srgb, var(--accent) 88%, black);
+		background: var(--accent-deep);
 	}
 </style>

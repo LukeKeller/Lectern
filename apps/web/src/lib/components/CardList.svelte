@@ -446,14 +446,13 @@
 								</div>
 							</div>
 
-							{#if finished(card)}
-								<span class="progress-bar done" aria-hidden="true"></span>
-							{:else if card.readingProgress > 0}
-								<span
-									class="progress-bar"
-									style={`--p:${Math.round(card.readingProgress * 100)}%`}
-									aria-hidden="true"
-								></span>
+							{#if card.readingProgress > 0 && !finished(card)}
+								<span class="progress" aria-hidden="true">
+									<span
+										class="progress-fill"
+										style={`--p:${Math.round(card.readingProgress * 100)}%`}
+									></span>
+								</span>
 							{/if}
 						</article>
 					</div>
@@ -528,7 +527,7 @@
 		/* Hidden until a swipe engages (the action toggles opacity) so the panels
 		   never bleed through the transparent card at rest. */
 		opacity: 0;
-		transition: opacity 0.15s ease;
+		transition: opacity var(--dur-fast) var(--ease);
 	}
 	.swipe-action {
 		flex: 1;
@@ -536,7 +535,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0 1.25rem;
-		color: #fff;
+		color: var(--accent-contrast);
 		font-size: var(--text-sm);
 		font-weight: 600;
 	}
@@ -545,7 +544,7 @@
 		justify-content: flex-start;
 	}
 	.swipe-action.archive {
-		background: var(--error, #c0392b);
+		background: var(--error);
 		justify-content: flex-end;
 	}
 	.swipe-front {
@@ -584,7 +583,7 @@
 		align-items: flex-start;
 		/* Left inset reserves the unread-dot gutter so titles align whether or not
 		   a row is unread or carries a cover. */
-		padding: 0.85rem 0.55rem 0.9rem 1.45rem;
+		padding: 0.95rem 0.55rem 1.05rem 1.45rem;
 		border-radius: var(--radius-lg);
 		transition:
 			background var(--dur-fast) var(--ease),
@@ -836,19 +835,26 @@
 		cursor: default;
 	}
 
-	.progress-bar {
+	/* In-progress meter only. Finished cards carry no bar — doneness reads from the
+	   dimmed `.read` title. Inset to the content column and lifted off the row
+	   divider so it reads as a meter, not a second hairline. The faint accent track
+	   keeps low percentages legible. */
+	.progress {
 		position: absolute;
-		left: 0;
-		bottom: 0;
+		left: 1.45rem;
+		right: 0.55rem;
+		bottom: 0.5rem;
 		height: 2px;
-		width: var(--p, 100%);
-		background: var(--accent);
-		border-radius: 0 var(--radius-full) var(--radius-full) 0;
+		border-radius: var(--radius-full);
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+		overflow: hidden;
 	}
-	.progress-bar.done {
-		width: 100%;
-		background: var(--ok);
-		opacity: 0.55;
+	.progress-fill {
+		display: block;
+		height: 100%;
+		width: var(--p, 0%);
+		background: var(--accent);
+		border-radius: inherit;
 	}
 
 	.empty {

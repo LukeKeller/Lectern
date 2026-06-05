@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.11.2',
+		date: '2026-06-04',
+		title: 'A more consistent finish',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Finished articles no longer show a stray green bar. A read item is marked simply by its dimmed title, and the thin progress line now appears only while you are partway through something — tucked just inside the row so it reads as a progress meter, not a divider.'
+			},
+			{
+				kind: 'improved',
+				text: 'The top bar and the reader header are now solid in every theme instead of frosted glass, so text stays crisp as the page scrolls beneath them.'
+			},
+			{
+				kind: 'improved',
+				text: 'Magazine covers lie flat like real stock — the glossy sheen is gone, and depth is saved for when you hover an issue to open it.'
+			},
+			{
+				kind: 'improved',
+				text: 'A consistency pass across colours, spacing, and quotations so every one of the seven themes stays true to the paper feel: button hovers, swipe actions, and blockquotes now draw from the active theme palette.'
+			}
+		]
+	},
+	{
 		version: '0.11.1',
 		date: '2026-06-04',
 		title: 'Skip internal mail',

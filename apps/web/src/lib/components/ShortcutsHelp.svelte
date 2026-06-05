@@ -90,7 +90,6 @@
 		justify-content: center;
 		padding: clamp(1.5rem, 8vh, 6rem) 1rem;
 		background: rgba(20, 16, 10, 0.4);
-		backdrop-filter: blur(2px);
 	}
 	.sheet {
 		width: min(46rem, 100%);

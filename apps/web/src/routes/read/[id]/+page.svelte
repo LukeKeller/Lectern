@@ -1033,8 +1033,7 @@
 		gap: 0.75rem;
 		margin: -0.4rem 0 1.4rem;
 		padding: 0.5rem 0;
-		background: color-mix(in srgb, var(--bg) 86%, transparent);
-		backdrop-filter: blur(8px);
+		background: var(--bg);
 	}
 	.back,
 	.orig,
@@ -1277,7 +1276,7 @@
 	}
 	article :global(blockquote) {
 		padding-left: 1.1em;
-		border-left: 3px solid var(--accent);
+		border-left: 3px solid var(--border-strong);
 		color: var(--text-muted);
 		font-style: italic;
 	}

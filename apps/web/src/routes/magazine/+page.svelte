@@ -253,15 +253,15 @@
 			hsl(var(--hue) 58% 40%),
 			hsl(calc(var(--hue) + 32) 60% 24%)
 		);
-		box-shadow: var(--shadow-md);
 	}
+	/* Functional bottom scrim only — keeps the foot text legible over the cover
+	   art. No glossy top highlight (Flat-At-Rest: no decorative sheen); resting
+	   covers carry no shadow, the clickable ones lift on hover (.cover-btn). */
 	.cover::before {
 		content: '';
 		position: absolute;
 		inset: 0;
-		background:
-			radial-gradient(125% 80% at 12% -5%, rgba(255, 255, 255, 0.22), transparent 55%),
-			linear-gradient(180deg, transparent 52%, rgba(0, 0, 0, 0.34));
+		background: linear-gradient(180deg, transparent 58%, rgba(0, 0, 0, 0.3));
 		pointer-events: none;
 	}
 	.cover > * {
