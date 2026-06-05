@@ -45,6 +45,7 @@ import { parseId } from "./ids";
 import {
   mergeOverlay,
   type ChangedDocuments,
+  type DocumentRef,
   type DocumentsPage,
   type ListDocumentsParams,
   type Overlay,
@@ -224,6 +225,41 @@ export class DrizzleOverlayStore implements OverlayStore {
   async deleteDocument(id: string): Promise<void> {
     await this.db.delete(rssHighlights).where(eq(rssHighlights.documentId, id));
     await this.db.delete(documents).where(eq(documents.id, id));
+  }
+
+  async softDelete(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const now = new Date();
+    for (let i = 0; i < ids.length; i += 500) {
+      await this.db
+        .update(documents)
+        .set({ deletedAt: now })
+        .where(inArray(documents.id, ids.slice(i, i + 500)));
+    }
+  }
+
+  async listByLocation(location: Location): Promise<DocumentRef[]> {
+    const rows = await this.db
+      .select({ id: documents.id, source: documents.source, sourceId: documents.sourceId })
+      .from(documents)
+      .where(and(eq(documents.location, location), isNull(documents.deletedAt)));
+    return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
+  }
+
+  async listReadBySource(source: Source): Promise<DocumentRef[]> {
+    // Read state is denormalized into the indexed backend card; "finished" is the
+    // unified read flag (set by markIndexedRead on open / by a backend poll).
+    const rows = await this.db
+      .select({ id: documents.id, source: documents.source, sourceId: documents.sourceId })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.source, source),
+          isNull(documents.deletedAt),
+          dsql`${documents.metadata}->'card'->>'readState' = 'finished'`,
+        ),
+      );
+    return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
   }
 
   async softDeleteMissing(source: string, presentIds: Set<string>): Promise<number> {

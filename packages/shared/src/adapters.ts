@@ -27,6 +27,12 @@ export interface RssBackend {
   getEntryContent(sourceId: string): Promise<string>;
   setRead(sourceId: string, read: boolean): Promise<void>;
   setStarred(sourceId: string, starred: boolean): Promise<void>;
+  /**
+   * Hide entries from the feed at the source. MiniFlux has no hard delete; the
+   * `removed` status hides an entry so it no longer lists (and the poll won't
+   * re-index it). Batch-capable so a bulk delete is one request.
+   */
+  setRemoved(sourceIds: string[]): Promise<void>;
   /** Trigger a feed refresh (all feeds). */
   refresh(): Promise<void>;
   exportOpml(): Promise<string>;
@@ -57,6 +63,11 @@ export interface ReadLaterBackend {
   /** progress is 0..1; the adapter scales to the backend's native unit. */
   setReadingProgress(sourceId: string, progress: number, anchor: string | null): Promise<void>;
   setArchived(sourceId: string, archived: boolean): Promise<void>;
+  /**
+   * Delete a bookmark at the source so the poll can't re-add it. A 404 is treated
+   * as success (the bookmark is already gone).
+   */
+  delete(sourceId: string): Promise<void>;
   setLabels(sourceId: string, labels: string[]): Promise<void>;
   listHighlights(sourceId: string): Promise<Highlight[]>;
   addHighlight(sourceId: string, highlight: NewHighlight): Promise<Highlight>;

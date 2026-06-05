@@ -284,6 +284,20 @@ export class ReadeckBackend implements ReadLaterBackend {
     });
   }
 
+  /**
+   * Delete a bookmark at the source (full delete, mirrors `setArchived`'s
+   * request/auth but with `DELETE /api/bookmarks/{id}`). A 404 means the
+   * bookmark is already gone, which is success for a delete.
+   */
+  async delete(sourceId: string): Promise<void> {
+    try {
+      await this.request(`/api/bookmarks/${sourceId}`, { method: "DELETE" });
+    } catch (err) {
+      if (err instanceof BackendHttpError && err.status === 404) return;
+      throw err;
+    }
+  }
+
   async listHighlights(sourceId: string): Promise<Highlight[]> {
     const res = await this.request(`/api/bookmarks/${sourceId}/annotations`);
     const list = (await res.json()) as ReadeckAnnotation[];

@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.17.0',
+		date: '2026-06-05',
+		title: 'Delete for good, sync on demand, and open where you want',
+		changes: [
+			{
+				kind: 'added',
+				text: 'You can now fully delete an item from the article menu. It is removed at the source too — saved articles are deleted from Readeck, RSS stories are dropped from MiniFlux — so it stays gone and will not reappear on the next sync. Archive has an Empty Archive action, and the Feed has Delete all read for clearing out stories you have finished.'
+			},
+			{
+				kind: 'added',
+				text: 'A Sync now button under Settings runs a fresh pull from your feeds and read-later sources immediately, instead of waiting for the next scheduled check — handy after tidying things up on the server.'
+			},
+			{
+				kind: 'added',
+				text: 'Settings now lets you choose which view Lectern opens to when you launch it. The default is your Feed.'
+			},
+			{
+				kind: 'improved',
+				text: 'Lists now show unread items by default, so you see what is left to read first. The All/Read/Unread control is still there whenever you want everything.'
+			}
+		]
+	},
+	{
 		version: '0.16.0',
 		date: '2026-06-05',
 		title: 'Push notifications for the feeds you care about',

@@ -205,7 +205,11 @@ export class MinifluxBackend implements RssBackend {
       order: "id",
       direction: "desc",
     });
-    if (params.onlyUnread) query.set("status", "unread");
+    // Exclude `removed` entries (our full-delete tombstones): keep unread+read,
+    // so a removed entry is never re-indexed and reads as "missing" to the
+    // deletion reconcile. `onlyUnread` narrows further to unread.
+    if (params.onlyUnread) query.append("status", "unread");
+    else for (const s of ["unread", "read"]) query.append("status", s);
     if (params.search) query.set("search", params.search);
     if (params.updatedAfter) query.set("changed_after", String(toUnixSeconds(params.updatedAfter)));
 
@@ -238,7 +242,9 @@ export class MinifluxBackend implements RssBackend {
       order: "id",
       direction: "desc",
     });
-    if (params.onlyUnread) query.set("status", "unread");
+    // Same `removed`-excluding status filter as `listEntries` (see there).
+    if (params.onlyUnread) query.append("status", "unread");
+    else for (const s of ["unread", "read"]) query.append("status", s);
     if (params.search) query.set("search", params.search);
     if (params.updatedAfter) query.set("changed_after", String(toUnixSeconds(params.updatedAfter)));
 
@@ -264,6 +270,21 @@ export class MinifluxBackend implements RssBackend {
     await this.request("/v1/entries", {
       method: "PUT",
       body: { entry_ids: [Number(sourceId)], status: read ? "read" : "unread" },
+    });
+  }
+
+  /**
+   * Hide entries from the feed: MiniFlux has no hard delete, so the `removed`
+   * status takes an entry out of unread+read listings (and our poll excludes
+   * `removed`, so it won't be re-indexed/un-tombstoned). Batch-capable — one PUT
+   * for the whole set. A no-op on an empty list.
+   */
+  async setRemoved(sourceIds: string[]): Promise<void> {
+    const ids = sourceIds.map(Number).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) return;
+    await this.request("/v1/entries", {
+      method: "PUT",
+      body: { entry_ids: ids, status: "removed" },
     });
   }
 

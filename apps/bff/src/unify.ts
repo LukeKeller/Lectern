@@ -183,6 +183,13 @@ export interface ChangedDocuments {
   deletedIds: string[];
 }
 
+/** Minimal index-row identity used by bulk-delete routing (id -> source/sourceId). */
+export interface DocumentRef {
+  id: string;
+  source: Source;
+  sourceId: string;
+}
+
 /**
  * The BFF-owned glue store. `UnificationService` only consumes the two read
  * methods at the top; the API routes use the full surface. Abstracted so routes
@@ -219,6 +226,23 @@ export interface OverlayStore {
   markIndexedRead(id: string, read: boolean): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */
   deleteDocument(id: string): Promise<void>;
+  /**
+   * Tombstone (set `deletedAt`) the given ids so the deletion rides the next
+   * `/sync` delta out to clients. Used by the full-delete path and bulk delete;
+   * the row is kept (not hard-deleted) so `documentsChangedSince` can report it.
+   */
+  softDelete(ids: string[]): Promise<void>;
+  /**
+   * Live (non-tombstoned) documents in the given unified location, any source —
+   * the targets of an "empty <location>" bulk delete.
+   */
+  listByLocation(location: Location): Promise<DocumentRef[]>;
+  /**
+   * Live (non-tombstoned) read documents of `source` — the targets of a
+   * "delete all read feed items" bulk delete. Read state lives in the indexed
+   * backend card (`metadata.card.readState === "finished"`).
+   */
+  listReadBySource(source: Source): Promise<DocumentRef[]>;
   /**
    * Soft-delete (tombstone) live documents of `source` whose id is not in
    * `presentIds` — the backend no longer has them. Returns how many were marked.

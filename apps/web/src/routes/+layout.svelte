@@ -8,6 +8,7 @@
 	import { resolveKey } from '$lib/keyboard';
 	import { activeList } from '$lib/list-controller.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
+	import { appSettings } from '$lib/app-settings.svelte';
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { matchesQuery } from '$lib/lists';
 	import { SMART_VIEWS } from '$lib/smart-views';
@@ -274,6 +275,13 @@
 
 	onMount(() => {
 		readerSettings.applyTheme();
+		// On first load, send the user to their chosen default view. Only redirect
+		// from the root path so deep links (and later in-app navigation to Inbox)
+		// are untouched; runs once since the layout mounts a single time.
+		const target = appSettings.current.defaultView;
+		if (target && target !== '/' && page.url.pathname === '/') {
+			void goto(target, { replaceState: true });
+		}
 		// Dev-only: populate the local store with mock cards when it's empty so the
 		// views have content without a backend. Dynamically imported + DEV-guarded so
 		// it's stripped from production builds.

@@ -4,6 +4,7 @@
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
 	import { readerSettings } from '$lib/reader-settings.svelte';
+	import { appSettings, LANDING_VIEWS } from '$lib/app-settings.svelte';
 	import {
 		FONT_LABELS,
 		FONT_STACKS,
@@ -30,6 +31,30 @@
 	let importing = $state(false);
 	let importResult = $state<ImportReadwiseResponse | undefined>(undefined);
 	let importError = $state<string | undefined>(undefined);
+
+	// ---- Sync (force reconcile) ----
+	let syncing = $state(false);
+	let syncResult = $state<string | undefined>(undefined);
+	let syncError = $state<string | undefined>(undefined);
+
+	// Force a server-side reconcile, then pull the resulting deltas so this device
+	// reflects the indexed/removed items.
+	async function forceSync() {
+		if (syncing) return;
+		syncing = true;
+		syncResult = undefined;
+		syncError = undefined;
+		try {
+			const res = await getClient().forceSync();
+			const indexed = res.miniflux + res.readeck;
+			syncResult = `Indexed ${indexed} new, removed ${res.tombstoned}`;
+			await getSync().pull();
+		} catch (err) {
+			syncError = err instanceof Error ? err.message : 'Sync failed.';
+		} finally {
+			syncing = false;
+		}
+	}
 
 	async function copyBookmarklet() {
 		await navigator.clipboard.writeText(bookmarklet);
@@ -405,6 +430,23 @@
 			{#if copied}<span class="ok">Copied.</span>{/if}
 		</div>
 		{#if !token.trim()}<p class="hint">Save a bearer token above first.</p>{/if}
+	</section>
+
+	<section>
+		<h2>Navigation</h2>
+		<div class="field">
+			<span class="flabel">Default view</span>
+			<select
+				class="picker"
+				value={appSettings.current.defaultView}
+				onchange={(e) => appSettings.update({ defaultView: e.currentTarget.value })}
+			>
+				{#each LANDING_VIEWS as v (v.id)}
+					<option value={v.id}>{v.label}</option>
+				{/each}
+			</select>
+			<span class="fhint">The screen Lectern opens to when you launch it.</span>
+		</div>
 	</section>
 
 	<section>
@@ -784,6 +826,21 @@
 			</div>
 		</label>
 		{#if podcastError}<p class="err">{podcastError}</p>{/if}
+	</section>
+
+	<section>
+		<h2>Sync</h2>
+		<p class="hint">
+			Force a full sync with your sources now. Re-indexes new items from MiniFlux and Readeck and
+			prunes anything deleted upstream, then refreshes this device.
+		</p>
+		<div class="row">
+			<button type="button" class="btn" disabled={syncing} onclick={forceSync}>
+				{syncing ? 'Syncing…' : 'Sync now'}
+			</button>
+			{#if syncResult}<span class="ok">{syncResult}</span>{/if}
+		</div>
+		{#if syncError}<p class="err">{syncError}</p>{/if}
 	</section>
 
 	<section class="about">

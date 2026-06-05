@@ -26,6 +26,7 @@ import {
   mergeOverlay,
   UnificationService,
   type ChangedDocuments,
+  type DocumentRef,
   type DocumentsPage,
   type ListDocumentsParams,
   type Overlay,
@@ -66,6 +67,13 @@ class FakeRssBackend implements RssBackend {
   }
   async setRead(sourceId: string, read: boolean): Promise<void> {
     this.reads.set(sourceId, read);
+  }
+  removed: string[] = [];
+  async setRemoved(sourceIds: string[]): Promise<void> {
+    for (const id of sourceIds) {
+      this.removed.push(id);
+      this.entries.delete(id);
+    }
   }
   async setStarred(): Promise<void> {}
   async refresh(): Promise<void> {
@@ -174,6 +182,11 @@ class FakeReadLaterBackend implements ReadLaterBackend {
     const card = await this.get(sourceId);
     this.bookmarks.set(sourceId, { ...card, tags: labels });
   }
+  deleted: string[] = [];
+  async delete(sourceId: string): Promise<void> {
+    this.deleted.push(sourceId);
+    this.bookmarks.delete(sourceId);
+  }
   async listHighlights(sourceId: string): Promise<Highlight[]> {
     return this.highlights.get(sourceId) ?? [];
   }
@@ -267,6 +280,32 @@ class FakeOverlayStore implements OverlayStore {
       }
     }
     return n;
+  }
+
+  async softDelete(ids: string[]): Promise<void> {
+    const now = new Date().toISOString();
+    for (const id of ids) if (this.index.has(id)) this.deleted.set(id, now);
+  }
+
+  async listByLocation(location: string): Promise<DocumentRef[]> {
+    const out: DocumentRef[] = [];
+    for (const [id, base] of this.index) {
+      if (this.deleted.has(id)) continue;
+      const card = await this.getIndexedCard(id);
+      if (card?.location === location)
+        out.push({ id, source: base.source, sourceId: base.sourceId });
+    }
+    return out;
+  }
+
+  async listReadBySource(source: Source): Promise<DocumentRef[]> {
+    const out: DocumentRef[] = [];
+    for (const [id, card] of this.index) {
+      if (this.deleted.has(id) || card.source !== source) continue;
+      if (card.readState === "finished")
+        out.push({ id, source: card.source, sourceId: card.sourceId });
+    }
+    return out;
   }
 
   contents = new Map<string, string>();
@@ -800,8 +839,9 @@ describe("documents", () => {
     await a.close();
   });
 
-  it("deletes a document (204) and drops the glue index", async () => {
-    await harness.deps.overlay.indexFromBackend(makeCard({ id: "miniflux:9", source: "miniflux" }));
+  it("full-deletes an rss document: removes it at MiniFlux and tombstones it", async () => {
+    harness.deps.rss.entries.set("9", makeCard({ id: "miniflux:9", source: "miniflux" }));
+    await poll();
     const a = app();
     const res = await a.inject({
       method: "DELETE",
@@ -809,7 +849,82 @@ describe("documents", () => {
       headers: auth,
     });
     expect(res.statusCode).toBe(204);
-    expect(harness.deps.overlay.index.has("miniflux:9")).toBe(false);
+    // Removed at the source so the poll can't re-add it...
+    expect(harness.deps.rss.removed).toContain("9");
+    // ...and tombstoned locally (row kept so /sync reports the deletion).
+    expect(harness.deps.overlay.deleted.has("miniflux:9")).toBe(true);
+    await a.close();
+  });
+
+  it("full-deletes a readeck document: deletes the bookmark and tombstones it", async () => {
+    harness.deps.readLater.bookmarks.set("b9", makeCard({ id: "readeck:b9", source: "readeck" }));
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "DELETE",
+      url: "/api/v1/documents/readeck:b9",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(204);
+    expect(harness.deps.readLater.deleted).toContain("b9");
+    expect(harness.deps.overlay.deleted.has("readeck:b9")).toBe(true);
+    await a.close();
+  });
+
+  it("bulk-deletes the archive across both sources and tombstones them", async () => {
+    harness.deps.readLater.bookmarks.set(
+      "b1",
+      makeCard({ id: "readeck:b1", source: "readeck", location: "archive" }),
+    );
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", location: "archive" }),
+    );
+    harness.deps.readLater.bookmarks.set(
+      "b2",
+      makeCard({ id: "readeck:b2", source: "readeck", location: "later" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "archive" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().deleted).toBe(2);
+    expect(harness.deps.readLater.deleted).toContain("b1");
+    expect(harness.deps.rss.removed).toContain("1");
+    expect(harness.deps.overlay.deleted.has("readeck:b1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(true);
+    // The non-archived bookmark is untouched.
+    expect(harness.deps.overlay.deleted.has("readeck:b2")).toBe(false);
+    await a.close();
+  });
+
+  it("bulk-deletes read feed items via MiniFlux setRemoved only", async () => {
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", readState: "finished" }),
+    );
+    harness.deps.rss.entries.set(
+      "2",
+      makeCard({ id: "miniflux:2", source: "miniflux", readState: "unopened" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "read-feed" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().deleted).toBe(1);
+    expect(harness.deps.rss.removed).toEqual(["1"]);
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("miniflux:2")).toBe(false);
     await a.close();
   });
 
