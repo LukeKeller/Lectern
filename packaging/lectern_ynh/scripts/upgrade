@@ -57,6 +57,24 @@ ynh_app_setting_set --key=enable_email --value="$enable_email"
 kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
 ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
 
+# Web Push (optional). Generate a VAPID keypair on the first upgrade that predates
+# push support, then persist it so it's durable (re-keying would invalidate every
+# existing browser subscription). Existing keys are preserved as-is.
+vapid_public_key="${vapid_public_key:-}"
+vapid_private_key="${vapid_private_key:-}"
+if [ -z "$vapid_public_key" ] || [ -z "$vapid_private_key" ]; then
+    ynh_script_progression "Generating Web Push (VAPID) keys..."
+    vapid_keys=$(cd "$install_dir/server" && node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log(k.publicKey+'\n'+k.privateKey)")
+    vapid_public_key=$(echo "$vapid_keys" | sed -n '1p')
+    vapid_private_key=$(echo "$vapid_keys" | sed -n '2p')
+fi
+vapid_subject="${vapid_subject:-mailto:admin@$domain}"
+enable_push="${enable_push:-1}"
+ynh_app_setting_set --key=vapid_public_key --value="$vapid_public_key"
+ynh_app_setting_set --key=vapid_private_key --value="$vapid_private_key"
+ynh_app_setting_set --key=vapid_subject --value="$vapid_subject"
+ynh_app_setting_set --key=enable_push --value="$enable_push"
+
 ynh_config_add --template=".env" --destination="$install_dir/.env"
 chmod 400 "$install_dir/.env"
 chown "$app:$app" "$install_dir/.env"

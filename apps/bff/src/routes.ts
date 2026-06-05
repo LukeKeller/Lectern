@@ -14,9 +14,16 @@ import {
   ImportReadwiseResponse,
   ListDocumentsQuery,
   ListDocumentsResponse,
+  FeedNotificationPref,
+  FeedNotificationPrefsResponse,
   PlayerState,
   PodcastEpisode,
   PodcastSettings,
+  PushOkResponse,
+  PushPublicKeyResponse,
+  PushSubscriptionRequest,
+  PushUnsubscribeRequest,
+  SetFeedNotificationRequest,
   SaveDocumentRequest,
   SavedView,
   SearchQuery,
@@ -47,6 +54,13 @@ import { podcastFeedUrl } from "./podcast";
 import { parseId } from "./ids";
 import { htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
+import {
+  deleteSubscription,
+  listFeedPrefs,
+  publicVapidKey,
+  setFeedPref,
+  upsertSubscription,
+} from "./push";
 import {
   applyAddHighlight,
   applyLocation,
@@ -505,6 +519,40 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const body = ImportOpmlRequest.parse(req.body);
     const message = await deps.rss.importOpml(body.opml);
     return ImportOpmlResponse.parse({ message });
+  });
+
+  // ---- web push notifications --------------------------------------------
+  app.get("/push/public-key", async () =>
+    PushPublicKeyResponse.parse({ publicKey: publicVapidKey() }),
+  );
+
+  app.post<{ Body: unknown }>("/push/subscriptions", async (req) => {
+    const body = PushSubscriptionRequest.parse(req.body);
+    await upsertSubscription({
+      endpoint: body.endpoint,
+      p256dh: body.keys.p256dh,
+      auth: body.keys.auth,
+    });
+    return PushOkResponse.parse({ ok: true });
+  });
+
+  app.delete<{ Body: unknown }>("/push/subscriptions", async (req) => {
+    const body = PushUnsubscribeRequest.parse(req.body);
+    await deleteSubscription(body.endpoint);
+    return PushOkResponse.parse({ ok: true });
+  });
+
+  app.get("/push/feeds", async () => {
+    const rows = await listFeedPrefs();
+    return FeedNotificationPrefsResponse.parse({
+      feeds: rows.map((r) => ({ feedId: r.feedId, enabled: r.enabled })),
+    });
+  });
+
+  app.put<{ Params: { feedId: string }; Body: unknown }>("/push/feeds/:feedId", async (req) => {
+    const body = SetFeedNotificationRequest.parse(req.body);
+    const pref = await setFeedPref(req.params.feedId, body.enabled);
+    return FeedNotificationPref.parse(pref);
   });
 
   app.post<{ Body: unknown }>("/import/readwise", async (req) => {

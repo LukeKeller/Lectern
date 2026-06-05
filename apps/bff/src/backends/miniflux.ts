@@ -216,6 +216,44 @@ export class MinifluxBackend implements RssBackend {
     return { items, nextCursor: nextOffset < body.total ? String(nextOffset) : null };
   }
 
+  /**
+   * Like `listEntries`, but each item is paired with the raw entry's `feed_id`,
+   * feed title, and unread flag — the signals the push poll needs to tally new
+   * articles per feed. `minifluxEntryToCard` drops `feed_id` (the unified `Card`
+   * has no feed field), so the poll reaches it through this raw-aware variant.
+   * The card's `id` (`miniflux:<entryId>`) still drives the dedup/index path;
+   * `feedId` is the stringified numeric feed id, equal to the `id` GET /feeds
+   * returns for that feed.
+   */
+  async listEntriesWithFeed(
+    params: BackendListParams & { onlyUnread?: boolean },
+  ): Promise<
+    BackendPage<{ card: Card; feedId: string; feedTitle: string | null; unread: boolean }>
+  > {
+    const limit = params.pageSize ?? DEFAULT_PAGE_SIZE;
+    const offset = params.cursor ? Number.parseInt(params.cursor, 10) || 0 : 0;
+    const query = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      order: "id",
+      direction: "desc",
+    });
+    if (params.onlyUnread) query.set("status", "unread");
+    if (params.search) query.set("search", params.search);
+    if (params.updatedAfter) query.set("changed_after", String(toUnixSeconds(params.updatedAfter)));
+
+    const res = await this.request(`/v1/entries?${query.toString()}`);
+    const body = (await res.json()) as MinifluxEntriesResponse;
+    const items = body.entries.map((entry) => ({
+      card: minifluxEntryToCard(entry),
+      feedId: String(entry.feed_id),
+      feedTitle: entry.feed?.title ?? null,
+      unread: entry.status === "unread",
+    }));
+    const nextOffset = offset + items.length;
+    return { items, nextCursor: nextOffset < body.total ? String(nextOffset) : null };
+  }
+
   async getEntryContent(sourceId: string): Promise<string> {
     const res = await this.request(`/v1/entries/${sourceId}/fetch-content`);
     const body = (await res.json()) as { content?: string };

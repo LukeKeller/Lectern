@@ -64,6 +64,69 @@ sw.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') sw.skipWaiting();
 });
 
+// ---- Web Push ----
+// App icon used for the notification + Android badge. From the manifest.
+const NOTIFY_ICON = `${base}/icon-192.png`;
+// Where a tapped notification lands by default (the feed list) when the push
+// payload doesn't carry its own url.
+const NOTIFY_DEFAULT_URL = `${base}/feed`;
+
+interface PushPayload {
+	title?: string;
+	body?: string;
+	url?: string;
+	tag?: string;
+}
+
+sw.addEventListener('push', (event) => {
+	event.waitUntil(
+		(async () => {
+			let payload: PushPayload = {};
+			try {
+				payload = (event.data?.json() as PushPayload) ?? {};
+			} catch {
+				// Non-JSON payloads: fall back to plain text as the body.
+				const text = event.data?.text();
+				if (text) payload = { body: text };
+			}
+			const title = payload.title || 'Lectern';
+			await sw.registration.showNotification(title, {
+				body: payload.body,
+				tag: payload.tag,
+				icon: NOTIFY_ICON,
+				badge: NOTIFY_ICON,
+				data: { url: payload.url || NOTIFY_DEFAULT_URL }
+			});
+		})()
+	);
+});
+
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const target = (event.notification.data?.url as string | undefined) ?? NOTIFY_DEFAULT_URL;
+	event.waitUntil(
+		(async () => {
+			const targetUrl = new URL(target, sw.location.origin);
+			const all = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+			// Focus an existing app window (navigating it to the target) if one is open.
+			for (const client of all) {
+				if ('focus' in client) {
+					await client.focus();
+					if ('navigate' in client && client.url !== targetUrl.href) {
+						try {
+							await client.navigate(targetUrl.href);
+						} catch {
+							/* navigation may be blocked cross-origin — focus is enough */
+						}
+					}
+					return;
+				}
+			}
+			await sw.clients.openWindow(targetUrl.href);
+		})()
+	);
+});
+
 /** Cache-first for precached shell assets (hashed URLs — safe to serve forever). */
 async function fromCache(request: Request): Promise<Response> {
 	const cached = await caches.match(request);

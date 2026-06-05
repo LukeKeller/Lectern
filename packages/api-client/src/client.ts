@@ -25,6 +25,12 @@ import {
   SyncPullResponse,
   SyncPushRequest,
   SyncPushResponse,
+  PushPublicKeyResponse,
+  PushOkResponse,
+  PushSubscriptionRequest,
+  PushUnsubscribeRequest,
+  FeedNotificationPref,
+  FeedNotificationPrefsResponse,
   TagsResponse,
   TtsSettings,
   TtsUsage,
@@ -34,7 +40,7 @@ import {
   UpdateViewRequest,
   ViewsResponse,
 } from "@lectern/shared";
-import type { z } from "zod";
+import { z } from "zod";
 
 export interface ClientOptions {
   /** Base URL including the API prefix, e.g. https://host/api/v1 */
@@ -187,6 +193,31 @@ export class LecternClient {
   }
   importReadwise(body: ImportReadwiseRequest) {
     return this.request("POST", "/import/readwise", { body, schema: ImportReadwiseResponse });
+  }
+
+  // ---- Web Push notifications ----
+  /** VAPID public key for this deployment, or null when push isn't configured. */
+  getPushPublicKey() {
+    return this.request("GET", "/push/public-key", { schema: PushPublicKeyResponse });
+  }
+  /** Register this device's push subscription (idempotent on the endpoint). */
+  registerPushSubscription(body: PushSubscriptionRequest) {
+    return this.request("POST", "/push/subscriptions", { body, schema: PushOkResponse });
+  }
+  /** Remove a device's push subscription. DELETE carries a JSON body (the endpoint). */
+  unregisterPushSubscription(body: PushUnsubscribeRequest) {
+    return this.request("DELETE", "/push/subscriptions", { body, schema: PushOkResponse });
+  }
+  /** Per-feed notification preferences for the current user. */
+  getFeedNotifications() {
+    return this.request("GET", "/push/feeds", { schema: FeedNotificationPrefsResponse });
+  }
+  /** Toggle notifications for a single feed. */
+  setFeedNotification(feedId: string, enabled: boolean) {
+    return this.request("PUT", `/push/feeds/${feedId}`, {
+      body: { enabled },
+      schema: FeedNotificationPref,
+    });
   }
 
   // ---- text-to-speech ("Listen") ----

@@ -17,7 +17,39 @@
 	let refreshMessage = $state<string | undefined>(undefined);
 	let importMessage = $state<string | undefined>(undefined);
 
+	// Per-feed notification prefs, keyed by feed id. Missing => disabled.
+	let notifyPrefs = $state<Map<string, boolean>>(new Map());
 	const grouped = $derived(groupFeeds(feeds, folders));
+
+	async function loadNotifyPrefs() {
+		try {
+			const res = await getClient().getFeedNotifications();
+			notifyPrefs = new Map(res.feeds.map((f) => [f.feedId, f.enabled]));
+		} catch {
+			/* offline or push not configured: leave bells in their default (off) state */
+		}
+	}
+
+	async function toggleNotify(feed: Feed) {
+		const current = notifyPrefs.get(feed.id) ?? false;
+		const next = !current;
+		// Optimistic update (reassign so Svelte tracks the Map change).
+		const optimistic = new Map(notifyPrefs);
+		optimistic.set(feed.id, next);
+		notifyPrefs = optimistic;
+		try {
+			const pref = await getClient().setFeedNotification(feed.id, next);
+			const confirmed = new Map(notifyPrefs);
+			confirmed.set(feed.id, pref.enabled);
+			notifyPrefs = confirmed;
+		} catch (e) {
+			// Roll back on failure.
+			const rolledBack = new Map(notifyPrefs);
+			rolledBack.set(feed.id, current);
+			notifyPrefs = rolledBack;
+			error = e instanceof Error ? e.message : 'Could not update notifications.';
+		}
+	}
 
 	async function load() {
 		loading = true;
@@ -106,7 +138,10 @@
 		});
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		void loadNotifyPrefs();
+	});
 </script>
 
 <div class="page">
@@ -159,6 +194,7 @@
 				<h2>{group.title}</h2>
 				<ul class="feeds">
 					{#each group.feeds as feed (feed.id)}
+						{@const notifyOn = notifyPrefs.get(feed.id) ?? false}
 						<li>
 							<div class="feed-head">
 								<!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -172,6 +208,44 @@
 								</a>
 								<!-- eslint-enable svelte/no-navigation-without-resolve -->
 								{#if feed.unreadCount > 0}<span class="unread">{feed.unreadCount}</span>{/if}
+								<button
+									type="button"
+									class="bell"
+									class:on={notifyOn}
+									aria-pressed={notifyOn}
+									aria-label={`${notifyOn ? 'Disable' : 'Enable'} notifications for ${feed.title}`}
+									title={notifyOn ? 'Notifications on' : 'Notifications off'}
+									onclick={() => toggleNotify(feed)}
+								>
+									{#if notifyOn}
+										<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+											<path
+												fill="currentColor"
+												d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm6-6V11a6 6 0 0 0-4.5-5.8V4.5a1.5 1.5 0 0 0-3 0v.7A6 6 0 0 0 6 11v5l-1.6 1.6a.9.9 0 0 0 .64 1.54h13.9a.9.9 0 0 0 .64-1.54L18 16Z"
+											/>
+										</svg>
+									{:else}
+										<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+											<path
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.8"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M18 16V11a6 6 0 0 0-4.5-5.8V4.5a1.5 1.5 0 0 0-3 0v.7A6 6 0 0 0 6 11v5l-1.6 1.6h15.2L18 16Zm-6 6a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Z"
+											/>
+											<line
+												x1="4"
+												y1="3.5"
+												x2="20"
+												y2="20.5"
+												stroke="currentColor"
+												stroke-width="1.8"
+												stroke-linecap="round"
+											/>
+										</svg>
+									{/if}
+								</button>
 							</div>
 							<div class="feed-actions">
 								<input
@@ -265,6 +339,30 @@
 		padding: 0.1rem 0.45rem;
 		border-radius: var(--radius-full);
 		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.bell {
+		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		border: 1px solid transparent;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease),
+			border-color var(--dur-fast) var(--ease);
+	}
+	.bell:hover {
+		color: var(--text);
+		background: var(--surface-alt);
+		border-color: var(--border);
+	}
+	.bell.on {
 		color: var(--accent);
 	}
 	.feed-actions {

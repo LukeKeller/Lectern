@@ -209,6 +209,12 @@ export interface OverlayStore {
   upsertIndex(card: Card): Promise<void>;
   /** Index from a backend poll: refresh backend-truth columns, PRESERVE overlay. */
   indexFromBackend(card: Card): Promise<void>;
+  /**
+   * Whether a document id already exists in the index. Lets the poll distinguish
+   * a genuinely-new entry from a re-indexed one — `indexFromBackend` is a blind
+   * upsert with no insert-vs-update signal. Must be called BEFORE indexing.
+   */
+  isIndexed(id: string): Promise<boolean>;
   /** Flip the read state on the indexed backend card (RSS "mark seen" on open). */
   markIndexedRead(id: string, read: boolean): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */

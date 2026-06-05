@@ -18,6 +18,7 @@
 	import { resolve } from '$app/paths';
 	import { DEFAULT_VOICE, voiceOptions } from '$lib/tts-voices';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
+	import { disablePush, enablePush, getPermission, isPushSupported, isSubscribed } from '$lib/push';
 
 	let token = $state('');
 	let saved = $state(false);
@@ -91,11 +92,54 @@
 	let podcastCopied = $state(false);
 	let podcastError = $state<string | undefined>(undefined);
 
+	// ---- Notifications (Web Push) ----
+	const pushSupported = isPushSupported();
+	let pushOn = $state(false);
+	let pushBusy = $state(false);
+	let pushError = $state<string | undefined>(undefined);
+	let pushDenied = $state(false);
+
 	onMount(() => {
 		token = getToken() ?? '';
 		void loadTts();
 		void loadPodcast();
+		void loadPush();
 	});
+
+	async function loadPush() {
+		if (!pushSupported) return;
+		pushDenied = getPermission() === 'denied';
+		try {
+			pushOn = await isSubscribed();
+		} catch {
+			/* registration not ready (e.g. dev): treat as off */
+		}
+	}
+
+	async function togglePush() {
+		if (pushBusy) return;
+		pushBusy = true;
+		pushError = undefined;
+		try {
+			if (pushOn) {
+				await disablePush();
+				pushOn = false;
+			} else {
+				const ok = await enablePush();
+				pushOn = ok;
+				if (!ok) {
+					pushDenied = getPermission() === 'denied';
+					pushError = pushDenied
+						? 'Notifications are blocked. Enable them for this site in your browser settings.'
+						: 'Push isn’t available — the server may not have notifications configured.';
+				}
+			}
+		} catch (err) {
+			pushError = err instanceof Error ? err.message : 'Could not change notification settings.';
+		} finally {
+			pushBusy = false;
+		}
+	}
 
 	async function loadPodcast() {
 		try {
@@ -683,6 +727,34 @@
 				{#if ttsVoicesNote}<p class="hint">{ttsVoicesNote}</p>{/if}
 			</label>
 		</div>
+	</section>
+
+	<section>
+		<h2>Notifications</h2>
+		{#if !pushSupported}
+			<p class="hint">
+				Push notifications aren’t supported on this browser. Install Lectern to your home screen and
+				open it as an app (Android Chrome) to enable them.
+			</p>
+		{:else}
+			<p class="hint">
+				Get a notification on this device when feeds you’ve subscribed to publish something new.
+				Choose which feeds notify you on the <a class="link" href={resolve('/feeds')}>Feeds page</a>.
+			</p>
+			<div class="row">
+				<button type="button" class="btn" disabled={pushBusy} onclick={togglePush}>
+					{pushBusy ? 'Working…' : pushOn ? 'Disable on this device' : 'Enable push on this device'}
+				</button>
+				{#if pushOn}<span class="ok">Enabled on this device.</span>{/if}
+			</div>
+			{#if pushDenied && !pushOn}
+				<p class="hint">
+					Notifications are currently blocked for this site — re-enable them in your browser’s site
+					settings, then try again.
+				</p>
+			{/if}
+			{#if pushError}<p class="err">{pushError}</p>{/if}
+		{/if}
 	</section>
 
 	<section>
