@@ -15,9 +15,11 @@ import {
   type Source,
   type SavedView,
   type Tag,
+  type TtsProvider,
   type UpdateViewRequest,
 } from "@lectern/shared";
 import { buildApp, type AppDeps } from "./app";
+import type { TtsRouter } from "./backends/tts-router";
 import { BackendHttpError } from "./errors";
 import { config } from "./config";
 import {
@@ -202,7 +204,13 @@ class FakeOverlayStore implements OverlayStore {
   rssHighlights = new Map<string, Highlight[]>();
   views = new Map<string, SavedView>();
   deleted = new Map<string, string>();
-  ttsConfig: { apiKey: string | null; voiceId: string; modelId: string } = {
+  ttsConfig: {
+    provider: TtsProvider;
+    apiKey: string | null;
+    voiceId: string;
+    modelId: string;
+  } = {
+    provider: "elevenlabs",
     apiKey: null,
     voiceId: "rachel",
     modelId: "eleven_flash_v2_5",
@@ -389,7 +397,13 @@ class FakeOverlayStore implements OverlayStore {
   async getTtsConfig() {
     return { ...this.ttsConfig };
   }
-  async setTtsConfig(patch: { apiKey?: string | null; voiceId?: string; modelId?: string }) {
+  async setTtsConfig(patch: {
+    provider?: TtsProvider;
+    apiKey?: string | null;
+    voiceId?: string;
+    modelId?: string;
+  }) {
+    if (patch.provider !== undefined) this.ttsConfig.provider = patch.provider;
     if (patch.apiKey !== undefined) this.ttsConfig.apiKey = patch.apiKey ? patch.apiKey : null;
     if (patch.voiceId !== undefined) this.ttsConfig.voiceId = patch.voiceId;
     if (patch.modelId !== undefined) this.ttsConfig.modelId = patch.modelId;
@@ -496,8 +510,10 @@ interface Harness {
     rss: FakeRssBackend;
     readLater: FakeReadLaterBackend;
     overlay: FakeOverlayStore;
-    tts: FakeTtsBackend;
+    tts: TtsRouter;
   };
+  /** The single fake backend the router resolves to (for call assertions). */
+  tts: FakeTtsBackend;
 }
 
 function makeHarness(): Harness {
@@ -506,7 +522,9 @@ function makeHarness(): Harness {
   const overlay = new FakeOverlayStore();
   const unify = new UnificationService(rss, readLater, overlay);
   const tts = new FakeTtsBackend();
-  return { deps: { rss, readLater, overlay, unify, tts } };
+  // One fake serves every provider; the router just hands it back.
+  const ttsRouter: TtsRouter = { forProvider: () => tts };
+  return { deps: { rss, readLater, overlay, unify, tts: ttsRouter }, tts };
 }
 
 const TOKEN = config.LECTERN_API_TOKEN;
@@ -1242,7 +1260,7 @@ describe("text-to-speech", () => {
       headers: auth,
     });
     expect(res.statusCode).toBe(409);
-    expect(harness.deps.tts.calls).toHaveLength(0);
+    expect(harness.tts.calls).toHaveLength(0);
     await a.close();
   });
 
@@ -1257,9 +1275,9 @@ describe("text-to-speech", () => {
     expect(first.statusCode).toBe(200);
     expect(first.headers["content-type"]).toContain("audio/mpeg");
     expect(first.headers["x-tts-content-hash"]).toMatch(/^[0-9a-f]{64}$/);
-    expect(harness.deps.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls).toHaveLength(1);
     // Synthesis ran over the extracted plain text ("rss"), not raw HTML.
-    expect(harness.deps.tts.calls[0]!.text).toBe("rss");
+    expect(harness.tts.calls[0]!.text).toBe("rss");
 
     const second = await a.inject({
       method: "POST",
@@ -1269,7 +1287,7 @@ describe("text-to-speech", () => {
     expect(second.statusCode).toBe(200);
     expect(second.headers["x-tts-content-hash"]).toBe(first.headers["x-tts-content-hash"]);
     // Cache hit: ElevenLabs was NOT called again.
-    expect(harness.deps.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls).toHaveLength(1);
     await a.close();
   });
 
@@ -1283,7 +1301,7 @@ describe("text-to-speech", () => {
       payload: { title: "A Grand Title" },
     });
     expect(res.statusCode).toBe(200);
-    expect(harness.deps.tts.calls[0]!.text).toBe("A Grand Title.\n\nrss");
+    expect(harness.tts.calls[0]!.text).toBe("A Grand Title.\n\nrss");
     await a.close();
   });
 
@@ -1304,7 +1322,7 @@ describe("text-to-speech", () => {
 
   it("returns an empty voice list (not 502) when the key lacks the Voices permission", async () => {
     harness.deps.overlay.ttsConfig.apiKey = "sk";
-    harness.deps.tts.voicesError = true;
+    harness.tts.voicesError = true;
     const a = app();
     const res = await a.inject({
       method: "GET",
@@ -1337,6 +1355,60 @@ describe("text-to-speech", () => {
     await a.close();
   });
 
+  it("synthesizes with the Kokoro provider without an API key", async () => {
+    // Kokoro is server-configured (no key); selecting it makes TTS ready.
+    harness.deps.overlay.ttsConfig.provider = "kokoro";
+    harness.deps.overlay.ttsConfig.apiKey = null;
+    harness.deps.overlay.ttsConfig.voiceId = "af_heart";
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(harness.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls[0]!.voiceId).toBe("af_heart");
+    await a.close();
+  });
+
+  it("lists Kokoro voices without an API key", async () => {
+    harness.deps.overlay.ttsConfig.provider = "kokoro";
+    harness.deps.overlay.ttsConfig.apiKey = null;
+    const a = app();
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/tts/voices",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { voices: unknown[] }).voices).toHaveLength(1);
+    await a.close();
+  });
+
+  it("reports usage as unavailable (409) for the Kokoro provider", async () => {
+    harness.deps.overlay.ttsConfig.provider = "kokoro";
+    harness.deps.overlay.ttsConfig.apiKey = null;
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/settings/tts/usage", headers: auth });
+    expect(res.statusCode).toBe(409);
+    await a.close();
+  });
+
+  it("PATCH switches the provider and reports it back as configured", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/settings/tts",
+      headers: auth,
+      payload: { provider: "kokoro", voiceId: "af_heart" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ provider: "kokoro", configured: true, voiceId: "af_heart" });
+    expect(harness.deps.overlay.ttsConfig.provider).toBe("kokoro");
+    await a.close();
+  });
+
   it("previews a voice once then serves the cached sample", async () => {
     harness.deps.overlay.ttsConfig.apiKey = "sk";
     const a = app();
@@ -1348,8 +1420,8 @@ describe("text-to-speech", () => {
     });
     expect(first.statusCode).toBe(200);
     expect(first.headers["content-type"]).toContain("audio/mpeg");
-    expect(harness.deps.tts.calls).toHaveLength(1);
-    expect(harness.deps.tts.calls[0]!.voiceId).toBe("voice-xyz");
+    expect(harness.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls[0]!.voiceId).toBe("voice-xyz");
 
     const second = await a.inject({
       method: "POST",
@@ -1358,7 +1430,7 @@ describe("text-to-speech", () => {
       payload: { voiceId: "voice-xyz" },
     });
     expect(second.statusCode).toBe(200);
-    expect(harness.deps.tts.calls).toHaveLength(1); // cache hit, no re-synth
+    expect(harness.tts.calls).toHaveLength(1); // cache hit, no re-synth
     await a.close();
   });
 
@@ -1424,7 +1496,7 @@ describe("podcast", () => {
       headers: auth,
     });
     expect(res.statusCode).toBe(409);
-    expect(harness.deps.tts.calls).toHaveLength(0);
+    expect(harness.tts.calls).toHaveLength(0);
     await a.close();
   });
 
@@ -1442,8 +1514,8 @@ describe("podcast", () => {
     expect(ep.title).toBe("My Article");
     expect(ep.byteLength).toBeGreaterThan(0);
     // Title is spoken before the body, exactly like Listen.
-    expect(harness.deps.tts.calls[0]!.text).toBe("My Article.\n\nrss");
-    expect(harness.deps.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls[0]!.text).toBe("My Article.\n\nrss");
+    expect(harness.tts.calls).toHaveLength(1);
 
     // Re-publishing reuses the cached audio (no second ElevenLabs call) and keeps
     // a single episode for the document.
@@ -1453,7 +1525,7 @@ describe("podcast", () => {
       headers: auth,
     });
     expect(second.statusCode).toBe(201);
-    expect(harness.deps.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls).toHaveLength(1);
 
     const settings = await a.inject({
       method: "GET",

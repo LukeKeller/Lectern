@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ElevenLabsBackend, chunkText } from "./elevenlabs";
+import { ElevenLabsBackend } from "./elevenlabs";
+import { chunkText } from "./chunk";
 
 describe("chunkText", () => {
   it("keeps short text as a single chunk", () => {

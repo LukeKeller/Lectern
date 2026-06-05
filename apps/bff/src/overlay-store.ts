@@ -21,6 +21,7 @@ import type {
   SearchResult,
   Source,
   Tag,
+  TtsProvider,
   UpdateViewRequest,
 } from "@lectern/shared";
 import type { Db } from "./db/client";
@@ -427,13 +428,19 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   // --- text-to-speech config + audio cache ---
-  async getTtsConfig(): Promise<{ apiKey: string | null; voiceId: string; modelId: string }> {
+  async getTtsConfig(): Promise<{
+    provider: TtsProvider;
+    apiKey: string | null;
+    voiceId: string;
+    modelId: string;
+  }> {
     const [row] = await this.db
       .select({ value: appSettings.value })
       .from(appSettings)
       .where(eq(appSettings.key, "tts"));
     const v = (row?.value ?? {}) as Record<string, unknown>;
     return {
+      provider: v.provider === "kokoro" ? "kokoro" : "elevenlabs",
       apiKey: typeof v.apiKey === "string" && v.apiKey ? v.apiKey : null,
       voiceId: typeof v.voiceId === "string" && v.voiceId ? v.voiceId : DEFAULT_TTS.voiceId,
       modelId: typeof v.modelId === "string" && v.modelId ? v.modelId : DEFAULT_TTS.modelId,
@@ -441,6 +448,7 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   async setTtsConfig(patch: {
+    provider?: TtsProvider;
     apiKey?: string | null;
     voiceId?: string;
     modelId?: string;
@@ -448,10 +456,12 @@ export class DrizzleOverlayStore implements OverlayStore {
     const current = await this.getTtsConfig();
     // Read the raw stored key (getTtsConfig already normalizes it to string|null).
     const next: Record<string, unknown> = {
+      provider: current.provider,
       apiKey: current.apiKey,
       voiceId: current.voiceId,
       modelId: current.modelId,
     };
+    if (patch.provider !== undefined) next.provider = patch.provider;
     if (patch.apiKey !== undefined) next.apiKey = patch.apiKey ? patch.apiKey : null;
     if (patch.voiceId !== undefined) next.voiceId = patch.voiceId;
     if (patch.modelId !== undefined) next.modelId = patch.modelId;

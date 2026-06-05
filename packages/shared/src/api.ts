@@ -133,9 +133,16 @@ export type ImportReadwiseResponse = z.infer<typeof ImportReadwiseResponse>;
 
 // ---- Text-to-speech (ElevenLabs "Listen") ----------------------------------
 
+/** Which speech engine synthesizes audio. `elevenlabs` is the hosted default
+ * (per-user API key); `kokoro` is a self-hosted Kokoro-FastAPI sibling service
+ * the operator points the BFF at via `KOKORO_BASE_URL` (no key, no quota). */
+export const TtsProvider = z.enum(["elevenlabs", "kokoro"]);
+export type TtsProvider = z.infer<typeof TtsProvider>;
+
 /** TTS config exposed to the client. The API key is write-only and NEVER read
  * back — only whether one is configured. */
 export const TtsSettings = z.object({
+  provider: TtsProvider.default("elevenlabs"),
   configured: z.boolean(),
   voiceId: z.string(),
   modelId: z.string(),
@@ -144,6 +151,7 @@ export type TtsSettings = z.infer<typeof TtsSettings>;
 
 /** Partial update. `apiKey` omitted = leave unchanged; null/"" = clear it. */
 export const UpdateTtsSettingsRequest = z.object({
+  provider: TtsProvider.optional(),
   apiKey: z.string().nullable().optional(),
   voiceId: z.string().optional(),
   modelId: z.string().optional(),
