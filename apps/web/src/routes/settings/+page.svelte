@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ImportReadwiseResponse, TtsVoice } from '@lectern/shared';
+	import type { ImportReadwiseResponse, TtsUsage, TtsVoice } from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
@@ -69,6 +69,15 @@
 	let ttsBusy = $state(false);
 	let ttsMsg = $state<string | undefined>(undefined);
 	let ttsError = $state<string | undefined>(undefined);
+	let ttsUsage = $state<TtsUsage | undefined>(undefined);
+	const usagePct = $derived(
+		ttsUsage && ttsUsage.characterLimit > 0
+			? Math.min(100, Math.round((ttsUsage.characterCount / ttsUsage.characterLimit) * 100))
+			: 0
+	);
+	const usageRemaining = $derived(
+		ttsUsage ? Math.max(0, ttsUsage.characterLimit - ttsUsage.characterCount) : 0
+	);
 
 	// ---- Podcast feed ----
 	let podcastFeedUrl = $state('');
@@ -139,6 +148,31 @@
 		} catch {
 			/* key lacks the Voices permission — built-in voices remain available */
 		}
+		await loadTtsUsage();
+	}
+
+	async function loadTtsUsage() {
+		if (!ttsConfigured) {
+			ttsUsage = undefined;
+			return;
+		}
+		try {
+			ttsUsage = await getClient().getTtsUsage();
+		} catch {
+			/* offline, or the key lacks the user-read permission: hide the panel */
+			ttsUsage = undefined;
+		}
+	}
+
+	function formatNumber(n: number): string {
+		return n.toLocaleString();
+	}
+
+	function formatResetDate(iso: string): string {
+		const d = new Date(iso);
+		return Number.isNaN(d.getTime())
+			? ''
+			: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 	}
 
 	async function saveTtsKey(event: SubmitEvent) {
@@ -151,6 +185,7 @@
 			ttsConfigured = s.configured;
 			ttsKey = '';
 			ttsMsg = s.configured ? 'API key saved.' : 'API key cleared.';
+			await loadTtsUsage();
 		} catch (err) {
 			ttsError = err instanceof Error ? err.message : 'Failed to save the key.';
 		} finally {
@@ -480,6 +515,7 @@
 							.then((s) => {
 								ttsConfigured = s.configured;
 								ttsMsg = 'API key cleared.';
+								ttsUsage = undefined;
 							});
 					}}
 				>
@@ -489,6 +525,48 @@
 		</form>
 		{#if ttsMsg}<p class="ok">{ttsMsg}</p>{/if}
 		{#if ttsError}<p class="err">{ttsError}</p>{/if}
+
+		{#if ttsUsage}
+			<div class="usage">
+				<div class="usage-head">
+					<span class="flabel">Usage this period</span>
+					<span class="usage-tier">{ttsUsage.tier}</span>
+				</div>
+				{#if ttsUsage.characterLimit > 0}
+					<div
+						class="meter"
+						class:meter-warn={usagePct >= 80}
+						class:meter-full={usagePct >= 100}
+						role="progressbar"
+						aria-valuenow={usagePct}
+						aria-valuemin="0"
+						aria-valuemax="100"
+					>
+						<div class="meter-fill" style="width: {usagePct}%"></div>
+					</div>
+					<dl class="usage-stats">
+						<div>
+							<dt>Used</dt>
+							<dd>{formatNumber(ttsUsage.characterCount)} / {formatNumber(ttsUsage.characterLimit)}</dd>
+						</div>
+						<div>
+							<dt>Remaining</dt>
+							<dd>{formatNumber(usageRemaining)} chars</dd>
+						</div>
+						{#if ttsUsage.nextResetAt}
+							<div>
+								<dt>Resets</dt>
+								<dd>{formatResetDate(ttsUsage.nextResetAt)}</dd>
+							</div>
+						{/if}
+					</dl>
+				{:else}
+					<p class="hint">
+						{formatNumber(ttsUsage.characterCount)} characters used (this plan reports no limit).
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="stack">
 			<label class="field">
@@ -965,5 +1043,67 @@
 	}
 	.about .link:hover {
 		text-decoration: underline;
+	}
+	.usage {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		padding: 0.85rem 1rem;
+		margin: 0 0 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-alt);
+	}
+	.usage-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+	}
+	.usage-tier {
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-weight: 600;
+		color: var(--accent);
+	}
+	.meter {
+		height: 0.5rem;
+		border-radius: 999px;
+		background: var(--border);
+		overflow: hidden;
+	}
+	.meter-fill {
+		height: 100%;
+		border-radius: inherit;
+		background: var(--accent);
+		transition: width var(--dur-fast) var(--ease);
+	}
+	.meter-warn .meter-fill {
+		background: var(--warning, #d98324);
+	}
+	.meter-full .meter-fill {
+		background: var(--error);
+	}
+	.usage-stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 1.6rem;
+		margin: 0;
+	}
+	.usage-stats > div {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.usage-stats dt {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	.usage-stats dd {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--text);
+		font-variant-numeric: tabular-nums;
 	}
 </style>

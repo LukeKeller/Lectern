@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.13.1',
+		date: '2026-06-04',
+		title: 'Add to podcast from the article menu',
+		changes: [
+			{
+				kind: 'added',
+				text: 'You can now add an article to your podcast feed straight from its ⋯ menu in any list — no need to open the article first. It sits alongside Listen and Add to queue, and shows its progress while the audio renders.'
+			}
+		]
+	},
+	{
 		version: '0.13.0',
 		date: '2026-06-04',
 		title: 'Listen to your articles as a podcast',

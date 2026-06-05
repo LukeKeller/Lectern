@@ -52,6 +52,36 @@ describe("ElevenLabsBackend", () => {
     expect(await tts.listVoices("k")).toEqual([{ id: "abc", name: "Rachel" }]);
   });
 
+  it("maps the subscription payload to the usage shape", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            tier: "creator",
+            status: "active",
+            character_count: 12_345,
+            character_limit: 100_000,
+            next_character_count_reset_unix: 1_750_000_000,
+          }),
+          { status: 200 },
+        ),
+    );
+    const tts = new ElevenLabsBackend({ fetch: fetchMock as unknown as typeof fetch });
+    expect(await tts.getUsage("k")).toEqual({
+      tier: "creator",
+      status: "active",
+      characterCount: 12_345,
+      characterLimit: 100_000,
+      nextResetUnix: 1_750_000_000,
+    });
+  });
+
+  it("throws BackendHttpError on a non-2xx usage response", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 401 }));
+    const tts = new ElevenLabsBackend({ fetch: fetchMock as unknown as typeof fetch });
+    await expect(tts.getUsage("bad")).rejects.toMatchObject({ status: 401 });
+  });
+
   it("throws BackendHttpError on a non-2xx synth response", async () => {
     const fetchMock = vi.fn(async () => new Response("nope", { status: 401 }));
     const tts = new ElevenLabsBackend({ fetch: fetchMock as unknown as typeof fetch });

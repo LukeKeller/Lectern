@@ -30,6 +30,7 @@ import {
   TagsResponse,
   TtsPreviewRequest,
   TtsSettings,
+  TtsUsage,
   TtsVoicesResponse,
   UpdateDocumentRequest,
   UpdateFeedRequest,
@@ -91,7 +92,8 @@ async function synthesizeDocument(
     .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
     .digest("hex");
   const cached = await deps.overlay.getCachedAudio(contentHash);
-  if (cached) return { contentHash, mime: cached.mime, bytes: cached.bytes, charCount: text.length };
+  if (cached)
+    return { contentHash, mime: cached.mime, bytes: cached.bytes, charCount: text.length };
   const bytes = await deps.tts.synthesize(text, {
     apiKey: cfg.apiKey,
     voiceId: cfg.voiceId,
@@ -244,6 +246,21 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       app.log.warn({ err }, "listTtsVoices failed; returning empty list");
       return TtsVoicesResponse.parse({ voices: [] });
     }
+  });
+
+  // ElevenLabs account usage/quota for the configured key (characters spent this
+  // billing period, plan tier, reset date). Read-only and never billed.
+  app.get("/settings/tts/usage", async (_req, reply) => {
+    const cfg = await deps.overlay.getTtsConfig();
+    if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+    const usage = await deps.tts.getUsage(cfg.apiKey);
+    return TtsUsage.parse({
+      tier: usage.tier,
+      status: usage.status,
+      characterCount: usage.characterCount,
+      characterLimit: usage.characterLimit,
+      nextResetAt: usage.nextResetUnix ? new Date(usage.nextResetUnix * 1000).toISOString() : null,
+    });
   });
 
   // Synthesis fires ONLY here, on an explicit client Listen action. Cache-first

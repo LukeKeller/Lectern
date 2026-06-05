@@ -14,11 +14,23 @@ export interface SynthesizeOptions {
   modelId: string;
 }
 
+/** Account usage/quota for a key, normalized from ElevenLabs' subscription shape. */
+export interface TtsUsageInfo {
+  tier: string;
+  status: string | null;
+  characterCount: number;
+  characterLimit: number;
+  /** Epoch seconds when the period counter resets, or null if not reported. */
+  nextResetUnix: number | null;
+}
+
 export interface TtsBackend {
   /** Synthesize speech for plain text, returning mp3 bytes (chunked + joined). */
   synthesize(text: string, opts: SynthesizeOptions): Promise<Buffer>;
   /** Voices available to the account behind `apiKey`. */
   listVoices(apiKey: string): Promise<TtsVoice[]>;
+  /** Usage and quota for the account behind `apiKey`. */
+  getUsage(apiKey: string): Promise<TtsUsageInfo>;
 }
 
 const API = "https://api.elevenlabs.io/v1";
@@ -87,6 +99,34 @@ export class ElevenLabsBackend implements TtsBackend {
     }
     const data = (await res.json()) as { voices?: { voice_id: string; name?: string }[] };
     return (data.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name ?? v.voice_id }));
+  }
+
+  async getUsage(apiKey: string): Promise<TtsUsageInfo> {
+    const res = await this.doFetch(`${API}/user/subscription`, {
+      headers: { "xi-api-key": apiKey },
+    });
+    if (!res.ok) {
+      throw new BackendHttpError(
+        "elevenlabs",
+        res.status,
+        res.headers.get("retry-after"),
+        `get usage failed: ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      tier?: string;
+      status?: string;
+      character_count?: number;
+      character_limit?: number;
+      next_character_count_reset_unix?: number;
+    };
+    return {
+      tier: data.tier ?? "unknown",
+      status: data.status ?? null,
+      characterCount: data.character_count ?? 0,
+      characterLimit: data.character_limit ?? 0,
+      nextResetUnix: data.next_character_count_reset_unix ?? null,
+    };
   }
 }
 
