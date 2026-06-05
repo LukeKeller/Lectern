@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Card } from '@lectern/shared';
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
@@ -44,6 +45,13 @@
 	function coverLines(list: Card[]): Card[] {
 		return list.slice(0, 3);
 	}
+	// The cover art is the first article in the issue that carries an image.
+	function coverArt(list: Card[]): string | null {
+		for (const c of list) if (c.coverImage) return c.coverImage;
+		return null;
+	}
+	// Tags whose cover image failed to load — fall back to the gradient-only cover.
+	const failedArt = new SvelteSet<string>();
 	// Synthetic folios: front matter fills the opening leaves, then each article
 	// spans a couple of pages, giving the contents real ascending page numbers.
 	function folios(list: Card[]): number[] {
@@ -95,6 +103,21 @@
 	{/if}
 {/snippet}
 
+{#snippet coverArtLayers(list: Card[], tag: string, eager = false)}
+	{@const art = coverArt(list)}
+	{#if art && !failedArt.has(tag)}
+		<img
+			class="cover-art"
+			src={art}
+			alt=""
+			aria-hidden="true"
+			loading={eager ? 'eager' : 'lazy'}
+			onerror={() => failedArt.add(tag)}
+		/>
+		<div class="cover-tint" aria-hidden="true"></div>
+	{/if}
+{/snippet}
+
 {#if opened}
 	<MagazineReader
 		magazine={opened.magazine}
@@ -124,6 +147,7 @@
 
 			<section class="hero" style={`--hue:${hue(featured.tag)}`}>
 				<div class="cover hero-cover">
+					{@render coverArtLayers(featured.cards, featured.tag, true)}
 					<span class="masthead">Lectern</span>
 					<h2 class="cover-title">{featured.tag}</h2>
 					<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
@@ -171,6 +195,7 @@
 				{#each rest as issue (issue.tag)}
 					<article class="zine" style={`--hue:${hue(issue.tag)}`}>
 						<button class="cover cover-btn" type="button" onclick={(e) => openMagazine(e, issue)}>
+							{@render coverArtLayers(issue.cards, issue.tag)}
 							<span class="masthead">Lectern</span>
 							<h2 class="cover-title">{issue.tag}</h2>
 							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
@@ -254,18 +279,54 @@
 			hsl(calc(var(--hue) + 32) 60% 24%)
 		);
 	}
-	/* Functional bottom scrim only — keeps the foot text legible over the cover
-	   art. No glossy top highlight (Flat-At-Rest: no decorative sheen); resting
-	   covers carry no shadow, the clickable ones lift on hover (.cover-btn). */
+	/* Cover art: the issue's first article image, desaturated so the brand hue
+	   (applied by .cover-tint above it) can tint it into a cohesive duotone and
+	   white cover text stays legible over any photo. Clipped to the cover shape
+	   by the parent's overflow:hidden + border-radius. Sits behind everything. */
+	.cover > .cover-art {
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		filter: grayscale(1) contrast(1.04) brightness(0.95);
+	}
+	/* Brand-hue duotone wash: multiplies the publication's color over the
+	   desaturated photo so each cover reads in its own brand color. */
+	.cover > .cover-tint {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		background: linear-gradient(
+			158deg,
+			hsl(var(--hue) 58% 42%),
+			hsl(calc(var(--hue) + 32) 62% 26%)
+		);
+		mix-blend-mode: multiply;
+		pointer-events: none;
+	}
+	/* Functional scrims — keep masthead/title and the foot row legible over the
+	   cover art. Top + bottom darkening so text reads even on a bright photo.
+	   No glossy highlight (Flat-At-Rest: no decorative sheen); resting covers
+	   carry no shadow, the clickable ones lift on hover (.cover-btn). */
 	.cover::before {
 		content: '';
 		position: absolute;
 		inset: 0;
-		background: linear-gradient(180deg, transparent 58%, rgba(0, 0, 0, 0.3));
+		z-index: 2;
+		background: linear-gradient(
+			180deg,
+			rgba(0, 0, 0, 0.32) 0%,
+			transparent 30%,
+			transparent 50%,
+			rgba(0, 0, 0, 0.42) 100%
+		);
 		pointer-events: none;
 	}
 	.cover > * {
 		position: relative;
+		z-index: 3;
 	}
 	.masthead {
 		font-family: var(--font-ui);

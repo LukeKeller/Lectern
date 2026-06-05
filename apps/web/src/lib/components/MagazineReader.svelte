@@ -2,6 +2,7 @@
 	import type { Card } from '@lectern/shared';
 	import type { Magazine } from '$lib/magazine';
 	import { onMount, tick } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { getSync } from '$lib/sync';
 	import { getArticleHtml } from '$lib/content';
@@ -20,6 +21,9 @@
 	let html = $state<Record<string, string>>({});
 	let failed = $state<Record<string, boolean>>({});
 	let marked = $state<Record<string, 'read' | 'archived'>>({});
+
+	// Lead images that failed to load, keyed by card id, so we can hide them.
+	const coverFailed = new SvelteSet<string>();
 
 	const title = $derived(
 		magazine.tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
@@ -79,9 +83,13 @@
 		<button class="mr-close" type="button" onclick={onclose}>
 			<Icon name="back" size={16} /> All magazines
 		</button>
+		<p class="mr-masthead">Lectern</p>
 		<h1>{title}</h1>
 		<div class="mr-head-row">
-			<p class="mr-count">{magazine.cards.length} articles</p>
+			<p class="mr-count">
+				{magazine.cards.length}
+				{magazine.cards.length === 1 ? 'article' : 'articles'}
+			</p>
 			<button
 				type="button"
 				class="mr-listen-all"
@@ -158,6 +166,17 @@
 					</div>
 				</div>
 
+				{#if card.coverImage && !coverFailed.has(card.id)}
+					<figure class="mr-lead">
+						<img
+							src={card.coverImage}
+							alt=""
+							loading="lazy"
+							onerror={() => coverFailed.add(card.id)}
+						/>
+					</figure>
+				{/if}
+
 				{#if html[card.id]}
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -175,6 +194,9 @@
 					↑ Contents
 				</button>
 			</article>
+			{#if i < magazine.cards.length - 1}
+				<div class="mr-sep" role="separator" aria-hidden="true">❧</div>
+			{/if}
 		{/each}
 	</div>
 </section>
@@ -185,7 +207,17 @@
 		margin: 0 auto;
 	}
 	.mr-head {
-		margin-bottom: 1.5rem;
+		margin-bottom: var(--space-6);
+		padding-bottom: var(--space-5);
+		border-bottom: 1px solid var(--border);
+	}
+	.mr-masthead {
+		font-family: var(--font-serif);
+		font-size: var(--text-2xs);
+		letter-spacing: 0.32em;
+		text-transform: uppercase;
+		color: var(--accent);
+		margin: 0 0 var(--space-2);
 	}
 	.mr-close {
 		display: inline-flex;
@@ -203,7 +235,10 @@
 		color: var(--text);
 	}
 	.mr-head h1 {
+		font-family: var(--font-serif);
 		font-size: var(--text-2xl);
+		line-height: 1.1;
+		letter-spacing: -0.015em;
 		margin: 0;
 		text-transform: capitalize;
 	}
@@ -300,31 +335,53 @@
 	}
 
 	.mr-article {
-		padding-bottom: 2.5rem;
-		margin-bottom: 2.5rem;
-		border-bottom: 1px solid var(--border);
 		scroll-margin-top: 1.5rem;
 	}
 	.mr-article.archived {
 		opacity: 0.5;
+	}
+
+	/* Editorial separator between articles: a centered ornament with breathing room. */
+	.mr-sep {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-4);
+		margin: var(--space-7) 0;
+		color: var(--text-muted);
+		font-family: var(--font-serif);
+		font-size: var(--text-lg);
+		line-height: 1;
+		user-select: none;
+	}
+	.mr-sep::before,
+	.mr-sep::after {
+		content: '';
+		width: 2.5rem;
+		height: 1px;
+		background: var(--border);
 	}
 	.mr-article-head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 1rem;
-		margin-bottom: 1.25rem;
+		margin-bottom: var(--space-5);
 	}
 	.mr-kicker {
+		display: inline-block;
+		font-family: var(--font-mono, ui-monospace, monospace);
 		font-size: var(--text-2xs);
-		letter-spacing: 0.12em;
+		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		color: var(--text-muted);
+		color: var(--accent);
 	}
 	.mr-article-head h2 {
+		font-family: var(--font-serif);
 		font-size: var(--text-xl);
-		line-height: 1.2;
-		margin: 0.3rem 0 0.5rem;
+		line-height: 1.15;
+		letter-spacing: -0.01em;
+		margin: var(--space-2) 0 var(--space-3);
 	}
 	.mr-article-head h2 a {
 		color: var(--text);
@@ -373,6 +430,18 @@
 		font-size: var(--text-sm);
 	}
 
+	/* Lead figure: a visual anchor at the top of each feature, full measure. */
+	.mr-lead {
+		margin: 0 0 var(--space-5);
+	}
+	.mr-lead img {
+		display: block;
+		width: 100%;
+		max-height: 22rem;
+		object-fit: cover;
+		border-radius: var(--radius);
+	}
+
 	/* Article body typography. The HTML is sanitized upstream. */
 	.mr-body {
 		font-size: var(--text-lg);
@@ -381,6 +450,16 @@
 	}
 	.mr-body :global(p) {
 		margin: 0 0 1.1rem;
+	}
+	/* Serif drop cap on the opening paragraph of each feature. */
+	.mr-body :global(p:first-of-type)::first-letter {
+		float: left;
+		font-family: var(--font-serif);
+		font-size: 3.2em;
+		line-height: 0.72;
+		font-weight: 700;
+		padding: 0.02em 0.08em 0 0;
+		color: var(--accent);
 	}
 	.mr-body :global(h1),
 	.mr-body :global(h2),

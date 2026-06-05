@@ -7,6 +7,62 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
 
+	// Newspaper reading flows DOWN one column then UP for the next when the whole
+	// article is one tall balanced block. To keep scrolling essentially downward,
+	// break the article into short stacked bands: each band is a bounded 2-column
+	// block, and headings/media/quotes/tables become full-width dividers between
+	// bands. Magazine never calls this — it keeps its single-measure flow.
+	type Band = { kind: 'flow' | 'full'; html: string };
+	function splitBands(raw: string): Band[] {
+		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw }];
+		const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html');
+		// Headings, media, quotes, tables and preformatted blocks must break to
+		// full width so they read as section dividers. Lists are left to flow with
+		// the surrounding paragraphs (they're usually short and read fine in column).
+		const FULL = new Set([
+			'FIGURE',
+			'IMG',
+			'TABLE',
+			'PRE',
+			'BLOCKQUOTE',
+			'H1',
+			'H2',
+			'H3',
+			'H4',
+			'HR',
+			'VIDEO',
+			'IFRAME'
+		]);
+		const out: Band[] = [];
+		let buf: string[] = [];
+		let words = 0;
+		const flush = () => {
+			if (buf.length) {
+				out.push({ kind: 'flow', html: buf.join('') });
+				buf = [];
+				words = 0;
+			}
+		};
+		for (const node of Array.from(doc.body.childNodes)) {
+			const el = node.nodeType === 1 ? (node as Element) : null;
+			if (!el && !(node.textContent ?? '').trim()) continue;
+			const tag = el?.tagName ?? '';
+			if (el && FULL.has(tag)) {
+				flush();
+				out.push({ kind: 'full', html: el.outerHTML });
+				continue;
+			}
+			const piece = el ? el.outerHTML : (node.textContent ?? '');
+			const w = (node.textContent ?? '').trim().split(/\s+/).filter(Boolean).length;
+			buf.push(piece);
+			words += w;
+			// ~130 words ≈ 6-8 lines per column, so the up-scroll per band is small.
+			if (words >= 130) flush();
+		}
+		flush();
+		return out.length ? out : [{ kind: 'flow', html: raw }];
+	}
+
 	let {
 		cards,
 		start = 0,
@@ -30,6 +86,9 @@
 
 	const current = $derived(cards[index]);
 	const total = $derived(cards.length);
+	const bands = $derived(
+		kind === 'newspaper' && !loading && !error && html ? splitBands(html) : null
+	);
 	const SKELETON_WIDTHS = [78, 92, 85, 70, 96, 82, 90, 74];
 
 	function byline(card: Card): string {
@@ -154,6 +213,18 @@
 							This article couldn't be loaded here.
 							<a href={resolve('/read/[id]', { id: current.id })}>Open it in the reader</a>.
 						</p>
+					{:else if bands}
+						<div class="fr-body fr-bands">
+							{#each bands as band, i (i)}
+								{#if band.kind === 'full'}
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									<div class="fr-full">{@html band.html}</div>
+								{:else}
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									<div class="fr-band">{@html band.html}</div>
+								{/if}
+							{/each}
+						</div>
 					{:else}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 						<div class="fr-body">{@html html}</div>
@@ -347,26 +418,47 @@
 		white-space: pre;
 	}
 
-	/* Newspaper — justified serif columns with hairline rules. */
+	/* Newspaper — short stacked bands so reading flows downward instead of all the
+	   way down one tall column and back up to the top of the next. */
 	.flip.newspaper .head h1 {
 		font-size: clamp(1.7rem, 4vw, 2.6rem);
 	}
-	.flip.newspaper .fr-body {
-		columns: 19rem;
+	/* The bands wrapper is a plain vertical stack; columns live inside each band. */
+	.fr-bands {
+		display: flex;
+		flex-direction: column;
+	}
+	/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
+	   columns and collapses to a single column on narrow screens. */
+	.fr-band {
+		columns: 2 17rem;
 		column-gap: 2.4rem;
 		column-rule: 1px solid var(--border);
 		text-align: justify;
 		hyphens: auto;
 	}
-	/* Media + headings span the columns so the flow stays readable. */
-	.flip.newspaper .fr-body :global(figure),
-	.flip.newspaper .fr-body :global(img),
-	.flip.newspaper .fr-body :global(pre),
-	.flip.newspaper .fr-body :global(table),
-	.flip.newspaper .fr-body :global(h2) {
-		column-span: all;
+	/* A true full-bleed hairline plus breathing room separates one band from the
+	   next, reading as a restrained editorial rule (not an accent stripe). */
+	.fr-band + .fr-band {
+		margin-top: 1.6em;
+		padding-top: 1.6em;
+		border-top: 1px solid var(--border);
 	}
-	.flip.newspaper .fr-body :global(p:first-of-type)::first-letter {
+	/* Full-width dividers: headings, media, quotes, tables. Generous margins make
+	   them read as section breaks between the column bands. */
+	.fr-full {
+		margin: 1.8em 0;
+	}
+	.fr-full :global(img),
+	.fr-full :global(figure),
+	.fr-full :global(video),
+	.fr-full :global(iframe),
+	.fr-full :global(table),
+	.fr-full :global(pre) {
+		max-width: 100%;
+	}
+	/* Drop cap on the very first paragraph of the first band only. */
+	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-letter {
 		float: left;
 		font-weight: 800;
 		font-size: 3.1em;

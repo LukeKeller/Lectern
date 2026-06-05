@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.12.0',
+		date: '2026-06-04',
+		title: 'Better reading in the newspaper and magazines',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'A newspaper story no longer reads as two full-height columns — running down one and back up to the top of the next. The text is now set in short stacked bands, the way a printed page breaks a story into manageable blocks, so reading flows steadily downward. Headings, photos, and pull quotes span the full width between bands as natural section breaks.'
+			},
+			{
+				kind: 'improved',
+				text: 'Magazine covers now carry real cover art. Each issue borrows the lead article’s image, tinted into the publication’s own colour, so the shelf reads like a rack of distinct titles rather than coloured placeholders.'
+			},
+			{
+				kind: 'improved',
+				text: 'Reading a magazine issue feels more like a feature: a title-page masthead, a lead image to open each article, a drop cap on the first paragraph, and a printer’s ornament marking the break between stories.'
+			}
+		]
+	},
+	{
 		version: '0.11.2',
 		date: '2026-06-04',
 		title: 'A more consistent finish',
