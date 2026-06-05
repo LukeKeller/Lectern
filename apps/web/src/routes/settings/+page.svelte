@@ -547,7 +547,9 @@
 					<dl class="usage-stats">
 						<div>
 							<dt>Used</dt>
-							<dd>{formatNumber(ttsUsage.characterCount)} / {formatNumber(ttsUsage.characterLimit)}</dd>
+							<dd>
+								{formatNumber(ttsUsage.characterCount)} / {formatNumber(ttsUsage.characterLimit)}
+							</dd>
 						</div>
 						<div>
 							<dt>Remaining</dt>
