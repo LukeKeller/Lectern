@@ -42,7 +42,7 @@
 
 <style>
 	.changelog {
-		max-width: 46rem;
+		max-width: 44rem;
 	}
 	.intro {
 		margin-bottom: 2rem;

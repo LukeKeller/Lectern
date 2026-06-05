@@ -206,8 +206,7 @@
 		gap: 0.75rem;
 		padding: 0.6rem 0.9rem;
 		border-bottom: 1px solid var(--border);
-		background: color-mix(in srgb, var(--bg) 90%, transparent);
-		backdrop-filter: blur(10px);
+		background: var(--bg);
 	}
 	.icon {
 		justify-self: start;
@@ -334,7 +333,7 @@
 	.fr-body :global(blockquote) {
 		margin: 1.2em 0;
 		padding-left: 1em;
-		border-left: 3px solid var(--accent-soft);
+		border-left: 3px solid var(--border-strong);
 		color: var(--text-muted);
 		font-style: italic;
 	}

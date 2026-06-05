@@ -171,3 +171,16 @@ The Vite dev server proxies `/api` → `http://127.0.0.1:8788` (the mock); point
   findings in `docs/spikes/D1-findings.md`.
 - No coverage thresholds are configured. When adding a feature, add a colocated `*.test.ts`
   covering branches/edge values; run only the tests you touched unless asked otherwise.
+
+## Design Context
+
+Strategic design context lives in **`PRODUCT.md`** (the source of truth) and the visual
+system in **`DESIGN.md`**. Read them before any UI/design work.
+
+- **Register: product** — app UI where design serves the reading workflow.
+- **Personality: calm, literary, trustworthy** — editorial and paper-like, reading-first;
+  the text leads and the chrome recedes. A calm queue, never a feed.
+- **Not**: busy social feed, sterile corporate SaaS, flashy AI aesthetic (neon/glass/gradients),
+  or a cluttered power-user IDE.
+- **Accessibility: WCAG AAA where feasible** — a headline feature (reading-tuned faces, high
+  contrast theme, reader-controlled type/measure/theme, reduced-motion). Don't erode it.
