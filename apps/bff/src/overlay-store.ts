@@ -29,11 +29,17 @@ import {
   documentAccent,
   documentContent,
   documents,
+  podcastEpisodes,
   rssHighlights,
   savedViews,
   ttsAudio,
 } from "./db/schema";
-import type { DocumentRow, NewDocumentRow } from "./db/schema";
+import type {
+  DocumentRow,
+  NewDocumentRow,
+  NewPodcastEpisodeRow,
+  PodcastEpisodeRow,
+} from "./db/schema";
 import { parseId } from "./ids";
 import {
   mergeOverlay,
@@ -484,6 +490,70 @@ export class DrizzleOverlayStore implements OverlayStore {
         charCount: row.charCount,
       })
       .onConflictDoNothing({ target: ttsAudio.contentHash });
+  }
+
+  // --- podcast feed (tokenized RSS of rendered episodes) ---
+  /** The feed token if one has been minted, else null. */
+  async getPodcastToken(): Promise<string | null> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "podcast"));
+    const v = (row?.value ?? {}) as Record<string, unknown>;
+    return typeof v.feedToken === "string" && v.feedToken ? v.feedToken : null;
+  }
+
+  /** The feed token, minting (and persisting) one on first use. */
+  async ensurePodcastToken(): Promise<string> {
+    const existing = await this.getPodcastToken();
+    return existing ?? this.regeneratePodcastToken();
+  }
+
+  /** Mint a fresh feed token, revoking the previous URL. */
+  async regeneratePodcastToken(): Promise<string> {
+    const token = randomUUID().replace(/-/g, "");
+    const value = { feedToken: token };
+    await this.db
+      .insert(appSettings)
+      .values({ key: "podcast", value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+    return token;
+  }
+
+  /** Add (or refresh) a podcast episode for a document. Idempotent per document;
+   *  `addedAt` is preserved on re-add so the feed order is stable. */
+  async addPodcastEpisode(row: NewPodcastEpisodeRow): Promise<void> {
+    await this.db
+      .insert(podcastEpisodes)
+      .values(row)
+      .onConflictDoUpdate({
+        target: podcastEpisodes.documentId,
+        set: {
+          contentHash: row.contentHash,
+          title: row.title,
+          sourceUrl: row.sourceUrl,
+          excerpt: row.excerpt,
+          coverImage: row.coverImage,
+          author: row.author,
+          mime: row.mime,
+          byteLength: row.byteLength,
+          durationSeconds: row.durationSeconds,
+        },
+      });
+  }
+
+  /** All published episodes, newest first (drives the feed and the episode count). */
+  async listPodcastEpisodes(): Promise<PodcastEpisodeRow[]> {
+    return this.db.select().from(podcastEpisodes).orderBy(desc(podcastEpisodes.addedAt));
+  }
+
+  /** A single episode by document id, or null if it isn't published. */
+  async getPodcastEpisode(documentId: string): Promise<PodcastEpisodeRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(podcastEpisodes)
+      .where(eq(podcastEpisodes.documentId, documentId));
+    return row ?? null;
   }
 
   /**

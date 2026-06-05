@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.13.0',
+		date: '2026-06-04',
+		title: 'Listen to your articles as a podcast',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Turn any saved article into a podcast episode. Open an article and tap the new RSS button to have it read aloud and added to your own private podcast feed — then subscribe in Apple Podcasts, Pocket Casts, Overcast, or any podcast app and listen anywhere, even offline. Find your personal feed URL under Settings → Podcast feed (keep it private — anyone with the link can hear your episodes; you can regenerate it any time to revoke old links).'
+			}
+		]
+	},
+	{
 		version: '0.12.0',
 		date: '2026-06-04',
 		title: 'Better reading in the newspaper and magazines',

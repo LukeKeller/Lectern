@@ -16,6 +16,8 @@ import {
   ListDocumentsQuery,
   ListDocumentsResponse,
   PlayerState,
+  PodcastEpisode,
+  PodcastSettings,
   SavedView,
   SaveDocumentRequest,
   SearchResponse,
@@ -231,6 +233,29 @@ export class LecternClient {
       mime: res.headers.get("content-type") ?? "audio/mpeg",
       contentHash: res.headers.get("x-tts-content-hash") ?? "",
     };
+  }
+
+  /**
+   * Publish a document as a podcast episode: renders (or reuses cached) audio
+   * server-side and records the episode. Returns episode metadata only — no
+   * audio bytes, so the caller never starts playback. Fires ElevenLabs synthesis
+   * on a cache miss, like Listen, so it's an explicit user action.
+   */
+  addToPodcast(id: string, title?: string) {
+    return this.request("POST", `/documents/${id}/podcast`, {
+      body: title ? { title } : {},
+      schema: PodcastEpisode,
+    });
+  }
+
+  /** The podcast feed subscribe URL (token baked in) and current episode count. */
+  getPodcastSettings() {
+    return this.request("GET", "/settings/podcast", { schema: PodcastSettings });
+  }
+
+  /** Rotate the podcast feed token, revoking the previous subscribe URL. */
+  regeneratePodcastFeed() {
+    return this.request("POST", "/settings/podcast/regenerate", { schema: PodcastSettings });
   }
 
   /** Fetch a short spoken sample of a voice (binary; bypasses the JSON helper). */

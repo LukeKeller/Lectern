@@ -70,10 +70,59 @@
 	let ttsMsg = $state<string | undefined>(undefined);
 	let ttsError = $state<string | undefined>(undefined);
 
+	// ---- Podcast feed ----
+	let podcastFeedUrl = $state('');
+	let podcastEpisodeCount = $state(0);
+	let podcastBusy = $state(false);
+	let podcastCopied = $state(false);
+	let podcastError = $state<string | undefined>(undefined);
+
 	onMount(() => {
 		token = getToken() ?? '';
 		void loadTts();
+		void loadPodcast();
 	});
+
+	async function loadPodcast() {
+		try {
+			const s = await getClient().getPodcastSettings();
+			podcastFeedUrl = s.feedUrl;
+			podcastEpisodeCount = s.episodeCount;
+		} catch {
+			/* offline or not configured: leave the feed section empty */
+		}
+	}
+
+	async function copyPodcastUrl() {
+		try {
+			await navigator.clipboard.writeText(podcastFeedUrl);
+			podcastCopied = true;
+			setTimeout(() => (podcastCopied = false), 2000);
+		} catch {
+			podcastError = 'Could not copy — select and copy the URL manually.';
+		}
+	}
+
+	async function regeneratePodcast() {
+		if (podcastBusy) return;
+		if (
+			!confirm(
+				'Generate a new feed URL? Podcast apps subscribed to the current URL will stop updating.'
+			)
+		)
+			return;
+		podcastBusy = true;
+		podcastError = undefined;
+		try {
+			const s = await getClient().regeneratePodcastFeed();
+			podcastFeedUrl = s.feedUrl;
+			podcastEpisodeCount = s.episodeCount;
+		} catch (err) {
+			podcastError = err instanceof Error ? err.message : 'Failed to regenerate the feed URL.';
+		} finally {
+			podcastBusy = false;
+		}
+	}
 
 	async function loadTts() {
 		try {
@@ -486,6 +535,35 @@
 				{#if ttsVoicesNote}<p class="hint">{ttsVoicesNote}</p>{/if}
 			</label>
 		</div>
+	</section>
+
+	<section>
+		<h2>Podcast feed</h2>
+		<p class="hint">
+			Subscribe any podcast app to listen to articles you publish. On an article, tap the
+			<span class="mono">RSS</span> button to render its audio and add it as an episode. The feed URL
+			is private — anyone with it can hear your episodes, so treat it like a password.
+		</p>
+		<label class="field">
+			<span class="flabel"
+				>Feed URL ({podcastEpisodeCount} episode{podcastEpisodeCount === 1 ? '' : 's'})</span
+			>
+			<div class="row">
+				<input
+					type="text"
+					readonly
+					value={podcastFeedUrl}
+					placeholder="Add an episode to mint your feed URL"
+				/>
+				<button type="button" class="btn ghost" disabled={!podcastFeedUrl} onclick={copyPodcastUrl}>
+					{podcastCopied ? 'Copied' : 'Copy'}
+				</button>
+				<button type="button" class="btn ghost" disabled={podcastBusy} onclick={regeneratePodcast}>
+					Regenerate
+				</button>
+			</div>
+		</label>
+		{#if podcastError}<p class="err">{podcastError}</p>{/if}
 	</section>
 
 	<section class="about">

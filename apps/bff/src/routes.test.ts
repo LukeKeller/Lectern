@@ -29,6 +29,7 @@ import {
   type Overlay,
   type OverlayPatch,
   type OverlayStore,
+  type PodcastEpisodeRecord,
 } from "./unify";
 
 // ---- In-memory fakes (implement the real interfaces; no network) -----------
@@ -431,6 +432,35 @@ class FakeOverlayStore implements OverlayStore {
   async setPlayerState(state: PlayerState) {
     this.player = PlayerState.parse({ ...state, updatedAt: "2026-06-04T00:00:00Z" });
     return this.player;
+  }
+
+  podcastToken: string | null = null;
+  podcastEpisodes = new Map<string, PodcastEpisodeRecord>();
+  async getPodcastToken() {
+    return this.podcastToken;
+  }
+  async ensurePodcastToken() {
+    if (!this.podcastToken) this.podcastToken = "feedtoken";
+    return this.podcastToken;
+  }
+  async regeneratePodcastToken() {
+    this.podcastToken = `feedtoken-${this.podcastEpisodes.size}-rotated`;
+    return this.podcastToken;
+  }
+  async addPodcastEpisode(row: Omit<PodcastEpisodeRecord, "addedAt">) {
+    const existing = this.podcastEpisodes.get(row.documentId);
+    this.podcastEpisodes.set(row.documentId, {
+      ...row,
+      addedAt: existing?.addedAt ?? new Date("2026-06-04T00:00:00Z"),
+    });
+  }
+  async listPodcastEpisodes() {
+    return [...this.podcastEpisodes.values()].sort(
+      (a, b) => b.addedAt.getTime() - a.addedAt.getTime(),
+    );
+  }
+  async getPodcastEpisode(documentId: string) {
+    return this.podcastEpisodes.get(documentId) ?? null;
   }
 }
 
@@ -1342,6 +1372,117 @@ describe("text-to-speech", () => {
       headers: auth,
     });
     expect((reloaded.json() as { queue: { id: string }[] }).queue[0]!.id).toBe("miniflux:1");
+    await a.close();
+  });
+});
+
+describe("podcast", () => {
+  beforeEach(async () => {
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", title: "My Article" }),
+    );
+    await poll();
+  });
+
+  it("returns 409 when publishing with no key configured", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/podcast",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(harness.deps.tts.calls).toHaveLength(0);
+    await a.close();
+  });
+
+  it("renders once, returns episode metadata, and is idempotent per document", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/podcast",
+      headers: auth,
+    });
+    expect(first.statusCode).toBe(201);
+    const ep = first.json() as Record<string, unknown>;
+    expect(ep.documentId).toBe("miniflux:1");
+    expect(ep.title).toBe("My Article");
+    expect(ep.byteLength).toBeGreaterThan(0);
+    // Title is spoken before the body, exactly like Listen.
+    expect(harness.deps.tts.calls[0]!.text).toBe("My Article.\n\nrss");
+    expect(harness.deps.tts.calls).toHaveLength(1);
+
+    // Re-publishing reuses the cached audio (no second ElevenLabs call) and keeps
+    // a single episode for the document.
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/podcast",
+      headers: auth,
+    });
+    expect(second.statusCode).toBe(201);
+    expect(harness.deps.tts.calls).toHaveLength(1);
+
+    const settings = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/podcast",
+      headers: auth,
+    });
+    const s = settings.json() as { feedUrl: string; episodeCount: number };
+    expect(s.episodeCount).toBe(1);
+    expect(s.feedUrl).toMatch(/\/podcast\/.+\/feed\.xml$/);
+    await a.close();
+  });
+
+  it("serves a tokenized RSS feed and 404s an unknown token", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/podcast",
+      headers: auth,
+    });
+    const token = await harness.deps.overlay.ensurePodcastToken();
+
+    const bad = await a.inject({ method: "GET", url: "/podcast/not-the-token/feed.xml" });
+    expect(bad.statusCode).toBe(404);
+
+    const feed = await a.inject({ method: "GET", url: `/podcast/${token}/feed.xml` });
+    expect(feed.statusCode).toBe(200);
+    expect(feed.headers["content-type"]).toContain("application/rss+xml");
+    expect(feed.body).toContain("<itunes:");
+    expect(feed.body).toContain("My Article");
+    expect(feed.body).toContain("<enclosure");
+    expect(feed.body).toContain(`/podcast/${token}/ep/miniflux%3A1.mp3`);
+    await a.close();
+  });
+
+  it("streams episode audio and honours Range requests", async () => {
+    harness.deps.overlay.ttsConfig.apiKey = "sk";
+    const a = app();
+    await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/podcast",
+      headers: auth,
+    });
+    const token = await harness.deps.overlay.ensurePodcastToken();
+    const url = `/podcast/${token}/ep/miniflux:1.mp3`;
+
+    const full = await a.inject({ method: "GET", url });
+    expect(full.statusCode).toBe(200);
+    expect(full.headers["content-type"]).toContain("audio/mpeg");
+    expect(full.headers["accept-ranges"]).toBe("bytes");
+    const total = Number(full.headers["content-length"]);
+    expect(total).toBeGreaterThan(0);
+
+    const ranged = await a.inject({ method: "GET", url, headers: { range: "bytes=0-3" } });
+    expect(ranged.statusCode).toBe(206);
+    expect(ranged.headers["content-range"]).toBe(`bytes 0-3/${total}`);
+    expect(Number(ranged.headers["content-length"])).toBe(4);
+
+    const missing = await a.inject({ method: "GET", url: `/podcast/${token}/ep/miniflux:999.mp3` });
+    expect(missing.statusCode).toBe(404);
     await a.close();
   });
 });
