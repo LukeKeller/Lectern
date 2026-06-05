@@ -127,6 +127,27 @@ export const ttsAudio = pgTable("tts_audio", {
 });
 
 /**
+ * Published podcast episodes: one saved article rendered to audio and exposed
+ * through the tokenized RSS feed. The row is a self-contained snapshot
+ * (title/url/excerpt/cover taken at add-time) so the feed survives the source
+ * document being un-saved or re-voiced; the audio bytes live in `tts_audio`,
+ * joined by `content_hash`. One episode per document (PK).
+ */
+export const podcastEpisodes = pgTable("podcast_episodes", {
+  documentId: text("document_id").primaryKey(),
+  contentHash: text("content_hash").notNull(),
+  title: text("title").notNull(),
+  sourceUrl: text("source_url"),
+  excerpt: text("excerpt"),
+  coverImage: text("cover_image"),
+  author: text("author"),
+  mime: text("mime").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  durationSeconds: integer("duration_seconds").notNull().default(0),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Per-document reader accent colour, derived server-side from the cover image
  * (dominant, contrast-clamped). Separate table so it survives backend re-ingest.
  * `color` is a hex string, or `''` to record "computed, no usable colour" so the
@@ -157,3 +178,5 @@ export type DocumentContentRow = typeof documentContent.$inferSelect;
 export type NewDocumentContentRow = typeof documentContent.$inferInsert;
 export type AppSettingRow = typeof appSettings.$inferSelect;
 export type TtsAudioRow = typeof ttsAudio.$inferSelect;
+export type PodcastEpisodeRow = typeof podcastEpisodes.$inferSelect;
+export type NewPodcastEpisodeRow = typeof podcastEpisodes.$inferInsert;

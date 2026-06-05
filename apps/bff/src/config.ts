@@ -34,6 +34,9 @@ const EnvSchema = z.object({
   IMAP_EXCLUDE_SENDERS: z.string().default(""),
   /** When set, the BFF serves the prebuilt web SPA from this dir (production single-service). */
   LECTERN_WEB_DIR: z.string().default(""),
+  /** Public origin (scheme + host) used to build absolute podcast feed/enclosure
+   * URLs. Empty = derive from the request's forwarded headers (default). */
+  LECTERN_PUBLIC_URL: z.string().default(""),
   /** Set to "1" to start the pg-boss polling jobs. */
   LECTERN_ENABLE_JOBS: z.string().default(""),
   /** Set to "1" to enable the newsletter mailbox poll (requires IMAP_* + jobs). */

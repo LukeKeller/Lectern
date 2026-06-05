@@ -15,6 +15,8 @@ import {
   ListDocumentsQuery,
   ListDocumentsResponse,
   PlayerState,
+  PodcastEpisode,
+  PodcastSettings,
   SaveDocumentRequest,
   SavedView,
   SearchQuery,
@@ -39,6 +41,7 @@ import {
 import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
 import { accentFromUrl } from "./palette";
+import { podcastFeedUrl } from "./podcast";
 import { parseId } from "./ids";
 import { htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
@@ -52,6 +55,57 @@ import {
 } from "./mutations";
 
 class NotFoundError extends Error {}
+
+/** Carries an HTTP status the central error handler echoes back (4xx → that code
+ * with `{ error: message }`). Used for the TTS pre-conditions (409 no key, 422
+ * no readable text) shared by the Listen and podcast synthesis paths. */
+class HttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Synthesize (or fetch from the content-hash cache) read-aloud audio for a
+ * document. Shared by the Listen endpoint and the podcast publish endpoint so
+ * they render byte-identical clips (and never double-bill ElevenLabs). The
+ * optional `title` is spoken first so each article announces itself. Throws
+ * `HttpError(409)` when no key is configured and `HttpError(422)` when the
+ * document has no readable text.
+ */
+async function synthesizeDocument(
+  deps: AppDeps,
+  id: string,
+  title: string | undefined,
+): Promise<{ contentHash: string; mime: string; bytes: Buffer; charCount: number }> {
+  const cfg = await deps.overlay.getTtsConfig();
+  if (!cfg.apiKey) throw new HttpError(409, "TTS is not configured");
+  const body = stripUrls(htmlToText(await loadContentHtml(deps, id)));
+  if (!body) throw new HttpError(422, "no readable text for this document");
+  const announce = title?.trim();
+  const text = announce ? `${announce}.\n\n${body}` : body;
+  const contentHash = createHash("sha256")
+    .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
+    .digest("hex");
+  const cached = await deps.overlay.getCachedAudio(contentHash);
+  if (cached) return { contentHash, mime: cached.mime, bytes: cached.bytes, charCount: text.length };
+  const bytes = await deps.tts.synthesize(text, {
+    apiKey: cfg.apiKey,
+    voiceId: cfg.voiceId,
+    modelId: cfg.modelId,
+  });
+  await deps.overlay.putCachedAudio({
+    contentHash,
+    documentId: id,
+    mime: "audio/mpeg",
+    bytes,
+    charCount: text.length,
+  });
+  return { contentHash, mime: "audio/mpeg", bytes, charCount: text.length };
+}
 
 /** Short sample read aloud when auditioning a voice (kept brief to bound cost). */
 const TTS_PREVIEW_TEXT = "This is a preview of how this voice sounds reading your articles aloud.";
@@ -199,41 +253,76 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     async (req, reply) => {
       const { id } = req.params;
       requireParsed(id);
-      const cfg = await deps.overlay.getTtsConfig();
-      if (!cfg.apiKey) return reply.code(409).send({ error: "TTS is not configured" });
+      // `title`, when present, is spoken before the body so each article announces
+      // itself (e.g. listening through a magazine issue). Baked into the per-article
+      // audio so the same clip is reused from the card/reader (and the podcast feed).
       const { title } = SynthesizeAudioRequest.parse(req.body ?? {});
-      const body = stripUrls(htmlToText(await loadContentHtml(deps, id)));
-      if (!body) return reply.code(422).send({ error: "no readable text for this document" });
-      // Speak the title first so each article announces itself (e.g. when listening
-      // through a whole magazine issue). Baked into the per-article audio so the
-      // same clip is reused from the card/reader too.
-      const announce = title?.trim();
-      const text = announce ? `${announce}.\n\n${body}` : body;
-      const contentHash = createHash("sha256")
-        .update(`${cfg.voiceId}\n${cfg.modelId}\n${text}`)
-        .digest("hex");
-      let audio = await deps.overlay.getCachedAudio(contentHash);
-      if (!audio) {
-        const bytes = await deps.tts.synthesize(text, {
-          apiKey: cfg.apiKey,
-          voiceId: cfg.voiceId,
-          modelId: cfg.modelId,
-        });
-        audio = { mime: "audio/mpeg", bytes };
-        await deps.overlay.putCachedAudio({
-          contentHash,
-          documentId: id,
-          mime: audio.mime,
-          bytes,
-          charCount: text.length,
-        });
-      }
+      const audio = await synthesizeDocument(deps, id, title);
       reply.header("content-type", audio.mime);
-      reply.header("x-tts-content-hash", contentHash);
+      reply.header("x-tts-content-hash", audio.contentHash);
       reply.header("cache-control", "private, max-age=31536000, immutable");
       return reply.send(audio.bytes);
     },
   );
+
+  // Publish a document as a podcast episode: render (or reuse cached) audio and
+  // record a self-contained episode row. Explicit opt-in — fires synthesis like
+  // Listen, but returns metadata only (no bytes), so the UI never starts playback.
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    "/documents/:id/podcast",
+    async (req, reply) => {
+      const { id } = req.params;
+      requireParsed(id);
+      const card = await loadDocument(deps, id);
+      const announce = SynthesizeAudioRequest.parse(req.body ?? {}).title ?? card.title;
+      const audio = await synthesizeDocument(deps, id, announce);
+      // 128 kbps CBR → bytes*8/bitrate seconds. An estimate (no decode); good
+      // enough for the <itunes:duration> hint.
+      const durationSeconds = Math.round((audio.bytes.length * 8) / 128_000);
+      const title = card.title || "Untitled";
+      await deps.overlay.addPodcastEpisode({
+        documentId: id,
+        contentHash: audio.contentHash,
+        title,
+        sourceUrl: card.url ?? null,
+        excerpt: card.excerpt ?? null,
+        coverImage: card.coverImage ?? null,
+        author: card.author ?? null,
+        mime: audio.mime,
+        byteLength: audio.bytes.length,
+        durationSeconds,
+      });
+      const episode = await deps.overlay.getPodcastEpisode(id);
+      reply.code(201);
+      return PodcastEpisode.parse({
+        documentId: id,
+        title,
+        durationSeconds,
+        byteLength: audio.bytes.length,
+        addedAt: (episode?.addedAt ?? new Date()).toISOString(),
+      });
+    },
+  );
+
+  // Podcast feed settings: the subscribe URL (token minted on first read) + count.
+  app.get("/settings/podcast", async (req) => {
+    const token = await deps.overlay.ensurePodcastToken();
+    const episodes = await deps.overlay.listPodcastEpisodes();
+    return PodcastSettings.parse({
+      feedUrl: podcastFeedUrl(req, token),
+      episodeCount: episodes.length,
+    });
+  });
+
+  // Rotate the feed token, revoking the old subscribe URL.
+  app.post("/settings/podcast/regenerate", async (req) => {
+    const token = await deps.overlay.regeneratePodcastToken();
+    const episodes = await deps.overlay.listPodcastEpisodes();
+    return PodcastSettings.parse({
+      feedUrl: podcastFeedUrl(req, token),
+      episodeCount: episodes.length,
+    });
+  });
 
   // Short voice sample for auditioning. Same cache-first machinery (keyed by a
   // "preview" content hash) so re-auditioning a voice never re-bills.

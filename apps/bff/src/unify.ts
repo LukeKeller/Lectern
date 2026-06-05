@@ -24,6 +24,23 @@ import type {
  * each backend's native state, kept here so D4's mutation routes reuse them.
  */
 
+/** A published podcast episode row (self-contained snapshot of the source card
+ * plus a pointer to the cached audio by content hash). Kept here so the store
+ * interface stays decoupled from the drizzle schema. */
+export interface PodcastEpisodeRecord {
+  documentId: string;
+  contentHash: string;
+  title: string;
+  sourceUrl: string | null;
+  excerpt: string | null;
+  coverImage: string | null;
+  author: string | null;
+  mime: string;
+  byteLength: number;
+  durationSeconds: number;
+  addedAt: Date;
+}
+
 // ---- Pure progress + state mappers -----------------------------------------
 
 /** Readeck stores reading progress as an integer 0..100; the model uses 0..1. */
@@ -245,6 +262,20 @@ export interface OverlayStore {
     bytes: Buffer;
     charCount: number;
   }): Promise<void>;
+
+  // --- podcast feed (tokenized RSS of rendered episodes) ---
+  /** The feed token if one has been minted, else null. */
+  getPodcastToken(): Promise<string | null>;
+  /** The feed token, minting (and persisting) one on first use. */
+  ensurePodcastToken(): Promise<string>;
+  /** Mint a fresh feed token, revoking the previous URL. */
+  regeneratePodcastToken(): Promise<string>;
+  /** Add (or refresh) a podcast episode for a document (idempotent per document). */
+  addPodcastEpisode(row: Omit<PodcastEpisodeRecord, "addedAt">): Promise<void>;
+  /** All published episodes, newest first. */
+  listPodcastEpisodes(): Promise<PodcastEpisodeRecord[]>;
+  /** A single episode by document id, or null if it isn't published. */
+  getPodcastEpisode(documentId: string): Promise<PodcastEpisodeRecord | null>;
 
   // --- adaptive reader accent (cover-derived colour cache) ---
   /** Cached accent: a hex string, null for "computed, no colour", or undefined

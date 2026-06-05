@@ -166,6 +166,28 @@ export type TtsPreviewRequest = z.infer<typeof TtsPreviewRequest>;
 export const SynthesizeAudioRequest = z.object({ title: z.string().optional() });
 export type SynthesizeAudioRequest = z.infer<typeof SynthesizeAudioRequest>;
 
+// ---- Podcast feed ----------------------------------------------------------
+
+/** A published podcast episode: one saved article rendered to audio and exposed
+ * through the tokenized RSS feed. The audio bytes live in the TTS cache; this is
+ * the feed-facing metadata returned when an episode is added. */
+export const PodcastEpisode = z.object({
+  documentId: z.string(),
+  title: z.string(),
+  durationSeconds: z.number().int().nonnegative(),
+  byteLength: z.number().int().nonnegative(),
+  addedAt: z.string(),
+});
+export type PodcastEpisode = z.infer<typeof PodcastEpisode>;
+
+/** Podcast settings surfaced in the UI: the subscribe URL (token baked in) and
+ * how many episodes the feed currently holds. */
+export const PodcastSettings = z.object({
+  feedUrl: z.string(),
+  episodeCount: z.number().int().nonnegative(),
+});
+export type PodcastSettings = z.infer<typeof PodcastSettings>;
+
 // ---- Listen player state (synced across devices) ---------------------------
 
 export const PlayerQueueItem = z.object({ id: z.string(), title: z.string() });
@@ -459,6 +481,34 @@ export const endpoints: Endpoint[] = [
     summary: "Synthesize (or return cached) read-aloud audio for a document",
     tags: ["tts"],
     body: SynthesizeAudioRequest,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/documents/:id/podcast",
+    operationId: "addPodcastEpisode",
+    summary: "Render a document to audio and publish it as a podcast episode",
+    tags: ["tts"],
+    body: SynthesizeAudioRequest,
+    response: PodcastEpisode,
+    status: 201,
+  },
+  {
+    method: "GET",
+    path: "/settings/podcast",
+    operationId: "getPodcastSettings",
+    summary: "Get the podcast feed subscribe URL and episode count",
+    tags: ["tts"],
+    response: PodcastSettings,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/settings/podcast/regenerate",
+    operationId: "regeneratePodcastFeed",
+    summary: "Rotate the podcast feed token (revokes the previous URL)",
+    tags: ["tts"],
+    response: PodcastSettings,
     status: 200,
   },
   {

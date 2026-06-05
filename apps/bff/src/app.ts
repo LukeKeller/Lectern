@@ -6,6 +6,7 @@ import type { OverlayStore, UnificationService } from "./unify";
 import type { TtsBackend } from "./backends/elevenlabs";
 import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
+import { registerPodcastRoutes } from "./podcast";
 import { buildRealDeps } from "./deps";
 import { BackendHttpError } from "./errors";
 import fastifyStatic from "@fastify/static";
@@ -87,6 +88,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     },
     { prefix: "/api/v1" },
   );
+  // Public, token-gated podcast feed + episode audio (no bearer auth — podcast
+  // clients can't send headers). Registered before the SPA fallback so the
+  // notFound handler never swallows these routes.
+  registerPodcastRoutes(app, resolved);
   registerWebApp(app, resolved);
   return app;
 }

@@ -567,6 +567,25 @@
 		}
 	}
 
+	/** Publish this article to the podcast feed: renders audio server-side and adds
+	 *  an episode. Deliberately does NOT start playback — feedback is the rail button
+	 *  flipping to a check on success. */
+	let podcastState = $state<'idle' | 'busy' | 'done' | 'error'>('idle');
+	let podcastMsg = $state<string | undefined>(undefined);
+	async function addToPodcast() {
+		if (!card || podcastState === 'busy') return;
+		podcastState = 'busy';
+		podcastMsg = 'Rendering audio for your podcast feed…';
+		try {
+			await getClient().addToPodcast(card.id, card.title);
+			podcastState = 'done';
+			podcastMsg = 'Added to your podcast feed.';
+		} catch (err) {
+			podcastState = 'error';
+			podcastMsg = err instanceof Error ? err.message : 'Could not add to the podcast feed.';
+		}
+	}
+
 	async function loadDoc(refresh = false) {
 		const docId = id;
 		if (!docId) {
@@ -669,6 +688,9 @@
 		<Icon name="back" size={18} />
 		<span>Back</span>
 	</button>
+	<span class="sr-status" role="status" aria-live="polite">
+		{podcastState === 'idle' ? '' : podcastMsg}
+	</span>
 	<div class="bar-right">
 		<button
 			type="button"
@@ -712,6 +734,18 @@
 				aria-label="Listen to this article"
 			>
 				<Icon name="headphones" size={16} />
+			</button>
+			<button
+				type="button"
+				class="rail-btn rail-podcast"
+				class:on={podcastState === 'done'}
+				class:spin={podcastState === 'busy'}
+				disabled={podcastState === 'busy'}
+				onclick={addToPodcast}
+				title={podcastMsg ?? 'Add to podcast feed'}
+				aria-label="Add this article to your podcast feed"
+			>
+				<Icon name={podcastState === 'done' ? 'check' : 'rss'} size={16} />
 			</button>
 		{/if}
 		<button
@@ -1329,6 +1363,17 @@
 		.bar {
 			position: static;
 		}
+	}
+	.sr-status {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 	.rail-btn {
 		display: inline-flex;

@@ -17,6 +17,8 @@ import {
   ListDocumentsResponse,
   SaveDocumentRequest,
   PlayerState,
+  PodcastEpisode,
+  PodcastSettings,
   SavedView,
   SyncPushRequest,
   SyncPullResponse,
@@ -267,6 +269,9 @@ const mockTts = {
   modelId: "eleven_flash_v2_5",
 };
 let mockPlayer = PlayerState.parse({});
+// In-memory podcast state for dev: a feed token + the set of published doc ids.
+let mockPodcastToken = "mocktoken";
+const mockPodcast = new Set<string>();
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
@@ -449,6 +454,27 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     res.end(bytes);
     return;
   }
+  if (path === "/settings/podcast" && method === "GET") {
+    return send(
+      res,
+      200,
+      PodcastSettings.parse({
+        feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
+        episodeCount: mockPodcast.size,
+      }),
+    );
+  }
+  if (path === "/settings/podcast/regenerate" && method === "POST") {
+    mockPodcastToken = `mocktoken-${mockPodcast.size}`;
+    return send(
+      res,
+      200,
+      PodcastSettings.parse({
+        feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
+        episodeCount: mockPodcast.size,
+      }),
+    );
+  }
   if (path === "/settings/player" && method === "GET") {
     return send(res, 200, PlayerState.parse(mockPlayer));
   }
@@ -457,11 +483,28 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(res, 200, mockPlayer);
   }
 
-  const doc = path.match(/^\/documents\/([^/]+)(\/content|\/highlights|\/audio|\/accent)?$/);
+  const doc = path.match(
+    /^\/documents\/([^/]+)(\/content|\/highlights|\/audio|\/accent|\/podcast)?$/,
+  );
   if (doc) {
     const id = doc[1]!;
     const sub = doc[2];
     if (sub === "/accent" && method === "GET") return send(res, 200, { color: null });
+    if (sub === "/podcast" && method === "POST") {
+      if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
+      mockPodcast.add(id);
+      return send(
+        res,
+        201,
+        PodcastEpisode.parse({
+          documentId: id,
+          title: (body as { title?: string })?.title ?? `Article ${id}`,
+          durationSeconds: 180,
+          byteLength: 2_880_000,
+          addedAt: new Date().toISOString(),
+        }),
+      );
+    }
     if (sub === "/audio" && method === "POST") {
       if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
       // Placeholder bytes so the SPA can build an object URL + exercise the player
