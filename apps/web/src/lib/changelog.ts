@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.19.0',
+		date: '2026-06-06',
+		title: 'Full post text from feeds like Bluesky',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Feeds that publish the whole post in the feed itself — Bluesky and other short-form sources — now show their full text in the reader instead of a near-blank page. Lectern keeps whichever copy is richer: a fetched full article when a site only syndicates a summary, or the feed body when the page itself cannot be fetched. Posts you had already opened repair themselves the next time you read them.'
+			}
+		]
+	},
+	{
 		version: '0.18.0',
 		date: '2026-06-06',
 		title: 'A calm Home, and a tidier sidebar',

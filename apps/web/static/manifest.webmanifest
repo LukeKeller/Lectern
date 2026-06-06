@@ -43,9 +43,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Inbox",
-      "short_name": "Inbox",
-      "description": "Triage your inbox",
+      "name": "Home",
+      "short_name": "Home",
+      "description": "Your reading at a glance",
       "url": "/"
     },
     {

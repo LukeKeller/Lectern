@@ -288,11 +288,13 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   async putContent(id: string, html: string): Promise<void> {
-    if (!html.trim()) return;
     const charCount = html
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim().length;
+    // Don't cache a body with no readable text (e.g. empty `<p></p>` markup from
+    // a failed scrape); leave it uncached so it re-fetches until real content.
+    if (charCount === 0) return;
     await this.db
       .insert(documentContent)
       .values({ documentId: id, html, charCount })

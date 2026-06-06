@@ -9,7 +9,7 @@ import type {
 } from "@lectern/shared";
 import { BackendHttpError } from "../errors";
 import { extractCoverImage } from "../cover";
-import { htmlToText, snippet } from "../html-text";
+import { htmlToText, richerHtml, snippet } from "../html-text";
 
 /**
  * MiniFlux RSS adapter. Talks to `/v1/*`, normalizing entries into `Card`s.
@@ -260,7 +260,31 @@ export class MinifluxBackend implements RssBackend {
     return { items, nextCursor: nextOffset < body.total ? String(nextOffset) : null };
   }
 
+  /**
+   * Body HTML for a feed entry. Compares the feed-provided body (`entry.content`)
+   * with MiniFlux's scraped copy (`fetch-content`) and keeps whichever has more
+   * readable text: scraping wins for excerpt-only feeds that link to a full
+   * article; the feed body wins for JS-only sources like Bluesky, whose post text
+   * lives in the RSS item but whose pages scrape to empty markup.
+   */
   async getEntryContent(sourceId: string): Promise<string> {
+    const stored = await this.entryBody(sourceId);
+    let scraped = "";
+    try {
+      scraped = await this.scrapedBody(sourceId);
+    } catch {
+      // Scraper failed (paywall / JS-only page); fall back to the feed body.
+    }
+    return richerHtml(stored, scraped);
+  }
+
+  private async entryBody(sourceId: string): Promise<string> {
+    const res = await this.request(`/v1/entries/${sourceId}`);
+    const body = (await res.json()) as { content?: string };
+    return body.content ?? "";
+  }
+
+  private async scrapedBody(sourceId: string): Promise<string> {
     const res = await this.request(`/v1/entries/${sourceId}/fetch-content`);
     const body = (await res.json()) as { content?: string };
     return body.content ?? "";

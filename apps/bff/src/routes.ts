@@ -55,7 +55,7 @@ import type { AppDeps } from "./app";
 import { accentFromUrl } from "./palette";
 import { podcastFeedUrl } from "./podcast";
 import { parseId } from "./ids";
-import { htmlToText, stripUrls } from "./html-text";
+import { hasReadableText, htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
 import {
   deleteSubscription,
@@ -249,7 +249,9 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     await deps.rss.setRemoved(minifluxIds);
     const concurrency = 5;
     for (let i = 0; i < readeckIds.length; i += concurrency) {
-      await Promise.all(readeckIds.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)));
+      await Promise.all(
+        readeckIds.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)),
+      );
     }
 
     await deps.overlay.softDelete(targets.map((t) => t.id));
@@ -701,7 +703,9 @@ async function loadContentHtml(deps: AppDeps, id: string, refresh = false): Prom
   // otherwise serve the stored copy when present (fast, offline-able).
   if (!refresh) {
     const stored = await deps.overlay.getContent(id);
-    if (stored) return stored.html;
+    // Ignore a cached body that extracted to empty markup (e.g. an earlier failed
+    // scrape of a JS-only page) so it re-fetches and self-heals.
+    if (stored && hasReadableText(stored.html)) return stored.html;
   }
   const html =
     parsed.source === "readeck"
