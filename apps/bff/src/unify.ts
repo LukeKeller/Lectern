@@ -1,15 +1,11 @@
 import type {
-  BackendListParams,
-  BackendPage,
   Card,
   CreateViewRequest,
   Highlight,
   Location,
   NewHighlight,
   PlayerState,
-  ReadLaterBackend,
   ReadState,
-  RssBackend,
   SavedView,
   SearchResult,
   Source,
@@ -121,34 +117,6 @@ export function mergeOverlay(card: Card, overlay?: Overlay, rssHighlightCount = 
   return next;
 }
 
-// ---- Combined cursor --------------------------------------------------------
-
-/** Encode the two per-backend cursors into one opaque cursor; null when both done. */
-export function encodeCombinedCursor(rss: string | null, readLater: string | null): string | null {
-  if (rss === null && readLater === null) return null;
-  return Buffer.from(JSON.stringify({ m: rss, r: readLater })).toString("base64url");
-}
-
-export function decodeCombinedCursor(cursor: string | undefined): {
-  rss: string | null | undefined;
-  readLater: string | null | undefined;
-} {
-  if (!cursor) return { rss: undefined, readLater: undefined };
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
-      m: string | null;
-      r: string | null;
-    };
-    // Preserve null: a null sub-cursor means that backend is EXHAUSTED (skip it
-    // on the next page), which is distinct from undefined (no cursor yet -> start
-    // from the top). Collapsing the two made a finished backend restart, so a
-    // paginating caller would loop forever and re-emit its first page.
-    return { rss: parsed.m, readLater: parsed.r };
-  } catch {
-    return { rss: undefined, readLater: undefined };
-  }
-}
-
 // ---- Service ----------------------------------------------------------------
 
 /** Partial overlay write for a single unified document (glue `documents` row). */
@@ -191,12 +159,25 @@ export interface DocumentRef {
 }
 
 /**
- * The BFF-owned glue store. `UnificationService` only consumes the two read
- * methods at the top; the API routes use the full surface. Abstracted so routes
- * are unit-testable without a live Postgres (the production impl is drizzle, the
- * tests inject an in-memory fake).
+ * The BFF-owned glue store, split by responsibility. The production impl
+ * (`DrizzleOverlayStore`) implements the whole composite (`OverlayStore`), but
+ * each consumer SHOULD depend on the narrowest facet it needs — e.g.
+ * `UnificationService` takes an `OverlayReader`, `MutationApplier` a
+ * `DocumentStore & HighlightStore` — so neither has to know the full surface.
  */
-export interface OverlayStore {
+
+/** The two overlay reads `UnificationService.applyOverlays` needs to merge glue
+ * state onto a freshly-fetched backend card. */
+export interface OverlayReader {
+  getOverlays(ids: string[]): Promise<Record<string, Overlay>>;
+  getRssHighlightCounts(ids: string[]): Promise<Record<string, number>>;
+}
+
+/**
+ * The unified document index: the source-of-truth read path for the UI plus the
+ * denormalized backend-truth/overlay rows the poll and the write path maintain.
+ */
+export interface DocumentStore extends OverlayReader {
   // --- index reads (the unified index is the source of truth for the UI) ---
   /** Filtered, sorted, paginated list of live (non-deleted) documents. */
   listDocuments(params: ListDocumentsParams): Promise<DocumentsPage>;
@@ -205,9 +186,6 @@ export interface OverlayStore {
    * documents soft-deleted since then. `since` undefined = full snapshot.
    */
   documentsChangedSince(since: string | undefined): Promise<ChangedDocuments>;
-  // --- consumed by UnificationService ---
-  getOverlays(ids: string[]): Promise<Record<string, Overlay>>;
-  getRssHighlightCounts(ids: string[]): Promise<Record<string, number>>;
 
   // --- unified document index (denormalized, populated by backend polling) ---
   /** Reconstruct a fully-overlaid `Card` from the glue index, or null if absent. */
@@ -249,31 +227,42 @@ export interface OverlayStore {
    */
   softDeleteMissing(source: Source, presentIds: Set<string>): Promise<number>;
 
-  // --- owned article content + full-text search ---
+  // --- overlay writes (BFF-owned columns; win over backend truth on merge) ---
+  upsertOverlay(id: string, patch: OverlayPatch): Promise<void>;
+}
+
+/** Captured article HTML + full-text search over owned bodies. */
+export interface ContentStore {
   /** Stored article HTML for a document, or null if we haven't captured it yet. */
   getContent(id: string): Promise<{ html: string } | null>;
   /** Store/refresh the captured article HTML (no-op for empty html). */
   putContent(id: string, html: string): Promise<void>;
   /** Full-text search over owned bodies (live docs only), ranked, with snippets. */
   searchContent(q: string, limit: number): Promise<SearchResult[]>;
+}
 
-  // --- overlay writes ---
-  upsertOverlay(id: string, patch: OverlayPatch): Promise<void>;
-
-  // --- tags ---
+/** Cross-source organization: aggregated tags + saved views. */
+export interface OrganizationStore {
   listTags(): Promise<Tag[]>;
-
-  // --- saved views ---
   listViews(): Promise<SavedView[]>;
   createView(input: CreateViewRequest): Promise<SavedView>;
   updateView(id: string, patch: UpdateViewRequest): Promise<SavedView | null>;
   deleteView(id: string): Promise<boolean>;
+}
 
-  // --- RSS highlights (BFF-owned; MiniFlux has no highlight API) ---
+/** BFF-owned RSS highlights (MiniFlux has no highlight API). */
+export interface HighlightStore {
   listRssHighlights(documentId: string): Promise<Highlight[]>;
   addRssHighlight(documentId: string, input: NewHighlight): Promise<Highlight>;
   removeRssHighlight(highlightId: string): Promise<boolean>;
+}
 
+/**
+ * Pure server-side asset + config caches that are NOT part of the unified
+ * document model: TTS config/audio, the podcast feed, reader accent, and the
+ * cross-device Listen player state.
+ */
+export interface AssetStore {
   // --- text-to-speech config + audio cache (BFF-owned, server-side only) ---
   /** TTS config including the raw API key. Server-internal: NEVER sent to the SPA. */
   getTtsConfig(): Promise<{
@@ -329,65 +318,22 @@ export interface OverlayStore {
 }
 
 /**
- * Resolve one backend's settled list result. A fulfilled result passes through;
- * a rejection degrades to an empty page that retains the backend's incoming
- * cursor, so the offline/faulting backend is retried on the next pull without
- * sinking the sibling backend's results. The failure is logged for operators.
+ * The full glue store: the composite of every focused facet, implemented by
+ * `DrizzleOverlayStore`. Held by `AppDeps.overlay`; prefer a narrower facet at
+ * each consumer (see the per-interface docs above).
  */
-function settledPage(
-  result: PromiseSettledResult<BackendPage<Card>>,
-  label: string,
-  fallbackCursor: string | undefined,
-): BackendPage<Card> {
-  if (result.status === "fulfilled") return result.value;
-  console.warn(`[unify] ${label} backend list failed; serving partial results:`, result.reason);
-  return { items: [], nextCursor: fallbackCursor ?? null };
-}
+export interface OverlayStore
+  extends DocumentStore, ContentStore, OrganizationStore, HighlightStore, AssetStore {}
 
+/**
+ * Applies BFF-owned glue-DB overlay state onto already-normalized backend cards.
+ * The unified index (`OverlayStore.listDocuments` / `documentsChangedSince`) is
+ * the source of truth for every list and sync read; this service is only used on
+ * the live get-by-id path, to overlay a single Readeck card fetched fresh from
+ * the backend (see `routes.ts` `loadDocument`).
+ */
 export class UnificationService {
-  constructor(
-    private readonly rss: RssBackend,
-    private readonly readLater: ReadLaterBackend,
-    private readonly overlays: OverlayStore,
-  ) {}
-
-  /**
-   * List from both backends in parallel, then overlay glue state. The two
-   * backends are independent: if one is unreachable or faulting (e.g. MiniFlux
-   * returns 404), we still serve the other's items rather than failing the whole
-   * pull — otherwise a single broken backend would empty the entire library and
-   * feed. A failed backend keeps its incoming cursor so the next pull retries it.
-   * Only when BOTH backends fail do we surface the error (a real outage).
-   */
-  async list(params: BackendListParams): Promise<BackendPage<Card>> {
-    const cursors = decodeCombinedCursor(params.cursor);
-    const exhausted: BackendPage<Card> = { items: [], nextCursor: null };
-    const [rssResult, readLaterResult] = await Promise.allSettled([
-      cursors.rss === null
-        ? Promise.resolve(exhausted)
-        : this.rss.listEntries({ ...params, cursor: cursors.rss }),
-      cursors.readLater === null
-        ? Promise.resolve(exhausted)
-        : this.readLater.list({ ...params, cursor: cursors.readLater }),
-    ]);
-
-    if (rssResult.status === "rejected" && readLaterResult.status === "rejected") {
-      throw rssResult.reason;
-    }
-
-    const rssPage = settledPage(rssResult, "rss", cursors.rss ?? undefined);
-    const readLaterPage = settledPage(
-      readLaterResult,
-      "read-later",
-      cursors.readLater ?? undefined,
-    );
-
-    const items = await this.applyOverlays([...rssPage.items, ...readLaterPage.items]);
-    return {
-      items,
-      nextCursor: encodeCombinedCursor(rssPage.nextCursor, readLaterPage.nextCursor),
-    };
-  }
+  constructor(private readonly overlays: OverlayReader) {}
 
   /** Overlay glue-DB state onto already-normalized cards. */
   async applyOverlays(cards: Card[]): Promise<Card[]> {

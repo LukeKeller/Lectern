@@ -157,48 +157,32 @@ export class DrizzleOverlayStore implements OverlayStore {
 
   async upsertIndex(card: Card): Promise<void> {
     const row = rowFromCard(card);
+    // A new save: the card is the source of truth for BOTH ownership zones, so the
+    // overlay columns are written alongside the backend-truth ones.
     await this.db
       .insert(documents)
       .values(row)
       .onConflictDoUpdate({
         target: documents.id,
         set: {
-          category: row.category,
+          ...backendTruthSet(row),
           location: row.location,
           readProgress: row.readProgress,
           readAnchor: row.readAnchor,
           tags: row.tags,
           note: row.note,
-          title: row.title,
-          url: row.url,
-          metadata: row.metadata,
-          savedAt: row.savedAt,
-          updatedAt: row.updatedAt,
-          deletedAt: null,
         },
       });
   }
 
   async indexFromBackend(card: Card): Promise<void> {
     const row = rowFromCard(card);
-    // On conflict refresh only backend-truth columns; the overlay columns
-    // (location/tags/note/read_progress/read_anchor) stay BFF-authoritative.
+    // A poll refresh: backend-truth columns only. The overlay columns stay
+    // BFF-authoritative — `backendTruthSet` cannot reach them.
     await this.db
       .insert(documents)
       .values(row)
-      .onConflictDoUpdate({
-        target: documents.id,
-        set: {
-          category: row.category,
-          title: row.title,
-          url: row.url,
-          metadata: row.metadata,
-          savedAt: row.savedAt,
-          updatedAt: row.updatedAt,
-          // A re-indexed backend item is alive again: clear any tombstone.
-          deletedAt: null,
-        },
-      });
+      .onConflictDoUpdate({ target: documents.id, set: backendTruthSet(row) });
   }
 
   async isIndexed(id: string): Promise<boolean> {
@@ -712,6 +696,35 @@ function rowFromCard(card: Card): NewDocumentRow {
     metadata: { card },
     savedAt: new Date(card.savedAt),
     updatedAt: new Date(card.updatedAt),
+  };
+}
+
+/**
+ * The BFF-authoritative overlay columns of a `documents` row (see db/schema.ts).
+ * A backend poll MUST NOT write these; `backendTruthSet` excludes them by
+ * construction, so refreshing the index from a backend card cannot clobber a
+ * user's triage location, tags, note, or RSS reading progress/anchor.
+ */
+export const OVERLAY_COLUMNS = ["location", "tags", "note", "readProgress", "readAnchor"] as const;
+
+/**
+ * The conflict-set a backend refresh applies on a documents upsert: backend-truth
+ * columns only, plus clearing any tombstone (a re-indexed backend item is alive
+ * again). Both index writers build their `onConflictDoUpdate` set from this; only
+ * `upsertIndex` (a fresh save, where the card itself is the truth) additionally
+ * writes the overlay columns. Keeping the overlay columns OUT of this builder makes
+ * the "index never clobbers the overlay" invariant a property of the seam rather
+ * than of remembering which method (`indexFromBackend` vs `upsertIndex`) to call.
+ */
+export function backendTruthSet(row: NewDocumentRow) {
+  return {
+    category: row.category,
+    title: row.title,
+    url: row.url,
+    metadata: row.metadata,
+    savedAt: row.savedAt,
+    updatedAt: row.updatedAt,
+    deletedAt: null,
   };
 }
 

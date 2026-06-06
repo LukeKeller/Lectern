@@ -15,6 +15,28 @@ Vocabulary (so suggestions stay consistent):
 
 Ordered by leverage. Items 1–3 are the core of the unification layer and reinforce each other.
 
+## Status — updated 2026-06-06
+
+Items **1, 2, 3, 5, 6** are **resolved**; item **4 is moot** (removed with #5). Remaining: item 7
+(`SyncEngine`) and the parking lot.
+
+- **#5 (dead read path) — done.** Deleted `UnificationService.list()`, `settledPage`, and the
+  combined-cursor codec (which was item #4's entire subject, so #4 is gone too). `UnificationService`
+  is now an overlay applier only. Index authority recorded in `docs/adr/0004-unified-index-is-the-read-source.md`.
+- **#6 (registry↔mock drift) — done.** Mock dispatch now derives from `endpoints[]` (router +
+  `operationId` handler map + load-time completeness check + a test). Completed the registry with the
+  real `accent` + `/push/*` routes (added `PUT` to `HttpMethod`) and regenerated `openapi.json`.
+- **#1 (write-path home) — done.** `MutationApplier` carries the ownership map as code; source
+  routing lives in one `toBackend` switch. Direct dual-write/conflict tests in `mutations.test.ts`.
+- **#2 (OverlayStore god-interface) — done via interface segregation.** Split into `OverlayReader`,
+  `DocumentStore`, `ContentStore`, `OrganizationStore`, `HighlightStore`, `AssetStore` composed into
+  `OverlayStore`; consumers narrowed (`UnificationService` → `OverlayReader`, `MutationApplier` →
+  `DocumentStore & HighlightStore`). The full DI field-split was NOT done — routes register
+  monolithically, so it would be wide callsite churn with little test-isolation payoff.
+- **#3 (index-never-clobbers-overlay) — done.** The poll path builds its conflict-set from a single
+  `backendTruthSet` that excludes the overlay columns by construction; `OVERLAY_COLUMNS` + a
+  disjointness test make the invariant a property of the seam.
+
 ---
 
 ## 1. The write path has no deep home — field ownership lives in comments

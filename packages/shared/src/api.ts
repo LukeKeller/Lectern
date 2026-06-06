@@ -4,6 +4,15 @@ import { Feed, FeedFolder } from "./feeds";
 import { SyncPullResponse, SyncPushRequest, SyncPushResponse } from "./sync";
 import { BulkDeleteRequest, BulkDeleteResponse, ForceSyncResponse } from "./maintenance";
 import { SavedView } from "./views";
+import {
+  FeedNotificationPref,
+  FeedNotificationPrefsResponse,
+  PushOkResponse,
+  PushPublicKeyResponse,
+  PushSubscriptionRequest,
+  PushUnsubscribeRequest,
+  SetFeedNotificationRequest,
+} from "./push";
 
 /**
  * The unified Lectern API contract. Mirrors the Readwise Reader API surface
@@ -55,6 +64,10 @@ export type UpdateDocumentRequest = z.infer<typeof UpdateDocumentRequest>;
 
 export const DocumentContentResponse = z.object({ id: z.string(), html: z.string() });
 export type DocumentContentResponse = z.infer<typeof DocumentContentResponse>;
+
+/** The cover-derived reader accent: a hex colour, or null when there's none. */
+export const DocumentAccentResponse = z.object({ color: z.string().nullable() });
+export type DocumentAccentResponse = z.infer<typeof DocumentAccentResponse>;
 
 export const SearchQuery = z.object({
   q: z.string().min(1),
@@ -230,7 +243,7 @@ export type PlayerState = z.infer<typeof PlayerState>;
 
 // ---- Endpoint registry ------------------------------------------------------
 
-export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface Endpoint {
   method: HttpMethod;
@@ -320,6 +333,15 @@ export const endpoints: Endpoint[] = [
     summary: "Get article HTML",
     tags: ["documents"],
     response: DocumentContentResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/documents/:id/accent",
+    operationId: "getDocumentAccent",
+    summary: "Get the cover-derived reader accent colour",
+    tags: ["documents"],
+    response: DocumentAccentResponse,
     status: 200,
   },
   {
@@ -589,6 +611,54 @@ export const endpoints: Endpoint[] = [
     tags: ["tts"],
     body: PlayerState,
     response: PlayerState,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/push/public-key",
+    operationId: "getPushPublicKey",
+    summary: "Get the Web Push VAPID public key (null when push is disabled)",
+    tags: ["push"],
+    response: PushPublicKeyResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/push/subscriptions",
+    operationId: "registerPushSubscription",
+    summary: "Register a browser push subscription",
+    tags: ["push"],
+    body: PushSubscriptionRequest,
+    response: PushOkResponse,
+    status: 200,
+  },
+  {
+    method: "DELETE",
+    path: "/push/subscriptions",
+    operationId: "unregisterPushSubscription",
+    summary: "Remove a browser push subscription",
+    tags: ["push"],
+    body: PushUnsubscribeRequest,
+    response: PushOkResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/push/feeds",
+    operationId: "getFeedNotifications",
+    summary: "List per-feed notification preferences",
+    tags: ["push"],
+    response: FeedNotificationPrefsResponse,
+    status: 200,
+  },
+  {
+    method: "PUT",
+    path: "/push/feeds/:feedId",
+    operationId: "setFeedNotification",
+    summary: "Toggle notifications for a single feed",
+    tags: ["push"],
+    body: SetFeedNotificationRequest,
+    response: FeedNotificationPref,
     status: 200,
   },
 ];

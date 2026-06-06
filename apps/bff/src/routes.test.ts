@@ -562,7 +562,7 @@ function makeHarness(): Harness {
   const rss = new FakeRssBackend();
   const readLater = new FakeReadLaterBackend();
   const overlay = new FakeOverlayStore();
-  const unify = new UnificationService(rss, readLater, overlay);
+  const unify = new UnificationService(overlay);
   const tts = new FakeTtsBackend();
   // One fake serves every provider; the router just hands it back.
   const ttsRouter: TtsRouter = { forProvider: () => tts };

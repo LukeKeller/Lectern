@@ -64,15 +64,7 @@ import {
   setFeedPref,
   upsertSubscription,
 } from "./push";
-import {
-  applyAddHighlight,
-  applyDelete,
-  applyLocation,
-  applyMutation,
-  applyNote,
-  applyProgress,
-  applyTags,
-} from "./mutations";
+import { MutationApplier } from "./mutations";
 import { pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
 
 class NotFoundError extends Error {}
@@ -166,6 +158,8 @@ function coerceSyncQuery(raw: Record<string, unknown>): SyncPullQuery {
  * are shaped with the response schemas.
  */
 export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
+  const mutations = new MutationApplier(deps);
+
   // ---- documents ----------------------------------------------------------
   app.get("/documents", async (req) => {
     const q = coerceListQuery(req.query as Record<string, unknown>);
@@ -211,12 +205,12 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const parsed = requireParsed(id);
     const body = UpdateDocumentRequest.parse(req.body);
 
-    if (body.location !== undefined) await applyLocation(deps, parsed, id, body.location);
-    if (body.tags !== undefined) await applyTags(deps, parsed, id, body.tags);
+    if (body.location !== undefined) await mutations.setLocation(parsed, id, body.location);
+    if (body.tags !== undefined) await mutations.setTags(parsed, id, body.tags);
     if (body.readingProgress !== undefined)
-      await applyProgress(deps, parsed, id, body.readingProgress, body.readAnchor ?? null);
-    if (body.note !== undefined) await applyNote(deps, parsed, id, body.note);
-    if (body.title !== undefined) await deps.overlay.upsertOverlay(id, { title: body.title });
+      await mutations.setProgress(parsed, id, body.readingProgress, body.readAnchor ?? null);
+    if (body.note !== undefined) await mutations.setNote(id, body.note);
+    if (body.title !== undefined) await mutations.setTitle(id, body.title);
 
     const card = await loadDocument(deps, id);
     const withTitle = body.title ? { ...card, title: body.title } : card;
@@ -228,7 +222,7 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const parsed = requireParsed(id);
     // Full delete: remove at the source (so the poll can't re-add it) then
     // tombstone locally (so the deletion syncs to other devices).
-    await applyDelete(deps, parsed, id);
+    await mutations.delete(parsed, id);
     return reply.code(204).send();
   });
 
@@ -465,9 +459,9 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     "/documents/:id/highlights",
     async (req, reply) => {
       const { id } = req.params;
-      const parsed = requireParsed(id);
+      requireParsed(id);
       const body = CreateHighlightRequest.parse(req.body);
-      const highlight = await applyAddHighlight(deps, parsed, id, {
+      const highlight = await mutations.addHighlight(id, {
         text: body.text,
         color: body.color,
         note: body.note,
@@ -653,7 +647,7 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const conflicts: SyncConflict[] = [];
     for (const mutation of body.mutations) {
       try {
-        await applyMutation(deps, mutation);
+        await mutations.apply(mutation);
         applied++;
       } catch (err) {
         conflicts.push({ id: mutation.id, reason: err instanceof Error ? err.message : "failed" });
