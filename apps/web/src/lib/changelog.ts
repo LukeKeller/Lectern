@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.20.0',
+		date: '2026-06-06',
+		title: 'A query cheat sheet for building views',
+		changes: [
+			{
+				kind: 'added',
+				text: 'The Views page now lists every field you can filter on — location, tag, author, words, progress, saved date and more — with the values each accepts and a working example. Tap a field or example to drop it straight into the new-view form, so building a custom view no longer means guessing the syntax.'
+			}
+		]
+	},
+	{
 		version: '0.19.0',
 		date: '2026-06-06',
 		title: 'Full post text from feeds like Bluesky',

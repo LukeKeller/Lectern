@@ -8,6 +8,7 @@
 	import { db } from '$lib/db';
 	import Icon from '$lib/components/Icon.svelte';
 	import type { Card } from '@lectern/shared';
+	import { Location, Category, Source } from '@lectern/shared';
 
 	let name = $state('');
 	let queryText = $state('location:later');
@@ -15,6 +16,37 @@
 	let formError = $state<string | undefined>(undefined);
 	let icon = $state('');
 	const allCards = liveCards(() => db.cards.toArray());
+
+	// Field reference for the saved-view query DSL (parsed by parseViewQuery). Enum
+	// values come from the shared schemas so they stay in sync with the model.
+	const QUERY_FIELDS = [
+		{ field: 'location', values: Location.options.join(' · '), example: 'location:later' },
+		{ field: 'category', values: Category.options.join(' · '), example: 'category:article' },
+		{ field: 'source', values: Source.options.join(' · '), example: 'source:readeck' },
+		{ field: 'tag', values: 'any tag you have applied', example: 'tag:ai' },
+		{ field: 'author', values: 'text — add ~ for contains', example: 'author:~doctorow' },
+		{ field: 'site', values: 'site name — add ~ for contains', example: 'site:~bsky' },
+		{ field: 'title', values: 'text — add ~ for contains', example: 'title:~bloat' },
+		{ field: 'words', values: 'word count — > >= < <=', example: 'words:>2000' },
+		{ field: 'progress', values: 'read fraction 0–1 — > >= < <=', example: 'progress:<0.5' },
+		{ field: 'saved', values: 'date YYYY-MM-DD — > after, < before', example: 'saved:>2026-01-01' },
+		{
+			field: 'updated',
+			values: 'date YYYY-MM-DD — > after, < before',
+			example: 'updated:>2026-05-01'
+		},
+		{ field: 'highlighted', values: 'true · false', example: 'highlighted:true' }
+	];
+	const QUERY_EXAMPLES = [
+		'location:later AND tag:ai',
+		'(source:readeck OR source:miniflux) AND words:>1000',
+		'title:~bloat AND NOT location:archive',
+		'author:"Dan Luu" AND saved:>2026-01-01'
+	];
+	function useExample(q: string): void {
+		queryText = q;
+		formError = undefined;
+	}
 
 	onMount(() => {
 		if (!viewsStore.loaded) void viewsStore.load();
@@ -132,6 +164,30 @@
 				{/each}
 			</ul>
 		{/if}
+	</section>
+
+	<section>
+		<h2>Query reference</h2>
+		<p class="muted">
+			A view is a saved filter over your library. Combine terms with <code>AND</code>,
+			<code>OR</code>, <code>NOT</code> and parentheses; wrap multi-word values in quotes. Tap a field
+			or example to drop it into the form below.
+		</p>
+		<ul class="ref">
+			{#each QUERY_FIELDS as f (f.field)}
+				<li>
+					<code>{f.field}</code>
+					<span class="ref-desc">{f.values}</span>
+					<button type="button" class="ex" onclick={() => useExample(f.example)}>{f.example}</button
+					>
+				</li>
+			{/each}
+		</ul>
+		<div class="ref-examples">
+			{#each QUERY_EXAMPLES as ex (ex)}
+				<button type="button" class="ex" onclick={() => useExample(ex)}>{ex}</button>
+			{/each}
+		</div>
 	</section>
 
 	<section>
@@ -331,5 +387,54 @@
 	.error {
 		color: var(--error);
 		font-size: var(--text-sm);
+	}
+	.ref {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 0.9rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.ref li {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		padding: 0.35rem 0.4rem;
+		border-radius: var(--radius);
+	}
+	.ref li:hover {
+		background: var(--surface-alt);
+	}
+	.ref li > code {
+		flex-shrink: 0;
+		min-width: 5.5rem;
+	}
+	.ref-desc {
+		flex: 1;
+		min-width: 11rem;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	.ex {
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: 0;
+		border-radius: var(--radius-sm);
+		padding: 0.12rem 0.45rem;
+		cursor: pointer;
+		transition: background var(--dur-fast) var(--ease);
+	}
+	.ex:hover {
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--border);
+	}
+	.ref-examples {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 	}
 </style>
