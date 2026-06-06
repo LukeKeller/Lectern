@@ -42,16 +42,14 @@
 		icon: IconName;
 	}
 
-	// Mirrors the triage locations + tools. Inbox/Feed/Library are also reachable
-	// from the `g i/f/l` keyboard chords. `as const` keeps `id` a literal route so
-	// `resolve()` stays type-safe.
-	const primary = [
-		{ id: '/', label: 'Inbox', icon: 'inbox' },
+	// The triage buckets shown as children of the collapsible Library group. Each
+	// is also reachable from a `g` keyboard chord. `as const` keeps `id` a literal
+	// route so `resolve()` stays type-safe.
+	const libraryItems = [
+		{ id: '/inbox', label: 'Inbox', icon: 'inbox' },
 		{ id: '/later', label: 'Later', icon: 'clock' },
 		{ id: '/shortlist', label: 'Shortlist', icon: 'star' },
-		{ id: '/archive', label: 'Archive', icon: 'archive' },
-		{ id: '/feed', label: 'Feed', icon: 'rss' },
-		{ id: '/library', label: 'Library', icon: 'book' }
+		{ id: '/archive', label: 'Archive', icon: 'archive' }
 	] as const satisfies readonly NavItem[];
 	const tools = [
 		{ id: '/search', label: 'Search', icon: 'search' }
@@ -135,9 +133,23 @@
 		}
 	});
 
+	// Library group disclosure — defaults open so the triage buckets stay
+	// discoverable; persisted as soon as the user toggles it.
+	let libraryOpen = $state(loadLibraryOpen());
+	function loadLibraryOpen(): boolean {
+		return (
+			typeof localStorage === 'undefined' || localStorage.getItem('lectern.libraryNav.open') !== '0'
+		);
+	}
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('lectern.libraryNav.open', libraryOpen ? '1' : '0');
+		}
+	});
+
 	function navCount(id: string): number {
 		switch (id) {
-			case '/':
+			case '/inbox':
 				return counts.inbox;
 			case '/later':
 				return counts.later;
@@ -343,21 +355,121 @@
 	</a>
 
 	<nav aria-label="Primary">
-		<p class="section">Library</p>
 		<ul>
-			{#each primary as item (item.id)}
-				<li>
-					<a
-						href={resolve(item.id)}
-						class:active={isActive(item.id)}
-						aria-current={isActive(item.id) ? 'page' : undefined}
-					>
-						<Icon name={item.icon} />
-						<span>{item.label}</span>
-						{#if navCount(item.id) > 0}<span class="nav-count">{navCount(item.id)}</span>{/if}
-					</a>
-				</li>
-			{/each}
+			<li>
+				<a
+					href={resolve('/')}
+					class:active={isActive('/')}
+					aria-current={isActive('/') ? 'page' : undefined}
+				>
+					<Icon name="home" />
+					<span>Home</span>
+				</a>
+			</li>
+
+			<li class="group">
+				<a
+					href={resolve('/library')}
+					class="group-link"
+					class:active={isActive('/library')}
+					aria-current={isActive('/library') ? 'page' : undefined}
+				>
+					<Icon name="book" />
+					<span>Library</span>
+					{#if navCount('/library') > 0}<span class="nav-count">{navCount('/library')}</span>{/if}
+				</a>
+				<button
+					type="button"
+					class="twisty"
+					aria-expanded={libraryOpen}
+					aria-label={libraryOpen ? 'Collapse Library' : 'Expand Library'}
+					onclick={() => (libraryOpen = !libraryOpen)}
+				>
+					<span class="chev" class:open={libraryOpen}><Icon name="chevron" size={14} /></span>
+				</button>
+			</li>
+			{#if libraryOpen}
+				{#each libraryItems as item (item.id)}
+					<li>
+						<a
+							href={resolve(item.id)}
+							class="child"
+							class:active={isActive(item.id)}
+							aria-current={isActive(item.id) ? 'page' : undefined}
+						>
+							<Icon name={item.icon} size={17} />
+							<span>{item.label}</span>
+							{#if navCount(item.id) > 0}<span class="nav-count">{navCount(item.id)}</span>{/if}
+						</a>
+					</li>
+				{/each}
+			{/if}
+
+			<li class="group">
+				<a
+					href={resolve('/feed')}
+					class="group-link"
+					class:active={isActive('/feed')}
+					aria-current={isActive('/feed') ? 'page' : undefined}
+				>
+					<Icon name="rss" />
+					<span>Feed</span>
+					{#if navCount('/feed') > 0}<span class="nav-count">{navCount('/feed')}</span>{/if}
+				</a>
+				<button
+					type="button"
+					class="twisty"
+					aria-expanded={feedsOpen}
+					aria-label={feedsOpen ? 'Collapse Feed' : 'Expand Feed'}
+					onclick={() => (feedsOpen = !feedsOpen)}
+				>
+					<span class="chev" class:open={feedsOpen}><Icon name="chevron" size={14} /></span>
+				</button>
+			</li>
+			{#if feedsOpen}
+				{#each feedsStore.grouped as group (feedGroupKey(group))}
+					{@const fkey = feedGroupKey(group)}
+					{@const folderOpen = openFolders.has(fkey)}
+					{@const unread = folderUnread(group.feeds.map((f) => f.title))}
+					<li class="tree-li">
+						<button
+							type="button"
+							class="tree-row"
+							aria-expanded={folderOpen}
+							onclick={() => toggleFolder(fkey)}
+						>
+							<span class="chev" class:open={folderOpen}><Icon name="chevron" size={12} /></span>
+							<Icon name="folder" size={15} />
+							<span class="tree-label">{group.title}</span>
+							{#if unread > 0}<span class="nav-count">{unread}</span>{/if}
+						</button>
+						{#if folderOpen}
+							<ul class="feed-children">
+								{#each group.feeds as feed (feed.id)}
+									{@const feedCount = feedUnread[feed.title] ?? 0}
+									{@const href = `${resolve('/feed')}?feed=${encodeURIComponent(feed.title)}`}
+									<li>
+										<!-- resolve() owns the path; the query string is appended for the per-feed filter -->
+										<!-- eslint-disable svelte/no-navigation-without-resolve -->
+										<a
+											{href}
+											class:active={page.url.pathname === resolve('/feed') &&
+												page.url.searchParams.get('feed') === feed.title}
+										>
+											<span class="tree-label">{feed.title}</span>
+											{#if feedCount > 0}<span class="nav-count">{feedCount}</span>{/if}
+										</a>
+										<!-- eslint-enable svelte/no-navigation-without-resolve -->
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</li>
+				{/each}
+				{#if feedsStore.loaded && feedsStore.grouped.length === 0}
+					<li class="tree-empty">No feeds yet</li>
+				{/if}
+			{/if}
 		</ul>
 
 		<p class="section">Daily</p>
@@ -418,68 +530,16 @@
 					</a>
 				</li>
 			{/each}
-			<li class="feeds-row">
+			<li>
 				<a
 					href={resolve('/feeds')}
 					class:active={isActive('/feeds')}
 					aria-current={isActive('/feeds') ? 'page' : undefined}
 				>
 					<Icon name="folder" />
-					<span>Feeds</span>
+					<span>Manage feeds</span>
 				</a>
-				<button
-					type="button"
-					class="disclosure"
-					aria-expanded={feedsOpen}
-					aria-label={feedsOpen ? 'Collapse feeds' : 'Expand feeds'}
-					onclick={() => (feedsOpen = !feedsOpen)}
-				>
-					<span class="chev" class:open={feedsOpen}><Icon name="chevron" size={14} /></span>
-				</button>
 			</li>
-			{#if feedsOpen}
-				{#each feedsStore.grouped as group (feedGroupKey(group))}
-					{@const fkey = feedGroupKey(group)}
-					{@const folderOpen = openFolders.has(fkey)}
-					{@const unread = folderUnread(group.feeds.map((f) => f.title))}
-					<li class="tree-li">
-						<button
-							type="button"
-							class="tree-row"
-							aria-expanded={folderOpen}
-							onclick={() => toggleFolder(fkey)}
-						>
-							<span class="chev" class:open={folderOpen}><Icon name="chevron" size={12} /></span>
-							<span class="tree-label">{group.title}</span>
-							{#if unread > 0}<span class="nav-count">{unread}</span>{/if}
-						</button>
-						{#if folderOpen}
-							<ul class="feed-children">
-								{#each group.feeds as feed (feed.id)}
-									{@const feedCount = feedUnread[feed.title] ?? 0}
-									{@const href = `${resolve('/feed')}?feed=${encodeURIComponent(feed.title)}`}
-									<li>
-										<!-- resolve() owns the path; the query string is appended for the per-feed filter -->
-										<!-- eslint-disable svelte/no-navigation-without-resolve -->
-										<a
-											{href}
-											class:active={page.url.pathname === resolve('/feed') &&
-												page.url.searchParams.get('feed') === feed.title}
-										>
-											<span class="tree-label">{feed.title}</span>
-											{#if feedCount > 0}<span class="nav-count">{feedCount}</span>{/if}
-										</a>
-										<!-- eslint-enable svelte/no-navigation-without-resolve -->
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</li>
-				{/each}
-				{#if feedsStore.loaded && feedsStore.grouped.length === 0}
-					<li class="tree-empty">No feeds yet</li>
-				{/if}
-			{/if}
 		</ul>
 
 		{#if ttsPlayer.hasQueue}
@@ -737,32 +797,40 @@
 		color: var(--accent);
 	}
 
-	/* Feeds disclosure: the management link sits inline with a chevron toggle. */
-	.feeds-row {
-		display: flex;
-		align-items: center;
+	/* Collapsible top-level group (Library, Feed): the row is a full-width nav
+	   link with a chevron toggle overlaid on its left, so clicking the row
+	   navigates while the chevron alone expands/collapses — like Reader's
+	   sidebar sections. */
+	.group {
+		position: relative;
 	}
-	.feeds-row a {
-		flex: 1;
-		min-width: 0;
+	.group-link {
+		padding-left: 2rem;
 	}
-	.disclosure {
+	.twisty {
+		position: absolute;
+		left: 0.1rem;
+		top: 0;
+		bottom: 0;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.75rem;
-		height: 1.75rem;
-		flex-shrink: 0;
+		width: 1.7rem;
 		border: 0;
 		border-radius: var(--radius);
 		background: transparent;
 		color: var(--text-muted);
 		cursor: pointer;
-		transition: background var(--dur-fast) var(--ease);
+		transition: color var(--dur-fast) var(--ease);
 	}
-	.disclosure:hover {
-		background: var(--surface-alt);
+	.twisty:hover {
 		color: var(--text);
+	}
+	/* Sub-items under a group (triage buckets): one step quieter, indented to sit
+	   under the group's label. */
+	.child {
+		padding-left: 2rem;
+		font-size: var(--text-sm);
 	}
 	.chev {
 		display: inline-flex;
@@ -777,7 +845,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		width: 100%;
-		padding: 0.4rem 0.55rem 0.4rem 1.35rem;
+		padding: 0.4rem 0.55rem 0.4rem 1.75rem;
 		border: 0;
 		border-radius: var(--radius);
 		background: transparent;
@@ -833,7 +901,7 @@
 	}
 	/* Feed leaves: nudged a further step in from their folder. */
 	.feed-children a {
-		padding-left: 2.5rem;
+		padding-left: 2.9rem;
 		font-size: var(--text-sm);
 	}
 	.tree-empty {

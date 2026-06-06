@@ -75,7 +75,11 @@ describe('resolveKey', () => {
 	it('handles the g-prefix navigation chord', () => {
 		const first = resolveKey(null, { key: 'g' });
 		expect(first).toEqual({ pending: 'g' });
-		expect(resolveKey(first.pending, { key: 'i' }).action).toEqual({ type: 'navigate', path: '/' });
+		expect(resolveKey(first.pending, { key: 'i' }).action).toEqual({
+			type: 'navigate',
+			path: '/inbox'
+		});
+		expect(resolveKey('g', { key: 'h' }).action).toEqual({ type: 'navigate', path: '/' });
 		expect(resolveKey('g', { key: 'f' }).action).toEqual({ type: 'navigate', path: '/feed' });
 		expect(resolveKey('g', { key: 'l' }).action).toEqual({ type: 'navigate', path: '/later' });
 		expect(resolveKey('g', { key: 's' }).action).toEqual({
@@ -106,6 +110,6 @@ describe('resolveKey', () => {
 
 	it('exposes the shortcut tables as data', () => {
 		expect(SINGLE_KEYS.j).toEqual({ type: 'move', delta: 1 });
-		expect(PREFIX_KEYS.g!.i).toEqual({ type: 'navigate', path: '/' });
+		expect(PREFIX_KEYS.g!.i).toEqual({ type: 'navigate', path: '/inbox' });
 	});
 });

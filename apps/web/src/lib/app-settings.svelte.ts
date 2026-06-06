@@ -13,7 +13,8 @@ export interface LandingView {
 // The left-nav destinations that make sense as a launch target. Mirrors the
 // primary nav in +layout.svelte plus the Daily editions.
 export const LANDING_VIEWS: readonly LandingView[] = [
-	{ id: '/', label: 'Inbox' },
+	{ id: '/', label: 'Home' },
+	{ id: '/inbox', label: 'Inbox' },
 	{ id: '/feed', label: 'Feed' },
 	{ id: '/later', label: 'Later' },
 	{ id: '/shortlist', label: 'Shortlist' },

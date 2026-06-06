@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.18.0',
+		date: '2026-06-06',
+		title: 'A calm Home, and a tidier sidebar',
+		changes: [
+			{
+				kind: 'added',
+				text: 'A new Home screen greets you with where you left off: the articles you are part-way through, your inbox at a glance, and the latest edition — a quiet place to begin rather than a feed. You can make it your launch screen under Settings, with Default view.'
+			},
+			{
+				kind: 'improved',
+				text: 'The sidebar is rearranged around how you read. Library now gathers Inbox, Later, Shortlist and Archive in one place you can expand or collapse, and your Feed sits at the top with its folders. Inbox moved to its own page so Home can open at the front door.'
+			}
+		]
+	},
+	{
 		version: '0.17.0',
 		date: '2026-06-05',
 		title: 'Delete for good, sync on demand, and open where you want',
