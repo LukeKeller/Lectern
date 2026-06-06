@@ -589,6 +589,14 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
+          "provider": {
+            "default": "elevenlabs",
+            "type": "string",
+            "enum": [
+              "elevenlabs",
+              "kokoro"
+            ]
+          },
           "configured": {
             "type": "boolean"
           },
@@ -600,6 +608,7 @@
           }
         },
         "required": [
+          "provider",
           "configured",
           "voiceId",
           "modelId"
@@ -1872,6 +1881,64 @@
         }
       }
     },
+    "/documents/bulk-delete": {
+      "post": {
+        "operationId": "bulkDeleteDocuments",
+        "summary": "Bulk delete documents (empty archive or delete read feed items)",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Bulk delete documents (empty archive or delete read feed items)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "archive",
+                      "read-feed"
+                    ]
+                  }
+                },
+                "required": [
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/{id}/content": {
       "get": {
         "operationId": "getDocumentContent",
@@ -1908,6 +1975,54 @@
                   "required": [
                     "id",
                     "html"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}/accent": {
+      "get": {
+        "operationId": "getDocumentAccent",
+        "summary": "Get the cover-derived reader accent colour",
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get the cover-derived reader accent colour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "color"
                   ],
                   "additionalProperties": false
                 }
@@ -3923,6 +4038,52 @@
         }
       }
     },
+    "/sync/force": {
+      "post": {
+        "operationId": "forceSync",
+        "summary": "Run backend polls + deletion reconcile now",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Run backend polls + deletion reconcile now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "miniflux": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "readeck": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "tombstoned": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "miniflux",
+                    "readeck",
+                    "tombstoned"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feeds": {
       "get": {
         "operationId": "listFeeds",
@@ -4447,6 +4608,14 @@
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
+                    "provider": {
+                      "default": "elevenlabs",
+                      "type": "string",
+                      "enum": [
+                        "elevenlabs",
+                        "kokoro"
+                      ]
+                    },
                     "configured": {
                       "type": "boolean"
                     },
@@ -4458,6 +4627,7 @@
                     }
                   },
                   "required": [
+                    "provider",
                     "configured",
                     "voiceId",
                     "modelId"
@@ -4485,6 +4655,14 @@
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
+                    "provider": {
+                      "default": "elevenlabs",
+                      "type": "string",
+                      "enum": [
+                        "elevenlabs",
+                        "kokoro"
+                      ]
+                    },
                     "configured": {
                       "type": "boolean"
                     },
@@ -4496,6 +4674,7 @@
                     }
                   },
                   "required": [
+                    "provider",
                     "configured",
                     "voiceId",
                     "modelId"
@@ -4514,6 +4693,13 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "elevenlabs",
+                      "kokoro"
+                    ]
+                  },
                   "apiKey": {
                     "anyOf": [
                       {
@@ -4586,6 +4772,74 @@
         }
       }
     },
+    "/settings/tts/usage": {
+      "get": {
+        "operationId": "getTtsUsage",
+        "summary": "Get the configured ElevenLabs account's usage and quota",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get the configured ElevenLabs account's usage and quota",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "characterCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "characterLimit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "nextResetAt": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tier",
+                    "status",
+                    "characterCount",
+                    "characterLimit",
+                    "nextResetAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/{id}/audio": {
       "post": {
         "operationId": "synthesizeAudio",
@@ -4621,6 +4875,160 @@
                   }
                 },
                 "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}/podcast": {
+      "post": {
+        "operationId": "addPodcastEpisode",
+        "summary": "Render a document to audio and publish it as a podcast episode",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Render a document to audio and publish it as a podcast episode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "durationSeconds": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "byteLength": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "addedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "documentId",
+                    "title",
+                    "durationSeconds",
+                    "byteLength",
+                    "addedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/podcast": {
+      "get": {
+        "operationId": "getPodcastSettings",
+        "summary": "Get the podcast feed subscribe URL and episode count",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get the podcast feed subscribe URL and episode count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "feedUrl": {
+                      "type": "string"
+                    },
+                    "episodeCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "feedUrl",
+                    "episodeCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/podcast/regenerate": {
+      "post": {
+        "operationId": "regeneratePodcastFeed",
+        "summary": "Rotate the podcast feed token (revokes the previous URL)",
+        "tags": [
+          "tts"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Rotate the podcast feed token (revokes the previous URL)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "feedUrl": {
+                      "type": "string"
+                    },
+                    "episodeCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "feedUrl",
+                    "episodeCount"
+                  ],
+                  "additionalProperties": false
+                }
               }
             }
           }
@@ -4880,6 +5288,281 @@
                   "position",
                   "rate",
                   "updatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/push/public-key": {
+      "get": {
+        "operationId": "getPushPublicKey",
+        "summary": "Get the Web Push VAPID public key (null when push is disabled)",
+        "tags": [
+          "push"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get the Web Push VAPID public key (null when push is disabled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "publicKey": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "publicKey"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/push/subscriptions": {
+      "post": {
+        "operationId": "registerPushSubscription",
+        "summary": "Register a browser push subscription",
+        "tags": [
+          "push"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Register a browser push subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "endpoint": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "keys": {
+                    "type": "object",
+                    "properties": {
+                      "p256dh": {
+                        "type": "string"
+                      },
+                      "auth": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "p256dh",
+                      "auth"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "endpoint",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unregisterPushSubscription",
+        "summary": "Remove a browser push subscription",
+        "tags": [
+          "push"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Remove a browser push subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "endpoint": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "endpoint"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/push/feeds": {
+      "get": {
+        "operationId": "getFeedNotifications",
+        "summary": "List per-feed notification preferences",
+        "tags": [
+          "push"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List per-feed notification preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "feeds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "feedId": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "feedId",
+                          "enabled"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "feeds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/push/feeds/{feedId}": {
+      "put": {
+        "operationId": "setFeedNotification",
+        "summary": "Toggle notifications for a single feed",
+        "tags": [
+          "push"
+        ],
+        "parameters": [
+          {
+            "name": "feedId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Toggle notifications for a single feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "feedId": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "feedId",
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
                 ],
                 "additionalProperties": false
               }

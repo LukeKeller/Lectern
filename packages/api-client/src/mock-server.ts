@@ -1,42 +1,33 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   Card,
-  Feed,
-  FeedsResponse,
-  ImportOpmlRequest,
-  ImportOpmlResponse,
-  ImportReadwiseRequest,
-  ImportReadwiseResponse,
-  SubscribeFeedRequest,
-  UpdateFeedRequest,
-  CreateHighlightRequest,
-  CreateViewRequest,
-  DocumentContentResponse,
   Highlight,
-  HighlightsResponse,
-  ListDocumentsResponse,
-  SaveDocumentRequest,
   PlayerState,
-  PodcastEpisode,
-  PodcastSettings,
-  SavedView,
-  SyncPushRequest,
-  SyncPullResponse,
-  SyncPushResponse,
-  TagsResponse,
-  TtsSettings,
-  TtsVoicesResponse,
-  UpdateDocumentRequest,
-  UpdateTtsSettingsRequest,
-  UpdateViewRequest,
-  ViewsResponse,
+  endpoints,
+  type CreateHighlightRequest,
+  type CreateViewRequest,
+  type Endpoint,
+  type ImportReadwiseRequest,
+  type SaveDocumentRequest,
+  type SetFeedNotificationRequest,
+  type SubscribeFeedRequest,
+  type SynthesizeAudioRequest,
+  type SyncPushRequest,
+  type TtsPreviewRequest,
+  type UpdateDocumentRequest,
+  type UpdateFeedRequest,
+  type UpdateTtsSettingsRequest,
+  type UpdateViewRequest,
 } from "@lectern/shared";
 
 /**
  * A dependency-light mock server that serves contract-valid fixtures for every
- * endpoint. The frontend track (D5/D6) develops against this while the real BFF
- * (D3/D4) is built. Every response is run through its shared schema, so the mock
- * cannot drift from the contract.
+ * endpoint in the shared API registry (`endpoints`). Dispatch is DERIVED from the
+ * registry: each operation maps to a fixture handler keyed by `operationId`, the
+ * router matches the request against the registry's method+path, validates the
+ * request body and the success response against the contract, and a load-time
+ * check throws if any registry endpoint lacks a handler — so the mock cannot drift
+ * from the contract the way the old hand-rolled if-chain did.
  */
 
 const NOW = "2026-06-03T12:00:00Z";
@@ -252,7 +243,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+  "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   "access-control-allow-headers": "authorization,content-type",
 } as const;
 
@@ -273,6 +264,327 @@ let mockPlayer = PlayerState.parse({});
 let mockPodcastToken = "mocktoken";
 const mockPodcast = new Set<string>();
 
+type MockContext = { params: Record<string, string>; query: URLSearchParams; body: unknown };
+type MockResult = {
+  status?: number;
+  json?: unknown;
+  binary?: { contentType: string; bytes: Buffer; headers?: Record<string, string> };
+};
+type MockHandler = (ctx: MockContext) => MockResult | Promise<MockResult>;
+
+const TTS_UNCONFIGURED: MockResult = { status: 409, json: { error: "TTS is not configured" } };
+
+function ttsSettings(): MockResult {
+  return {
+    json: { configured: !!mockTts.apiKey, voiceId: mockTts.voiceId, modelId: mockTts.modelId },
+  };
+}
+
+const ARTICLE = [
+  "<h2>Introduction</h2>",
+  "<p>This opening paragraph is long enough to read comfortably and to select text within for highlighting during development.</p>",
+  "<p>A second paragraph continues the thought so the reader has several blocks to focus and navigate between with the keyboard.</p>",
+  "<h2>Background</h2>",
+  "<p>Background paragraph one sets the context in a few sentences of sample prose used while building the reading view.</p>",
+  "<p>Background paragraph two adds detail, giving the table of contents and paragraph focus real material to work with.</p>",
+  "<h3>Finer points</h3>",
+  "<p>A nested subsection paragraph, addressed by an h3 entry in the table of contents.</p>",
+  "<blockquote>A short pull quote to vary the block types within the article body.</blockquote>",
+  "<h2>Conclusion</h2>",
+  "<p>The closing paragraph wraps things up and gives the reader a final block to land on.</p>",
+].join("");
+
+/**
+ * Fixture handlers keyed by the registry's `operationId`. Each returns a plain
+ * object the router validates against the endpoint's response schema (so a fixture
+ * that drifts from the contract fails loudly), or a `binary`/`status` override for
+ * audio and error paths.
+ */
+const handlers: Record<string, MockHandler> = {
+  // ---- documents ----
+  listDocuments: () => ({
+    json: { results: sampleCards(), nextCursor: null, count: sampleCards().length },
+  }),
+  search: ({ query }) => {
+    const q = query.get("q") ?? "";
+    const first = sampleCards()[0]!;
+    return {
+      json: { results: q ? [{ id: first.id, snippet: `…matches “${q}”…`, rank: 1 }] : [] },
+    };
+  },
+  saveDocument: ({ body }) => {
+    const input = body as SaveDocumentRequest;
+    return {
+      json: sampleCard({
+        id: "card_new",
+        url: input.url,
+        location: input.location,
+        tags: input.tags,
+      }),
+    };
+  },
+  getDocument: ({ params }) => ({ json: sampleCard({ id: params.id }) }),
+  updateDocument: ({ params, body }) => ({
+    json: sampleCard({ id: params.id, ...(body as UpdateDocumentRequest) }),
+  }),
+  deleteDocument: () => ({}),
+  bulkDeleteDocuments: () => ({ json: { deleted: 0 } }),
+  getDocumentContent: ({ params }) => ({
+    json: { id: params.id, html: `<main>${ARTICLE}</main>` },
+  }),
+  getDocumentAccent: () => ({ json: { color: null } }),
+  importReadwise: ({ body }) => {
+    const total = (body as ImportReadwiseRequest).csv
+      .split("\n")
+      .filter((l) => /https?:\/\//.test(l)).length;
+    return { json: { total, imported: total, failed: 0 } };
+  },
+  // ---- highlights ----
+  listHighlights: () => ({ json: { highlights: [] } }),
+  createHighlight: ({ params, body }) => ({
+    json: sampleHighlight({ documentId: params.id, ...(body as CreateHighlightRequest) }),
+  }),
+  deleteHighlight: () => ({}),
+  // ---- tags ----
+  listTags: () => ({ json: { tags: [{ name: "sample", count: 1 }] } }),
+  // ---- views ----
+  listViews: () => ({ json: { views: [] } }),
+  createView: ({ body }) => ({
+    json: { id: "view_new", createdAt: NOW, updatedAt: NOW, ...(body as CreateViewRequest) },
+  }),
+  updateView: ({ params, body }) => ({
+    json: {
+      id: params.id,
+      name: "Mock view",
+      query: { kind: "term", field: "location", op: "eq", value: "later" },
+      createdAt: NOW,
+      updatedAt: NOW,
+      ...(body as UpdateViewRequest),
+    },
+  }),
+  deleteView: () => ({}),
+  // ---- sync ----
+  syncPull: () => ({ json: { cards: sampleCards(), deletedIds: [], cursor: "1" } }),
+  syncPush: ({ body }) => ({
+    json: { applied: (body as SyncPushRequest).mutations.length, conflicts: [] },
+  }),
+  forceSync: () => {
+    const cards = sampleCards();
+    return {
+      json: {
+        miniflux: cards.filter((c) => c.source === "miniflux").length,
+        readeck: cards.filter((c) => c.source === "readeck").length,
+        tombstoned: 0,
+      },
+    };
+  },
+  // ---- feeds ----
+  listFeeds: () => ({
+    json: {
+      // Mirror the publications behind the sample feed cards (matched by siteName)
+      // so the sidebar feed tree shows realistic folders + counts.
+      feeds: [
+        {
+          id: "feed_1",
+          title: "Simon Willison's Weblog",
+          feedUrl: "https://simonwillison.net/atom/everything/",
+          siteUrl: "https://simonwillison.net",
+          folderId: "folder_tech",
+          folderTitle: "Tech",
+          unreadCount: 2,
+        },
+        {
+          id: "feed_2",
+          title: "The Pragmatic Engineer",
+          feedUrl: "https://newsletter.pragmaticengineer.com/feed",
+          siteUrl: "https://newsletter.pragmaticengineer.com",
+          folderId: "folder_tech",
+          folderTitle: "Tech",
+          unreadCount: 2,
+        },
+        {
+          id: "feed_3",
+          title: "Increment",
+          feedUrl: "https://increment.com/feed.xml",
+          siteUrl: "https://increment.com",
+          folderId: "folder_design",
+          folderTitle: "Design",
+          unreadCount: 1,
+        },
+      ],
+      folders: [
+        { id: "folder_tech", title: "Tech", unreadCount: 4 },
+        { id: "folder_design", title: "Design", unreadCount: 1 },
+      ],
+    },
+  }),
+  subscribeFeed: ({ body }) => {
+    const input = body as SubscribeFeedRequest;
+    return {
+      json: {
+        id: "feed_new",
+        title: "New Feed",
+        feedUrl: input.feedUrl,
+        folderId: input.folderId ?? null,
+      },
+    };
+  },
+  updateFeed: ({ params, body }) => {
+    const patch = body as UpdateFeedRequest;
+    return {
+      json: {
+        id: params.id,
+        title: patch.title ?? "Example Feed",
+        feedUrl: "https://example.com/rss",
+        folderId: patch.folderId ?? null,
+      },
+    };
+  },
+  deleteFeed: () => ({}),
+  refreshFeeds: () => ({}),
+  importOpml: () => ({ json: { message: "Feeds imported." } }),
+  // ---- web push notifications ----
+  getPushPublicKey: () => ({ json: { publicKey: "mock-vapid-public-key" } }),
+  registerPushSubscription: () => ({ json: { ok: true } }),
+  unregisterPushSubscription: () => ({ json: { ok: true } }),
+  getFeedNotifications: () => ({ json: { feeds: [] } }),
+  setFeedNotification: ({ params, body }) => ({
+    json: { feedId: params.feedId, enabled: (body as SetFeedNotificationRequest).enabled },
+  }),
+  // ---- text-to-speech ("Listen") ----
+  getTtsSettings: () => ttsSettings(),
+  updateTtsSettings: ({ body }) => {
+    const patch = body as UpdateTtsSettingsRequest;
+    if (patch.apiKey !== undefined) mockTts.apiKey = patch.apiKey ? patch.apiKey : null;
+    if (patch.voiceId !== undefined) mockTts.voiceId = patch.voiceId;
+    if (patch.modelId !== undefined) mockTts.modelId = patch.modelId;
+    return ttsSettings();
+  },
+  listTtsVoices: () =>
+    mockTts.apiKey
+      ? {
+          json: {
+            voices: [
+              { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" },
+              { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi" },
+            ],
+          },
+        }
+      : TTS_UNCONFIGURED,
+  getTtsUsage: () =>
+    mockTts.apiKey
+      ? {
+          json: {
+            tier: "creator",
+            status: "active",
+            characterCount: 12_000,
+            characterLimit: 100_000,
+            nextResetAt: NOW,
+          },
+        }
+      : TTS_UNCONFIGURED,
+  previewTtsVoice: ({ body }) => {
+    if (!mockTts.apiKey) return TTS_UNCONFIGURED;
+    const voiceId = (body as TtsPreviewRequest).voiceId;
+    return {
+      binary: {
+        contentType: "audio/mpeg",
+        bytes: Buffer.from(`mock-preview:${voiceId}`),
+        headers: { "x-tts-content-hash": `mockpreview_${voiceId}` },
+      },
+    };
+  },
+  synthesizeAudio: ({ params }) => {
+    if (!mockTts.apiKey) return TTS_UNCONFIGURED;
+    return {
+      binary: {
+        contentType: "audio/mpeg",
+        bytes: Buffer.from(`mock-audio:${params.id}`),
+        headers: { "x-tts-content-hash": `mockhash_${params.id}` },
+      },
+    };
+  },
+  addPodcastEpisode: ({ params, body }) => {
+    const id = params.id!;
+    if (!mockTts.apiKey) return TTS_UNCONFIGURED;
+    mockPodcast.add(id);
+    return {
+      json: {
+        documentId: id,
+        title: (body as SynthesizeAudioRequest).title ?? `Article ${id}`,
+        durationSeconds: 180,
+        byteLength: 2_880_000,
+        addedAt: new Date().toISOString(),
+      },
+    };
+  },
+  getPodcastSettings: () => ({
+    json: {
+      feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
+      episodeCount: mockPodcast.size,
+    },
+  }),
+  regeneratePodcastFeed: () => {
+    mockPodcastToken = `mocktoken-${mockPodcast.size}`;
+    return {
+      json: {
+        feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
+        episodeCount: mockPodcast.size,
+      },
+    };
+  },
+  getPlayerState: () => ({ json: mockPlayer }),
+  savePlayerState: ({ body }) => {
+    mockPlayer = PlayerState.parse({ ...(body as object), updatedAt: new Date().toISOString() });
+    return { json: mockPlayer };
+  },
+};
+
+/** Every registry endpoint must have a handler — fail fast on contract drift. */
+export const handledOperationIds: ReadonlySet<string> = new Set(Object.keys(handlers));
+const unhandled = endpoints.filter((e) => !handledOperationIds.has(e.operationId));
+if (unhandled.length > 0) {
+  throw new Error(
+    `mock-server: missing handlers for ${unhandled.map((e) => e.operationId).join(", ")}`,
+  );
+}
+
+interface CompiledRoute {
+  ep: Endpoint;
+  regex: RegExp;
+  keys: string[];
+}
+
+// Static segments must win over `:param` ones at the same depth (e.g.
+// `/documents/bulk-delete` before `/documents/:id`), so try fewer-param routes first.
+const routes: CompiledRoute[] = endpoints
+  .map((ep) => {
+    const keys: string[] = [];
+    const pattern = ep.path.replace(/:(\w+)/g, (_m, k: string) => {
+      keys.push(k);
+      return "([^/]+)";
+    });
+    return { ep, regex: new RegExp(`^${pattern}$`), keys };
+  })
+  .sort((a, b) => a.keys.length - b.keys.length);
+
+function respond(res: ServerResponse, ep: Endpoint, out: MockResult): void {
+  const status = out.status ?? ep.status;
+  if (out.binary) {
+    res.writeHead(status, {
+      "content-type": out.binary.contentType,
+      ...out.binary.headers,
+      ...CORS_HEADERS,
+    });
+    res.end(out.binary.bytes);
+    return;
+  }
+  let body = out.json;
+  // Validate success responses against the contract so fixtures can't drift.
+  if (status === ep.status && ep.response && body !== undefined) body = ep.response.parse(body);
+  send(res, status, body);
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
   if (method === "OPTIONS") {
@@ -280,314 +592,31 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     res.end();
     return;
   }
-  const path =
-    (new URL(req.url ?? "/", "http://localhost").pathname.replace(/^\/api\/v1/, "") || "/").replace(
-      /\/$/,
-      "",
-    ) || "/";
-  const body = method === "POST" || method === "PATCH" ? await readJson(req) : undefined;
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const path = (url.pathname.replace(/^\/api\/v1/, "") || "/").replace(/\/$/, "") || "/";
+  const body = method === "GET" ? undefined : await readJson(req);
 
-  if (path === "/documents" && method === "GET") {
-    return send(
-      res,
-      200,
-      ListDocumentsResponse.parse({
-        results: sampleCards(),
-        nextCursor: null,
-        count: sampleCards().length,
-      }),
-    );
-  }
-  if (path === "/documents" && method === "POST") {
-    const input = SaveDocumentRequest.parse(body);
-    return send(
-      res,
-      201,
-      sampleCard({ id: "card_new", url: input.url, location: input.location, tags: input.tags }),
-    );
-  }
-  if (path === "/import/readwise" && method === "POST") {
-    const input = ImportReadwiseRequest.parse(body);
-    const total = input.csv.split("\n").filter((l) => /https?:\/\//.test(l)).length;
-    return send(res, 200, ImportReadwiseResponse.parse({ total, imported: total, failed: 0 }));
-  }
-  if (path === "/tags" && method === "GET") {
-    return send(res, 200, TagsResponse.parse({ tags: [{ name: "sample", count: 1 }] }));
-  }
-  if (path === "/views" && method === "GET") {
-    return send(res, 200, ViewsResponse.parse({ views: [] }));
-  }
-  if (path === "/views" && method === "POST") {
-    const input = CreateViewRequest.parse(body);
-    return send(
-      res,
-      201,
-      SavedView.parse({ id: "view_new", createdAt: NOW, updatedAt: NOW, ...input }),
-    );
-  }
-  if (path === "/sync" && method === "GET") {
-    return send(
-      res,
-      200,
-      SyncPullResponse.parse({ cards: sampleCards(), deletedIds: [], cursor: "1" }),
-    );
-  }
-  if (path === "/sync" && method === "POST") {
-    const input = SyncPushRequest.parse(body);
-    return send(
-      res,
-      200,
-      SyncPushResponse.parse({ applied: input.mutations.length, conflicts: [] }),
-    );
-  }
-  if (path === "/feeds" && method === "GET") {
-    return send(
-      res,
-      200,
-      FeedsResponse.parse({
-        // Mirror the publications behind the sample feed cards (matched by
-        // siteName) so the sidebar feed tree shows realistic folders + counts.
-        feeds: [
-          {
-            id: "feed_1",
-            title: "Simon Willison's Weblog",
-            feedUrl: "https://simonwillison.net/atom/everything/",
-            siteUrl: "https://simonwillison.net",
-            folderId: "folder_tech",
-            folderTitle: "Tech",
-            unreadCount: 2,
-          },
-          {
-            id: "feed_2",
-            title: "The Pragmatic Engineer",
-            feedUrl: "https://newsletter.pragmaticengineer.com/feed",
-            siteUrl: "https://newsletter.pragmaticengineer.com",
-            folderId: "folder_tech",
-            folderTitle: "Tech",
-            unreadCount: 2,
-          },
-          {
-            id: "feed_3",
-            title: "Increment",
-            feedUrl: "https://increment.com/feed.xml",
-            siteUrl: "https://increment.com",
-            folderId: "folder_design",
-            folderTitle: "Design",
-            unreadCount: 1,
-          },
-        ],
-        folders: [
-          { id: "folder_tech", title: "Tech", unreadCount: 4 },
-          { id: "folder_design", title: "Design", unreadCount: 1 },
-        ],
-      }),
-    );
-  }
-  if (path === "/feeds" && method === "POST") {
-    const input = SubscribeFeedRequest.parse(body);
-    return send(
-      res,
-      201,
-      Feed.parse({
-        id: "feed_new",
-        title: "New Feed",
-        feedUrl: input.feedUrl,
-        folderId: input.folderId ?? null,
-      }),
-    );
-  }
-  if (path === "/feeds/refresh" && method === "POST") return send(res, 202);
-  if (path === "/feeds/import" && method === "POST") {
-    ImportOpmlRequest.parse(body);
-    return send(res, 200, ImportOpmlResponse.parse({ message: "Feeds imported." }));
-  }
-
-  // ---- text-to-speech ("Listen") ----
-  if (path === "/settings/tts" && method === "GET") {
-    return send(
-      res,
-      200,
-      TtsSettings.parse({
-        configured: !!mockTts.apiKey,
-        voiceId: mockTts.voiceId,
-        modelId: mockTts.modelId,
-      }),
-    );
-  }
-  if (path === "/settings/tts" && method === "PATCH") {
-    const patch = UpdateTtsSettingsRequest.parse(body);
-    if (patch.apiKey !== undefined) mockTts.apiKey = patch.apiKey ? patch.apiKey : null;
-    if (patch.voiceId !== undefined) mockTts.voiceId = patch.voiceId;
-    if (patch.modelId !== undefined) mockTts.modelId = patch.modelId;
-    return send(
-      res,
-      200,
-      TtsSettings.parse({
-        configured: !!mockTts.apiKey,
-        voiceId: mockTts.voiceId,
-        modelId: mockTts.modelId,
-      }),
-    );
-  }
-  if (path === "/settings/tts/voices" && method === "GET") {
-    if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
-    return send(
-      res,
-      200,
-      TtsVoicesResponse.parse({
-        voices: [
-          { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" },
-          { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi" },
-        ],
-      }),
-    );
-  }
-  if (path === "/settings/tts/preview" && method === "POST") {
-    if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
-    const voiceId = (body as { voiceId?: string })?.voiceId ?? mockTts.voiceId;
-    const bytes = Buffer.from(`mock-preview:${voiceId}`);
-    res.writeHead(200, {
-      "content-type": "audio/mpeg",
-      "x-tts-content-hash": `mockpreview_${voiceId}`,
-      ...CORS_HEADERS,
+  for (const route of routes) {
+    if (route.ep.method !== method) continue;
+    const match = route.regex.exec(path);
+    if (!match) continue;
+    const params: Record<string, string> = {};
+    route.keys.forEach((k, i) => {
+      params[k] = match[i + 1]!;
     });
-    res.end(bytes);
-    return;
-  }
-  if (path === "/settings/podcast" && method === "GET") {
-    return send(
-      res,
-      200,
-      PodcastSettings.parse({
-        feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
-        episodeCount: mockPodcast.size,
-      }),
-    );
-  }
-  if (path === "/settings/podcast/regenerate" && method === "POST") {
-    mockPodcastToken = `mocktoken-${mockPodcast.size}`;
-    return send(
-      res,
-      200,
-      PodcastSettings.parse({
-        feedUrl: `http://localhost/podcast/${mockPodcastToken}/feed.xml`,
-        episodeCount: mockPodcast.size,
-      }),
-    );
-  }
-  if (path === "/settings/player" && method === "GET") {
-    return send(res, 200, PlayerState.parse(mockPlayer));
-  }
-  if (path === "/settings/player" && method === "PATCH") {
-    mockPlayer = PlayerState.parse({ ...(body as object), updatedAt: new Date().toISOString() });
-    return send(res, 200, mockPlayer);
-  }
-
-  const doc = path.match(
-    /^\/documents\/([^/]+)(\/content|\/highlights|\/audio|\/accent|\/podcast)?$/,
-  );
-  if (doc) {
-    const id = doc[1]!;
-    const sub = doc[2];
-    if (sub === "/accent" && method === "GET") return send(res, 200, { color: null });
-    if (sub === "/podcast" && method === "POST") {
-      if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
-      mockPodcast.add(id);
-      return send(
-        res,
-        201,
-        PodcastEpisode.parse({
-          documentId: id,
-          title: (body as { title?: string })?.title ?? `Article ${id}`,
-          durationSeconds: 180,
-          byteLength: 2_880_000,
-          addedAt: new Date().toISOString(),
-        }),
-      );
+    let parsedBody = body;
+    if (route.ep.body && body !== undefined) {
+      const result = route.ep.body.safeParse(body);
+      if (!result.success) return send(res, 400, { error: "invalid request body" });
+      parsedBody = result.data;
     }
-    if (sub === "/audio" && method === "POST") {
-      if (!mockTts.apiKey) return send(res, 409, { error: "TTS is not configured" });
-      // Placeholder bytes so the SPA can build an object URL + exercise the player
-      // without a real ElevenLabs call. Not valid audio; enough for UI/state checks.
-      const bytes = Buffer.from(`mock-audio:${id}`);
-      res.writeHead(200, {
-        "content-type": "audio/mpeg",
-        "x-tts-content-hash": `mockhash_${id}`,
-        ...CORS_HEADERS,
-      });
-      res.end(bytes);
-      return;
-    }
-    if (!sub && method === "GET") return send(res, 200, sampleCard({ id }));
-    if (!sub && method === "PATCH")
-      return send(res, 200, sampleCard({ id, ...UpdateDocumentRequest.parse(body) }));
-    if (!sub && method === "DELETE") return send(res, 204);
-    if (sub === "/content" && method === "GET") {
-      const article = [
-        "<h2>Introduction</h2>",
-        "<p>This opening paragraph is long enough to read comfortably and to select text within for highlighting during development.</p>",
-        "<p>A second paragraph continues the thought so the reader has several blocks to focus and navigate between with the keyboard.</p>",
-        "<h2>Background</h2>",
-        "<p>Background paragraph one sets the context in a few sentences of sample prose used while building the reading view.</p>",
-        "<p>Background paragraph two adds detail, giving the table of contents and paragraph focus real material to work with.</p>",
-        "<h3>Finer points</h3>",
-        "<p>A nested subsection paragraph, addressed by an h3 entry in the table of contents.</p>",
-        "<blockquote>A short pull quote to vary the block types within the article body.</blockquote>",
-        "<h2>Conclusion</h2>",
-        "<p>The closing paragraph wraps things up and gives the reader a final block to land on.</p>",
-      ].join("");
-      return send(res, 200, DocumentContentResponse.parse({ id, html: `<main>${article}</main>` }));
-    }
-    if (sub === "/highlights" && method === "GET")
-      return send(res, 200, HighlightsResponse.parse({ highlights: [] }));
-    if (sub === "/highlights" && method === "POST") {
-      return send(
-        res,
-        201,
-        sampleHighlight({ documentId: id, ...CreateHighlightRequest.parse(body) }),
-      );
-    }
+    const out = await handlers[route.ep.operationId]!({
+      params,
+      query: url.searchParams,
+      body: parsedBody,
+    });
+    return respond(res, route.ep, out);
   }
-
-  const view = path.match(/^\/views\/([^/]+)$/);
-  if (view) {
-    const id = view[1]!;
-    if (method === "PATCH") {
-      const patch = UpdateViewRequest.parse(body);
-      return send(
-        res,
-        200,
-        SavedView.parse({
-          id,
-          name: "Mock view",
-          query: { kind: "term", field: "location", op: "eq", value: "later" },
-          createdAt: NOW,
-          updatedAt: NOW,
-          ...patch,
-        }),
-      );
-    }
-    if (method === "DELETE") return send(res, 204);
-  }
-  const feed = path.match(/^\/feeds\/([^/]+)$/);
-  if (feed) {
-    const id = feed[1]!;
-    if (method === "PATCH") {
-      const patch = UpdateFeedRequest.parse(body);
-      return send(
-        res,
-        200,
-        Feed.parse({
-          id,
-          title: patch.title ?? "Example Feed",
-          feedUrl: "https://example.com/rss",
-          folderId: patch.folderId ?? null,
-        }),
-      );
-    }
-    if (method === "DELETE") return send(res, 204);
-  }
-  if (path.match(/^\/highlights\/([^/]+)$/) && method === "DELETE") return send(res, 204);
 
   send(res, 404, { error: "not found", method, path });
 }

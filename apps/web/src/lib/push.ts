@@ -36,10 +36,7 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer | null): string {
 /** True only when the browser has the full service worker + push + notification stack. */
 export function isPushSupported(): boolean {
 	return (
-		browser &&
-		'serviceWorker' in navigator &&
-		'PushManager' in window &&
-		'Notification' in window
+		browser && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 	);
 }
 

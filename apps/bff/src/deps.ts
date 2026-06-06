@@ -26,7 +26,7 @@ export function buildRealDeps(): AppDeps {
     apiToken: config.READECK_API_TOKEN,
   });
   const overlay = new DrizzleOverlayStore(db);
-  const unify = new UnificationService(rss, readLater, overlay);
+  const unify = new UnificationService(overlay);
   const tts = new ProviderTtsRouter({
     elevenlabs: new ElevenLabsBackend(),
     kokoro: new KokoroBackend({ baseUrl: config.KOKORO_BASE_URL }),

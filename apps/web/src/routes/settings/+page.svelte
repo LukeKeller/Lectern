@@ -781,7 +781,8 @@
 		{:else}
 			<p class="hint">
 				Get a notification on this device when feeds you’ve subscribed to publish something new.
-				Choose which feeds notify you on the <a class="link" href={resolve('/feeds')}>Feeds page</a>.
+				Choose which feeds notify you on the <a class="link" href={resolve('/feeds')}>Feeds page</a
+				>.
 			</p>
 			<div class="row">
 				<button type="button" class="btn" disabled={pushBusy} onclick={togglePush}>

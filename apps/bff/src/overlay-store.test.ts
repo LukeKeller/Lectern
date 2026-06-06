@@ -1,6 +1,6 @@
 import { Card } from "@lectern/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cardFromRow } from "./overlay-store";
+import { backendTruthSet, cardFromRow, OVERLAY_COLUMNS } from "./overlay-store";
 import type { DocumentRow } from "./db/schema";
 
 /**
@@ -73,5 +73,33 @@ describe("cardFromRow", () => {
     const row = rowFromStoredCard(validCard);
     row.metadata = null;
     expect(cardFromRow(row, 0)).toBeNull();
+  });
+});
+
+describe("backendTruthSet (index-never-clobbers-overlay invariant)", () => {
+  it("excludes every overlay column, so a backend poll cannot clobber it", () => {
+    const row = rowFromStoredCard(validCard);
+    // User-owned overlay state that a backend refresh must leave untouched.
+    row.location = "archive";
+    row.tags = ["mine"];
+    row.note = "my note";
+    row.readProgress = 0.7;
+    row.readAnchor = "#n9";
+    const set = backendTruthSet(row);
+    for (const col of OVERLAY_COLUMNS) {
+      expect(col in set).toBe(false);
+    }
+  });
+
+  it("refreshes the backend-truth columns and clears the tombstone", () => {
+    const row = rowFromStoredCard(validCard);
+    expect(backendTruthSet(row)).toMatchObject({
+      category: row.category,
+      title: row.title,
+      url: row.url,
+      savedAt: row.savedAt,
+      updatedAt: row.updatedAt,
+      deletedAt: null,
+    });
   });
 });

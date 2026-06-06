@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { endpoints } from "@lectern/shared";
 import { LecternClient } from "./client";
-import { type MockServerHandle, startMockServer } from "./mock-server";
+import { handledOperationIds, type MockServerHandle, startMockServer } from "./mock-server";
 
 let handle: MockServerHandle;
 let client: LecternClient;
@@ -56,5 +57,54 @@ describe("mock server serves the contract", () => {
 
   it("refreshFeeds resolves on an empty-body 202", async () => {
     await expect(client.refreshFeeds()).resolves.toBeUndefined();
+  });
+});
+
+describe("mock dispatch is derived from the registry", () => {
+  it("has a handler for every endpoint in the registry", () => {
+    const missing = endpoints.filter((e) => !handledOperationIds.has(e.operationId));
+    expect(missing.map((e) => e.operationId)).toEqual([]);
+  });
+});
+
+describe("mock serves endpoints the old if-chain dropped", () => {
+  it("search returns ranked, schema-valid results", async () => {
+    const r = await client.search("fox");
+    expect(r.results.length).toBeGreaterThan(0);
+    expect(r.results[0]!.rank).toBe(1);
+  });
+
+  it("bulkDelete returns a deleted count", async () => {
+    const r = await client.bulkDelete("archive");
+    expect(r.deleted).toBeGreaterThanOrEqual(0);
+  });
+
+  it("forceSync returns per-source counts", async () => {
+    const r = await client.forceSync();
+    expect(r.miniflux + r.readeck).toBeGreaterThan(0);
+  });
+
+  it("getTtsUsage returns usage for the preconfigured key", async () => {
+    const r = await client.getTtsUsage();
+    expect(r.tier).toBeTruthy();
+  });
+
+  it("getDocumentAccent returns a nullable colour", async () => {
+    const r = await client.getDocumentAccent("card_1");
+    expect(r).toHaveProperty("color");
+  });
+
+  it("push endpoints round-trip against the contract", async () => {
+    expect((await client.getPushPublicKey()).publicKey).toBeTruthy();
+    const reg = await client.registerPushSubscription({
+      endpoint: "https://push.example/abc",
+      keys: { p256dh: "k", auth: "a" },
+    });
+    expect(reg.ok).toBe(true);
+    expect(Array.isArray((await client.getFeedNotifications()).feeds)).toBe(true);
+    expect(await client.setFeedNotification("feed_1", true)).toEqual({
+      feedId: "feed_1",
+      enabled: true,
+    });
   });
 });
