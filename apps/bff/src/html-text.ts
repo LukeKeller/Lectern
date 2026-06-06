@@ -80,3 +80,21 @@ export function stripUrls(text: string): string {
     .replace(/ +([.,;:!?])/g, "$1")
     .trim();
 }
+
+/**
+ * Does this HTML carry any readable text, or is it empty markup like
+ * `<p></p><p></p>`? Used to avoid caching/serving bodies that failed to extract.
+ */
+export function hasReadableText(html: string): boolean {
+  return htmlToText(html).length > 0;
+}
+
+/**
+ * Choose whichever HTML body has more readable text. Lets the content resolver
+ * prefer a scraped full article over an excerpt-only feed body, while keeping
+ * the feed body for JS-only sources (e.g. Bluesky) whose pages scrape to empty
+ * markup. Ties keep `feedBody`.
+ */
+export function richerHtml(feedBody: string, scraped: string): string {
+  return htmlToText(scraped).length > htmlToText(feedBody).length ? scraped : feedBody;
+}

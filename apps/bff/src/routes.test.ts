@@ -757,6 +757,21 @@ describe("documents", () => {
     await a.close();
   });
 
+  it("ignores a cached body with no readable text and re-fetches it", async () => {
+    // An earlier failed scrape cached empty markup for a feed item; the reader
+    // should re-fetch (and now get the feed-provided body) instead of showing blank.
+    await harness.deps.overlay.putContent("miniflux:42", "<p></p><p></p>");
+    harness.deps.rss.content.set("42", "<article>full bluesky post</article>");
+    const a = app();
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/miniflux:42/content",
+      headers: auth,
+    });
+    expect(res.json().html).toContain("full bluesky post");
+    await a.close();
+  });
+
   it("full-text searches owned article bodies", async () => {
     harness.deps.readLater.content.set("b1", "<article>the quick brown fox jumps</article>");
     const a = app();

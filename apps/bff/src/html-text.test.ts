@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToText, stripUrls } from "./html-text";
+import { hasReadableText, htmlToText, richerHtml, stripUrls } from "./html-text";
 
 describe("htmlToText", () => {
   it("strips tags and keeps paragraph breaks between blocks", () => {
@@ -33,5 +33,30 @@ describe("stripUrls", () => {
 
   it("leaves URL-free text untouched", () => {
     expect(stripUrls("Just plain prose.")).toBe("Just plain prose.");
+  });
+});
+
+describe("hasReadableText", () => {
+  it("is false for empty markup and true for real text", () => {
+    expect(hasReadableText("<p></p><p></p>")).toBe(false);
+    expect(hasReadableText("   \n  ")).toBe(false);
+    expect(hasReadableText("<p>hello</p>")).toBe(true);
+  });
+});
+
+describe("richerHtml", () => {
+  it("keeps the feed body when the scrape is empty markup (e.g. Bluesky)", () => {
+    const feed = "<p>The full post text lives in the RSS item.</p>";
+    expect(richerHtml(feed, "<p></p><p></p>")).toBe(feed);
+  });
+
+  it("prefers the scrape when it has more text than an excerpt feed body", () => {
+    const excerpt = "<p>Short teaser…</p>";
+    const full = "<p>The complete article body with much more text than the teaser.</p>";
+    expect(richerHtml(excerpt, full)).toBe(full);
+  });
+
+  it("keeps the feed body on a tie", () => {
+    expect(richerHtml("<p>same</p>", "<div>same</div>")).toBe("<p>same</p>");
   });
 });
