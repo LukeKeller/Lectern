@@ -35,6 +35,7 @@
 		{
 			title: 'Go to',
 			items: [
+				['g  h', 'Home'],
 				['g  i', 'Inbox'],
 				['g  l', 'Later'],
 				['g  s', 'Shortlist'],

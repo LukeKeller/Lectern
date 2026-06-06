@@ -30,6 +30,7 @@ import type { Location } from '@lectern/shared';
 /** A navigable route handled by the global keyboard layer. */
 export type NavTarget =
 	| '/'
+	| '/inbox'
 	| '/later'
 	| '/shortlist'
 	| '/archive'
@@ -83,7 +84,7 @@ export const SINGLE_KEYS: Record<string, KeyAction> = {
 /** Two-key chords keyed by their leading prefix (e.g. `g` then `i`). */
 export const PREFIX_KEYS: Record<string, Record<string, KeyAction>> = {
 	g: {
-		i: { type: 'navigate', path: '/' },
+		i: { type: 'navigate', path: '/inbox' },
 		h: { type: 'navigate', path: '/' },
 		l: { type: 'navigate', path: '/later' },
 		s: { type: 'navigate', path: '/shortlist' },

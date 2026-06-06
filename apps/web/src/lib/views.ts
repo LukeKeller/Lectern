@@ -12,7 +12,7 @@ import type { Location, QueryNode } from '@lectern/shared';
 export interface PredefinedView {
 	id: string;
 	name: string;
-	path: '/' | '/feed' | '/library';
+	path: '/inbox' | '/later' | '/shortlist' | '/archive' | '/feed';
 	query: QueryNode;
 }
 
@@ -42,10 +42,10 @@ export function orQueries(...nodes: QueryNode[]): QueryNode {
 
 /** The built-in views surfaced in the nav and command palette. */
 export const PREDEFINED_VIEWS: PredefinedView[] = [
-	{ id: 'inbox', name: 'Inbox', path: '/', query: locationQuery('inbox') },
-	{ id: 'later', name: 'Later', path: '/', query: locationQuery('later') },
-	{ id: 'shortlist', name: 'Shortlist', path: '/library', query: locationQuery('shortlist') },
-	{ id: 'archive', name: 'Archive', path: '/library', query: locationQuery('archive') },
+	{ id: 'inbox', name: 'Inbox', path: '/inbox', query: locationQuery('inbox') },
+	{ id: 'later', name: 'Later', path: '/later', query: locationQuery('later') },
+	{ id: 'shortlist', name: 'Shortlist', path: '/shortlist', query: locationQuery('shortlist') },
+	{ id: 'archive', name: 'Archive', path: '/archive', query: locationQuery('archive') },
 	{ id: 'feed', name: 'Feed', path: '/feed', query: locationQuery('feed') }
 ];
 

@@ -22,7 +22,13 @@
 
 	const commands = $derived.by<Command[]>(() => {
 		const list: Command[] = [
-			{ id: 'go-inbox', label: 'Inbox', group: 'Go to', run: () => void goto(resolve('/')) },
+			{ id: 'go-home', label: 'Home', group: 'Go to', run: () => void goto(resolve('/')) },
+			{
+				id: 'go-inbox',
+				label: 'Inbox',
+				group: 'Go to',
+				run: () => void goto(resolve('/inbox'))
+			},
 			{ id: 'go-later', label: 'Later', group: 'Go to', run: () => void goto(resolve('/later')) },
 			{
 				id: 'go-shortlist',

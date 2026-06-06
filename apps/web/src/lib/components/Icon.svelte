@@ -6,6 +6,7 @@
 	 */
 	export type IconName =
 		| 'inbox'
+		| 'home'
 		| 'clock'
 		| 'star'
 		| 'archive'
@@ -49,6 +50,7 @@
 	const paths: Record<IconName, string> = {
 		inbox:
 			'<path d="M3 13h4l2 3h6l2-3h4"/><path d="M5 13 7 5h10l2 8v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>',
+		home: '<path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19z"/>',
 		clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
 		star: '<path d="M12 3.5 14.6 9l5.9.6-4.4 4 1.3 5.9L12 16.6 6.6 19.5l1.3-5.9-4.4-4 5.9-.6z"/>',
 		archive:
