@@ -6,6 +6,7 @@
 	import { activeList } from '$lib/list-controller.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import { viewsStore } from '$lib/views-store.svelte';
+	import { trapFocus } from '$lib/focus-trap';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -170,7 +171,7 @@
 		onclick={() => (open = false)}
 		onkeydown={(e) => e.key === 'Enter' && (open = false)}
 	></div>
-	<div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+	<div class="palette" role="dialog" aria-modal="true" aria-label="Command palette" use:trapFocus>
 		<div class="search">
 			<input
 				bind:this={input}
@@ -179,13 +180,18 @@
 				type="text"
 				placeholder="Search commands…"
 				autocomplete="off"
+				role="combobox"
+				aria-expanded="true"
+				aria-controls="cmd-palette-list"
+				aria-activedescendant={filtered[cursor] ? `cmd-${filtered[cursor].id}` : undefined}
 			/>
 		</div>
-		<ul>
+		<ul id="cmd-palette-list" role="listbox" aria-label="Commands">
 			{#each filtered as cmd, i (cmd.id)}
-				<li>
+				<li role="option" id="cmd-{cmd.id}" aria-selected={i === cursor}>
 					<button
 						type="button"
+						tabindex="-1"
 						class:active={i === cursor}
 						onmouseenter={() => (cursor = i)}
 						onclick={() => run(cmd)}

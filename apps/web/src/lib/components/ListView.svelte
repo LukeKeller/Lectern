@@ -84,6 +84,9 @@
 	// Bumped on every keyboard-driven selection move so CardList can scroll the
 	// focused row into view (hover-driven selection leaves this untouched).
 	let scrollNonce = $state(0);
+	// SR-only announcement for triage / mark-read so assistive tech hears the move
+	// even when the row simply slides away.
+	let liveMessage = $state('');
 
 	// Ids marked read while viewing this list. They stay visible but faded instead
 	// of vanishing under the "unread" filter, until a refresh (component remount)
@@ -229,9 +232,31 @@
 		if (selectedIndex >= cards.length) selectedIndex = Math.max(0, cards.length - 1);
 	});
 
+	const LOCATION_LABEL: Record<Location, string> = {
+		inbox: 'Inbox',
+		later: 'Later',
+		shortlist: 'Shortlist',
+		archive: 'Archive',
+		feed: 'Feed'
+	};
+
 	function triageById(id: string, location: Location) {
+		const card = (all.value ?? []).find((c) => c.id === id);
+		const from = card?.location;
 		const sync = getSync();
 		void sync.enqueue({ type: 'setLocation', id, location }).then(() => sync.flush());
+		const label = location === 'archive' ? 'Archived' : `Moved to ${LOCATION_LABEL[location]}`;
+		// Single triage is reversible too: snapshot the prior location and offer the
+		// same timed Undo the bulk actions use. Its role=status toast doubles as the
+		// screen-reader announcement; a no-op move still announces via the live region.
+		if (from && from !== location) {
+			offerBulkUndo(label, () => {
+				const s = getSync();
+				void s.enqueue({ type: 'setLocation', id, location: from }).then(() => s.flush());
+			});
+		} else {
+			liveMessage = label;
+		}
 	}
 
 	// Mark one card read. RSS items flip their MiniFlux read flag (markRead); saved
@@ -247,6 +272,7 @@
 				.then(() => sync.flush());
 		}
 		noteRead(card.id, true);
+		liveMessage = 'Marked read';
 	}
 
 	// ---- Bulk actions over the currently-visible cards, each reversible. ----
@@ -437,6 +463,7 @@
 <svelte:window onclick={closePopovers} />
 
 <section class="list page">
+	<div class="sr-only" role="status" aria-live="polite">{liveMessage}</div>
 	<header class="head">
 		<h1>
 			{title}
@@ -639,6 +666,7 @@
 
 	<CardList
 		{cards}
+		loading={all.value === undefined}
 		{actions}
 		{empty}
 		{emptyHint}

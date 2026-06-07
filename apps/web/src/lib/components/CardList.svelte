@@ -18,6 +18,7 @@
 
 	let {
 		cards,
+		loading = false,
 		actions = [],
 		empty = 'Nothing here.',
 		emptyHint,
@@ -32,6 +33,8 @@
 		onopen
 	}: {
 		cards: Card[] | undefined;
+		/** Show the loading skeleton (not the empty state) while the mirror resolves. */
+		loading?: boolean;
 		actions?: TriageAction[];
 		empty?: string;
 		/** Secondary line under the empty headline that teaches what this list holds. */
@@ -260,6 +263,7 @@
 	let undoTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function onSwipe(card: Card, dir: SwipeDirection) {
+		dismissSwipeHint();
 		if (dir === 'right') {
 			toggleRead(card);
 			return;
@@ -267,7 +271,7 @@
 		// Left swipe = archive, offered with a brief undo since it's destructive.
 		const from = card.location;
 		triage(card.id, 'archive');
-		if (from !== 'archive') {
+		if (!ontriage && from !== 'archive') {
 			undo = { id: card.id, from };
 			if (undoTimer) clearTimeout(undoTimer);
 			undoTimer = setTimeout(() => (undo = null), 6000);
@@ -285,11 +289,27 @@
 	// images become the exception that earns visual weight, not a forced rail.
 	let failedCovers = new SvelteSet<string>();
 	const hasCover = (card: Card) => !!card.coverImage && !failedCovers.has(card.id);
+
+	// One-time mobile coach: the quick-action buttons are hover-only, so on touch
+	// the swipe gestures need a nudge. Shown once, dismissed on first swipe or via
+	// the close button, and remembered across loads.
+	let swipeHintSeen = $state(
+		typeof localStorage !== 'undefined' && localStorage.getItem('lectern.swipeHint.seen') === '1'
+	);
+	function dismissSwipeHint() {
+		if (swipeHintSeen) return;
+		swipeHintSeen = true;
+		try {
+			localStorage.setItem('lectern.swipeHint.seen', '1');
+		} catch {
+			/* private mode: it simply shows again next load */
+		}
+	}
 </script>
 
 <svelte:window onclick={() => (menuOpenId = null)} />
 
-{#if !cards}
+{#if loading || !cards}
 	<ul class="cards" aria-hidden="true">
 		{#each [0, 1, 2, 3] as i (i)}
 			<li class="row">
@@ -307,6 +327,14 @@
 		{#if emptyHint}<p class="empty-hint">{emptyHint}</p>{/if}
 	</div>
 {:else}
+	{#if !swipeHintSeen}
+		<div class="swipe-hint" role="note">
+			<span>Swipe a card: right to mark read, left to archive.</span>
+			<button type="button" aria-label="Dismiss hint" onclick={dismissSwipeHint}>
+				<Icon name="close" size={14} />
+			</button>
+		</div>
+	{/if}
 	<ul class="cards" bind:this={listEl}>
 		{#each rows as row (row.type === 'card' ? row.card.id : 'header:' + row.label)}
 			{#if row.type === 'header'}
@@ -835,6 +863,10 @@
 		.more-btn {
 			opacity: 1;
 		}
+		.round {
+			min-width: 2.75rem;
+			min-height: 2.75rem;
+		}
 	}
 	.round {
 		display: inline-flex;
@@ -860,6 +892,35 @@
 	.round:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+	.swipe-hint {
+		display: none;
+	}
+	@media (hover: none) {
+		.swipe-hint {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--space-3);
+			margin: 0 0 var(--space-2);
+			padding: var(--space-2) var(--space-3);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			background: var(--surface);
+			color: var(--text-muted);
+			font-size: var(--text-sm);
+		}
+		.swipe-hint button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 2.75rem;
+			min-height: 2.75rem;
+			border: 0;
+			background: transparent;
+			color: var(--text-muted);
+			cursor: pointer;
+		}
 	}
 
 	/* Mobile: serif title steps down, cover shrinks, swipe replaces quick buttons. */

@@ -194,8 +194,8 @@
 	--text-muted: #6f5d3f;
 	--border: #e3d6ba;
 	--border-strong: #d3c19f;
-	--accent: #9a5a2c;
-	--accent-deep: #864e26;
+	--accent: #8f5026;
+	--accent-deep: #834824;
 	--accent-contrast: #ffffff;
 	--accent-soft: #efe1c6;
 	--ok: #5b7d3f;
@@ -379,6 +379,11 @@ textarea {
 	color: inherit;
 }
 
+::placeholder {
+	color: var(--text-muted);
+	opacity: 1;
+}
+
 :focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
@@ -394,6 +399,20 @@ textarea {
 .page {
 	max-width: 44rem;
 	margin-inline: auto;
+}
+
+/* Screen-reader-only: visually hidden but still announced — for aria-live status
+   regions and labels that should not occupy visual space. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

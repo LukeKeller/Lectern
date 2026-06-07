@@ -71,7 +71,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 };
 
 export const FONT_STACKS: Record<FontFamily, string> = {
-	serif: 'Georgia, "Iowan Old Style", "Times New Roman", serif',
+	serif: '"Iowan Old Style", Charter, Georgia, "Times New Roman", serif',
 	sans: 'system-ui, -apple-system, "Segoe UI", sans-serif',
 	mono: '"SF Mono", "JetBrains Mono", ui-monospace, monospace',
 	literata: '"Literata", Georgia, "Times New Roman", serif',

@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.21.0',
+		date: '2026-06-06',
+		title: 'Triage you can take back, and a calmer offline conscience',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Every way you triage a card can now be undone. Moving an item with the keyboard or the quick buttons offers the same one-tap Undo that swiping always did, and announces the move for screen readers, so the fastest path is no longer the only irreversible one.'
+			},
+			{
+				kind: 'added',
+				text: 'A quiet sync line now sits at the foot of the sidebar. It reads Synced when everything is saved, shows how many changes are still queued while you are offline, and offers Retry if a sync could not get through, so your offline edits never disappear without a word.'
+			},
+			{
+				kind: 'fixed',
+				text: 'A pass for the readers who need it most: form placeholders and the Sepia accent now meet the contrast bar, the command palette and shortcut sheet keep keyboard focus where it belongs, in-document jumps hold still when you have asked for reduced motion, and an article that fails to load now explains itself with Retry and Open original instead of a raw error.'
+			},
+			{
+				kind: 'improved',
+				text: 'On a phone the controls you tap are bigger and easier to hit, a one-time hint shows how to swipe a card to read or archive it, and lists no longer flash an empty page for a moment while your library loads.'
+			}
+		]
+	},
+	{
 		version: '0.20.0',
 		date: '2026-06-06',
 		title: 'A query cheat sheet for building views',

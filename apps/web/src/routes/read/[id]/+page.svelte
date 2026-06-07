@@ -31,6 +31,7 @@
 	} from '$lib/progress';
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { scrollIntoViewMotion, scrollBehavior } from '$lib/motion';
 
 	const id = $derived(page.params.id);
 
@@ -103,6 +104,7 @@
 	let panelTab = $state<'info' | 'notebook'>('info');
 	let selRect = $state<{ x: number; y: number } | null>(null);
 	let pendingHighlight: NewHighlight | null = null;
+	let hlError = $state<NewHighlight | null>(null);
 	let noteDraft = $state('');
 	let noteSeededFor: string | undefined = undefined;
 	let findOpen = $state(false);
@@ -254,7 +256,7 @@
 		focusIndex = Math.max(0, Math.min(blocks.length - 1, i));
 		updateBar();
 		applyFocusClass();
-		blocks[focusIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		scrollIntoViewMotion(blocks[focusIndex], { block: 'center' });
 	}
 
 	// Focus mode dims every block but the focused one; the class drives the CSS.
@@ -449,7 +451,7 @@
 
 	function jumpTo(e: MouseEvent, hid: string) {
 		e.preventDefault();
-		document.getElementById(hid)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+		scrollIntoViewMotion(document.getElementById(hid), { block: 'start' });
 	}
 
 	async function addHighlight(nh: NewHighlight) {
@@ -458,8 +460,11 @@
 			const created = await getClient().createHighlight(id, nh);
 			highlights = [...highlights, created];
 			renderHighlights(articleEl, highlights);
+			hlError = null;
 		} catch {
-			/* offline / failed: leave the selection so the user can retry */
+			// Direct API call (not sync-queued), so the global sync chip won't cover
+			// it. Surface an inline retry instead of failing silently.
+			hlError = nh;
 		}
 		selRect = null;
 		pendingHighlight = null;
@@ -523,7 +528,10 @@
 		move(delta) {
 			// j/k and arrows move the paragraph focus; fall back to scrolling pre-render.
 			if (!advance(delta)) {
-				window.scrollBy({ top: delta * Math.round(window.innerHeight * 0.1), behavior: 'smooth' });
+				window.scrollBy({
+					top: delta * Math.round(window.innerHeight * 0.1),
+					behavior: scrollBehavior()
+				});
 			}
 		},
 		open() {},
@@ -681,7 +689,7 @@
 	});
 </script>
 
-<div class="progress" aria-hidden="true" style={`--p:${Math.round(progress * 100)}%`}></div>
+<div class="progress" aria-hidden="true" style={`--p:${progress}`}></div>
 
 <nav class="bar">
 	<button class="back" type="button" onclick={goBack} aria-label="Back">
@@ -916,9 +924,38 @@
 		{/if}
 
 		{#if loading}
-			<p class="state">Loading…</p>
+			<div class="sk" aria-hidden="true">
+				<span class="sk-line sk-title"></span>
+				<span class="sk-line"></span>
+				<span class="sk-line"></span>
+				<span class="sk-line sk-short"></span>
+				<span class="sk-line"></span>
+				<span class="sk-line"></span>
+				<span class="sk-line sk-short"></span>
+			</div>
 		{:else if error}
-			<p class="state err">Could not load article: {error}</p>
+			<div class="state-err" role="alert">
+				<h2>Couldn't load this article.</h2>
+				<p>The text couldn't be fetched. Check your connection or open the original.</p>
+				<div class="err-actions">
+					<button
+						type="button"
+						class="err-btn primary"
+						onclick={refetchContent}
+						disabled={refetching}
+					>
+						Retry
+					</button>
+					{#if card}
+						<!-- card.url is an external absolute URL, not an internal route -->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a class="err-btn" href={card.url} target="_blank" rel="noopener noreferrer"
+							>Open original</a
+						>
+					{/if}
+				</div>
+				<p class="err-detail">{error}</p>
+			</div>
 		{:else}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 			<article bind:this={articleEl}>{@html html}</article>
@@ -1003,9 +1040,9 @@
 								type="button"
 								class="hl-text"
 								onclick={() =>
-									document
-										.querySelector(`mark[data-hl="${h.id}"]`)
-										?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>{h.text}</button
+									scrollIntoViewMotion(document.querySelector(`mark[data-hl="${h.id}"]`), {
+										block: 'center'
+									})}>{h.text}</button
 							>
 							{#if h.note}<p class="hl-note">{h.note}</p>{/if}
 							<button
@@ -1038,6 +1075,24 @@
 	</button>
 {/if}
 
+{#if hlError}
+	<div class="hl-toast" role="status">
+		<span>Couldn't save highlight.</span>
+		<button
+			type="button"
+			class="hl-retry"
+			onclick={() => {
+				const nh = hlError;
+				hlError = null;
+				if (nh) void addHighlight(nh);
+			}}>Retry</button
+		>
+		<button type="button" class="hl-toast-x" aria-label="Dismiss" onclick={() => (hlError = null)}>
+			<Icon name="close" size={13} />
+		</button>
+	</div>
+{/if}
+
 <style>
 	.progress {
 		position: fixed;
@@ -1052,9 +1107,11 @@
 		content: '';
 		display: block;
 		height: 100%;
-		width: var(--p);
+		width: 100%;
 		background: var(--accent);
-		transition: width 80ms linear;
+		transform-origin: left center;
+		transform: scaleX(var(--p));
+		transition: transform 80ms linear;
 	}
 
 	.bar {
@@ -1079,6 +1136,7 @@
 		font-weight: 500;
 		color: var(--text-muted);
 		padding: 0.35rem 0.5rem;
+		min-height: 2.75rem;
 		border-radius: var(--radius);
 		border: 0;
 		background: transparent;
@@ -1250,11 +1308,151 @@
 		padding-bottom: 1.4rem;
 		border-bottom: 1px solid var(--border);
 	}
-	.state {
+	.sk {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 0.4rem 0 0;
+	}
+	.sk-line {
+		height: 0.9rem;
+		border-radius: var(--radius-sm);
+		background: linear-gradient(
+			90deg,
+			var(--surface-alt) 25%,
+			color-mix(in srgb, var(--surface-alt) 55%, transparent) 50%,
+			var(--surface-alt) 75%
+		);
+		background-size: 200% 100%;
+		animation: shimmer 1.3s linear infinite;
+	}
+	.sk-title {
+		height: 1.6rem;
+		width: 70%;
+		margin-bottom: 0.8rem;
+	}
+	.sk-short {
+		width: 45%;
+	}
+	@keyframes shimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -200% 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.sk-line {
+			animation: none;
+		}
+	}
+	.state-err {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+		padding: 1.5rem 0;
+	}
+	.state-err h2 {
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: 1.3em;
+		color: var(--text);
+	}
+	.state-err p {
+		margin: 0;
+		font-size: var(--text-sm);
 		color: var(--text-muted);
 	}
-	.err {
-		color: var(--error);
+	.err-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-top: 0.6rem;
+	}
+	.err-btn {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0.45rem 0.95rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		text-decoration: none;
+		cursor: pointer;
+		transition:
+			color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease),
+			border-color var(--dur-fast) var(--ease);
+	}
+	.err-btn:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-alt);
+	}
+	.err-btn.primary {
+		border-color: var(--accent);
+		background: var(--accent);
+		color: var(--accent-contrast);
+	}
+	.err-btn.primary:hover {
+		background: var(--accent-deep);
+	}
+	.err-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.err-detail {
+		margin-top: 0.5rem;
+		font-family: var(--font-mono);
+		font-size: var(--text-2xs);
+		color: var(--text-muted);
+	}
+	.hl-toast {
+		position: fixed;
+		left: 50%;
+		bottom: 1.5rem;
+		transform: translateX(-50%);
+		z-index: 60;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.5rem 0.4rem 0.85rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		box-shadow: var(--shadow);
+		font-size: var(--text-sm);
+		color: var(--text);
+	}
+	.hl-retry,
+	.hl-toast-x {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.75rem;
+		padding: 0.35rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		cursor: pointer;
+		transition: background var(--dur-fast) var(--ease);
+	}
+	.hl-retry {
+		color: var(--accent);
+		font-weight: 600;
+		font-size: var(--text-sm);
+	}
+	.hl-retry:hover,
+	.hl-toast-x:hover {
+		background: var(--surface-alt);
+	}
+	.hl-toast-x {
+		min-width: 2.75rem;
+		color: var(--text-muted);
 	}
 
 	article {
@@ -1379,8 +1577,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 2rem;
-		height: 2rem;
+		width: 2.75rem;
+		height: 2.75rem;
 		border: 0;
 		border-radius: var(--radius);
 		background: transparent;
@@ -1448,7 +1646,7 @@
 		color: var(--text-muted);
 		text-decoration: none;
 		line-height: 1.35;
-		border-left: 2px solid transparent;
+		border-left: 0;
 	}
 	.toc-list a.lvl3 {
 		padding-left: 1.2rem;
@@ -1460,7 +1658,8 @@
 	}
 	.toc-list a.active {
 		color: var(--accent);
-		border-left-color: var(--accent);
+		font-weight: 600;
+		background: var(--accent-soft);
 	}
 	.meta {
 		margin: 0;

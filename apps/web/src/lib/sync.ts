@@ -94,8 +94,10 @@ export class SyncEngine {
 	private readonly backoff: (attempt: number) => number;
 	private readonly sleep: (ms: number) => Promise<void>;
 	private flushing = false;
+	private failed = false;
 	private started = false;
 	private onlineHandler?: () => void;
+	private activityListener?: (s: { flushing: boolean; failed: boolean }) => void;
 
 	constructor(opts: SyncEngineOptions) {
 		this.db = opts.db;
@@ -103,6 +105,14 @@ export class SyncEngine {
 		this.maxRetries = opts.maxRetries ?? 5;
 		this.backoff = opts.backoff ?? backoffDelay;
 		this.sleep = opts.sleep ?? defaultSleep;
+	}
+
+	/**
+	 * Register an observer notified whenever flush activity changes. The engine
+	 * stays rune-free; the rune store wires this from outside to avoid a cycle.
+	 */
+	setActivityListener(fn: (s: { flushing: boolean; failed: boolean }) => void): void {
+		this.activityListener = fn;
 	}
 
 	/** The persisted sync cursor, or `undefined` before the first pull. */
@@ -141,6 +151,7 @@ export class SyncEngine {
 	async flush(): Promise<SyncPushResponse | null> {
 		if (this.flushing) return null;
 		this.flushing = true;
+		this.activityListener?.({ flushing: this.flushing, failed: this.failed });
 		try {
 			const entries = await this.db.outbox.orderBy('id').toArray();
 			if (entries.length === 0) return null;
@@ -150,15 +161,20 @@ export class SyncEngine {
 				try {
 					const res = await this.client.syncPush({ mutations });
 					await this.db.outbox.bulkDelete(entries.map((e) => e.id));
+					this.failed = false;
 					return res;
 				} catch (err) {
 					attempt += 1;
-					if (attempt >= this.maxRetries) throw err;
+					if (attempt >= this.maxRetries) {
+						this.failed = true;
+						throw err;
+					}
 					await this.sleep(this.backoff(attempt));
 				}
 			}
 		} finally {
 			this.flushing = false;
+			this.activityListener?.({ flushing: this.flushing, failed: this.failed });
 		}
 	}
 

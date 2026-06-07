@@ -5,6 +5,7 @@
 	 * actual key handling, so this stays a static, discoverable cheat-sheet.
 	 */
 	import Icon from './Icon.svelte';
+	import { trapFocus } from '$lib/focus-trap';
 
 	let { onclose }: { onclose: () => void } = $props();
 
@@ -55,6 +56,7 @@
 		aria-modal="true"
 		aria-label="Keyboard shortcuts"
 		tabindex="-1"
+		use:trapFocus
 		onclick={(e) => e.stopPropagation()}
 	>
 		<header>

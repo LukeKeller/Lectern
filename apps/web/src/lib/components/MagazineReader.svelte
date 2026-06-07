@@ -9,6 +9,7 @@
 	import Icon from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
+	import { scrollIntoViewMotion } from '$lib/motion';
 
 	let {
 		magazine,
@@ -43,7 +44,7 @@
 	}
 
 	function jump(id: string): void {
-		document.getElementById(anchor(id))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		scrollIntoViewMotion(document.getElementById(anchor(id)), { block: 'start' });
 	}
 
 	function markRead(card: Card): void {

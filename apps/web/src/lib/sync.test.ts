@@ -161,6 +161,38 @@ describe('flush', () => {
 	});
 });
 
+describe('activity reporting', () => {
+	it('emits flushing transitions around a successful push', async () => {
+		await db.cards.put(makeCard());
+		await engine.enqueue({ type: 'setLocation', id: 'c1', location: 'later' });
+		const events: { flushing: boolean; failed: boolean }[] = [];
+		engine.setActivityListener((s) => events.push({ ...s }));
+
+		await engine.flush();
+
+		expect(events[0]).toEqual({ flushing: true, failed: false });
+		expect(events.at(-1)).toEqual({ flushing: false, failed: false });
+	});
+
+	it('reports failed when retries are exhausted, then clears it on a later success', async () => {
+		await db.cards.put(makeCard());
+		await engine.enqueue({ type: 'setLocation', id: 'c1', location: 'later' });
+		client.failPushes = 99;
+		const events: { flushing: boolean; failed: boolean }[] = [];
+		engine.setActivityListener((s) => events.push({ ...s }));
+
+		await expect(engine.flush()).rejects.toThrow('network down');
+		expect(events.at(-1)).toEqual({ flushing: false, failed: true });
+
+		// The outbox is left intact; a later flush that connects clears the failure.
+		client.failPushes = 0;
+		events.length = 0;
+		await engine.flush();
+		expect(events.at(-1)).toEqual({ flushing: false, failed: false });
+		expect(await db.outbox.count()).toBe(0);
+	});
+});
+
 describe('pull', () => {
 	it('upserts cards, deletes ids, and advances the cursor', async () => {
 		await db.cards.put(makeCard({ id: 'old', location: 'inbox' }));

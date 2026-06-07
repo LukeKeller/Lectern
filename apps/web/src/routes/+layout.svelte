@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getSync } from '$lib/sync';
+	import { syncStatus } from '$lib/sync-status.svelte';
 	import { resolveKey } from '$lib/keyboard';
 	import { activeList } from '$lib/list-controller.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
@@ -22,6 +23,7 @@
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
 	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
 	import ListenPlayer from '$lib/components/ListenPlayer.svelte';
+	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import type { ThemeMode } from '$lib/typography';
@@ -305,6 +307,7 @@
 		ttsPlayer.init();
 		const sync = getSync();
 		sync.start();
+		syncStatus.start();
 		// Service-worker update lifecycle (deploy detection + "new version" prompt)
 		// lives in <UpdatePrompt>.
 		window.addEventListener('keydown', onKeydown);
@@ -620,6 +623,7 @@
 				<kbd>⌘K</kbd>
 			</button>
 		</div>
+		<SyncStatus />
 	</div>
 </aside>
 
@@ -680,8 +684,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 2.25rem;
-		height: 2.25rem;
+		min-width: 2.75rem;
+		min-height: 2.75rem;
 		border: 0;
 		border-radius: var(--radius);
 		background: transparent;
