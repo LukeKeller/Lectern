@@ -4,8 +4,11 @@ import {
   Highlight,
   PlayerState,
   endpoints,
+  type BulkMaintenanceRequest,
   type CreateHighlightRequest,
   type CreateViewRequest,
+  type EmailIgnoreSenderRequest,
+  type EmailSender,
   type Endpoint,
   type ImportReadwiseRequest,
   type SaveDocumentRequest,
@@ -260,6 +263,13 @@ const mockTts = {
   modelId: "eleven_flash_v2_5",
 };
 let mockPlayer = PlayerState.parse({});
+// In-memory newsletter ignore list for dev: a couple of sample senders the user
+// can ignore (which removes them from `known`) and un-ignore.
+let mockEmailIgnore: string[] = [];
+let mockEmailKnown: EmailSender[] = [
+  { name: "Morning Brew", count: 4 },
+  { name: "Stratechery", count: 2 },
+];
 // In-memory podcast state for dev: a feed token + the set of published doc ids.
 let mockPodcastToken = "mocktoken";
 const mockPodcast = new Set<string>();
@@ -329,6 +339,25 @@ const handlers: Record<string, MockHandler> = {
   }),
   deleteDocument: () => ({}),
   bulkDeleteDocuments: () => ({ json: { deleted: 0 } }),
+  bulkMaintenance: ({ body }) => ({
+    json: { action: (body as BulkMaintenanceRequest).action, affected: 0 },
+  }),
+  getEmailIgnore: () => ({ json: { senders: [...mockEmailIgnore], known: mockEmailKnown } }),
+  addEmailIgnore: ({ body }) => {
+    const sender = (body as EmailIgnoreSenderRequest).sender;
+    if (!mockEmailIgnore.some((s) => s.toLowerCase() === sender.toLowerCase()))
+      mockEmailIgnore.push(sender);
+    const removed = mockEmailKnown
+      .filter((k) => k.name.toLowerCase() === sender.toLowerCase())
+      .reduce((n, k) => n + k.count, 0);
+    mockEmailKnown = mockEmailKnown.filter((k) => k.name.toLowerCase() !== sender.toLowerCase());
+    return { json: { senders: [...mockEmailIgnore], known: mockEmailKnown, removed } };
+  },
+  removeEmailIgnore: ({ body }) => {
+    const sender = (body as EmailIgnoreSenderRequest).sender;
+    mockEmailIgnore = mockEmailIgnore.filter((s) => s.toLowerCase() !== sender.toLowerCase());
+    return { json: { senders: [...mockEmailIgnore], known: mockEmailKnown } };
+  },
   getDocumentContent: ({ params }) => ({
     json: { id: params.id, html: `<main>${ARTICLE}</main>` },
   }),

@@ -8,6 +8,8 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
+  lte,
   sql as dsql,
 } from "drizzle-orm";
 import { Card, PlayerState } from "@lectern/shared";
@@ -48,6 +50,7 @@ import {
   type DocumentRef,
   type DocumentsPage,
   type ListDocumentsParams,
+  type MaintenanceFilter,
   type Overlay,
   type OverlayPatch,
   type OverlayStore,
@@ -241,6 +244,69 @@ export class DrizzleOverlayStore implements OverlayStore {
           eq(documents.source, source),
           isNull(documents.deletedAt),
           dsql`${documents.metadata}->'card'->>'readState' = 'finished'`,
+        ),
+      );
+    return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
+  }
+
+  async listForMaintenance(filter: MaintenanceFilter): Promise<DocumentRef[]> {
+    const col = filter.dateField === "updatedAt" ? documents.updatedAt : documents.savedAt;
+    const conds = [
+      isNull(documents.deletedAt),
+      filter.inclusive ? lte(col, filter.before) : lt(col, filter.before),
+    ];
+    if (filter.location) conds.push(eq(documents.location, filter.location));
+    if (filter.category) conds.push(eq(documents.category, filter.category));
+    if (filter.source) conds.push(eq(documents.source, filter.source));
+    const rows = await this.db
+      .select({ id: documents.id, source: documents.source, sourceId: documents.sourceId })
+      .from(documents)
+      .where(and(...conds));
+    return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
+  }
+
+  async markIndexedReadMany(ids: string[], read: boolean): Promise<void> {
+    if (ids.length === 0) return;
+    const state = read ? "finished" : "unopened";
+    // jsonb_set the denormalized read flag in place (no per-row read) and bump
+    // updatedAt so the change rides the next sync delta out to clients.
+    for (let i = 0; i < ids.length; i += 500) {
+      await this.db
+        .update(documents)
+        .set({
+          metadata: dsql`jsonb_set(${documents.metadata}, '{card,readState}', to_jsonb(${state}::text))`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            inArray(documents.id, ids.slice(i, i + 500)),
+            isNotNull(dsql`${documents.metadata} -> 'card'`),
+          ),
+        );
+    }
+  }
+
+  async listEmailSenders(): Promise<{ name: string; count: number }[]> {
+    const rows = (await this.db.execute(dsql`
+      select coalesce(metadata->'card'->>'author', '') as name, count(*)::int as count
+      from documents
+      where category = 'email' and deleted_at is null
+      group by 1
+      having coalesce(metadata->'card'->>'author', '') <> ''
+      order by count desc, name asc
+    `)) as unknown as Array<{ name: string; count: number }>;
+    return rows.map((r) => ({ name: String(r.name), count: Number(r.count) }));
+  }
+
+  async listEmailDocsBySender(sender: string): Promise<DocumentRef[]> {
+    const rows = await this.db
+      .select({ id: documents.id, source: documents.source, sourceId: documents.sourceId })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.category, "email"),
+          isNull(documents.deletedAt),
+          dsql`lower(${documents.metadata}->'card'->>'author') = ${sender.trim().toLowerCase()}`,
         ),
       );
     return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
@@ -502,6 +568,36 @@ export class DrizzleOverlayStore implements OverlayStore {
         target: appSettings.key,
         set: { value: next, updatedAt: new Date() },
       });
+  }
+
+  // --- newsletter ignore list ---
+  async getEmailIgnoreList(): Promise<string[]> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "email-ignore"));
+    const v = (row?.value ?? {}) as Record<string, unknown>;
+    return Array.isArray(v.senders)
+      ? v.senders.filter((s): s is string => typeof s === "string")
+      : [];
+  }
+
+  async setEmailIgnoreList(senders: string[]): Promise<void> {
+    // Normalize: trim, drop blanks, de-dupe case-insensitively (keep first form).
+    const seen = new Set<string>();
+    const clean: string[] = [];
+    for (const s of senders) {
+      const t = s.trim();
+      const key = t.toLowerCase();
+      if (!t || seen.has(key)) continue;
+      seen.add(key);
+      clean.push(t);
+    }
+    const value = { senders: clean };
+    await this.db
+      .insert(appSettings)
+      .values({ key: "email-ignore", value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
   }
 
   async getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null> {

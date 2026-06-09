@@ -1,5 +1,11 @@
 <script lang="ts">
-	import type { ImportReadwiseResponse, TtsProvider, TtsUsage, TtsVoice } from '@lectern/shared';
+	import type {
+		EmailSender,
+		ImportReadwiseResponse,
+		TtsProvider,
+		TtsUsage,
+		TtsVoice
+	} from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
 	import { getSync } from '$lib/sync';
@@ -117,6 +123,68 @@
 	let podcastCopied = $state(false);
 	let podcastError = $state<string | undefined>(undefined);
 
+	// ---- Newsletter ignore list ----
+	let emailIgnore = $state<string[]>([]);
+	let emailKnown = $state<EmailSender[]>([]);
+	let emailInput = $state('');
+	let emailBusy = $state(false);
+	let emailMsg = $state<string | undefined>(undefined);
+	let emailError = $state<string | undefined>(undefined);
+	// Senders in the library that aren't already ignored — the one-tap add list.
+	const emailKnownAvailable = $derived(
+		emailKnown.filter((k) => !emailIgnore.some((s) => s.toLowerCase() === k.name.toLowerCase()))
+	);
+
+	async function loadEmailIgnore() {
+		try {
+			const s = await getClient().getEmailIgnore();
+			emailIgnore = s.senders;
+			emailKnown = s.known;
+		} catch {
+			/* offline or newsletter ingestion not configured: leave the section empty */
+		}
+	}
+
+	async function addEmailIgnore(sender: string) {
+		const name = sender.trim();
+		if (!name || emailBusy) return;
+		emailBusy = true;
+		emailError = undefined;
+		emailMsg = undefined;
+		try {
+			const s = await getClient().addEmailIgnore(name);
+			emailIgnore = s.senders;
+			emailKnown = s.known;
+			emailInput = '';
+			emailMsg =
+				s.removed > 0
+					? `Ignoring “${name}”. Removed ${s.removed} saved email${s.removed === 1 ? '' : 's'}.`
+					: `Ignoring “${name}”.`;
+			// Existing emails were deleted server-side; pull so they leave this device too.
+			if (s.removed > 0) await getSync().pull();
+		} catch (err) {
+			emailError = err instanceof Error ? err.message : 'Could not update the ignore list.';
+		} finally {
+			emailBusy = false;
+		}
+	}
+
+	async function removeEmailIgnore(sender: string) {
+		if (emailBusy) return;
+		emailBusy = true;
+		emailError = undefined;
+		emailMsg = undefined;
+		try {
+			const s = await getClient().removeEmailIgnore(sender);
+			emailIgnore = s.senders;
+			emailKnown = s.known;
+		} catch (err) {
+			emailError = err instanceof Error ? err.message : 'Could not update the ignore list.';
+		} finally {
+			emailBusy = false;
+		}
+	}
+
 	// ---- Notifications (Web Push) ----
 	const pushSupported = isPushSupported();
 	let pushOn = $state(false);
@@ -129,6 +197,7 @@
 		void loadTts();
 		void loadPodcast();
 		void loadPush();
+		void loadEmailIgnore();
 	});
 
 	async function loadPush() {
@@ -772,6 +841,73 @@
 	</section>
 
 	<section>
+		<h2>Newsletter senders</h2>
+		<p class="hint">
+			Ignore a sender to skip its future emails when Lectern checks your newsletter mailbox. Adding
+			one also removes its already-saved emails from your library. Match by sender name or email
+			address.
+		</p>
+		<form
+			class="row"
+			onsubmit={(e) => {
+				e.preventDefault();
+				void addEmailIgnore(emailInput);
+			}}
+		>
+			<input
+				type="text"
+				bind:value={emailInput}
+				placeholder="Sender name or email address"
+				autocomplete="off"
+			/>
+			<button type="submit" class="btn" disabled={emailBusy || !emailInput.trim()}>Ignore</button>
+		</form>
+		{#if emailMsg}<p class="ok">{emailMsg}</p>{/if}
+		{#if emailError}<p class="err">{emailError}</p>{/if}
+
+		{#if emailIgnore.length}
+			<div class="field">
+				<span class="flabel">Ignored</span>
+				<ul class="chips">
+					{#each emailIgnore as s (s)}
+						<li class="chip chip-tag">
+							<span>{s}</span>
+							<button
+								type="button"
+								aria-label={`Stop ignoring ${s}`}
+								disabled={emailBusy}
+								onclick={() => removeEmailIgnore(s)}>×</button
+							>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+
+		{#if emailKnownAvailable.length}
+			<div class="field">
+				<span class="flabel">Senders in your library</span>
+				<ul class="chips">
+					{#each emailKnownAvailable as k (k.name)}
+						<li>
+							<button
+								type="button"
+								class="chip chip-add"
+								disabled={emailBusy}
+								title={`Ignore ${k.name} and remove ${k.count} email${k.count === 1 ? '' : 's'}`}
+								onclick={() => addEmailIgnore(k.name)}
+							>
+								<span>{k.name}</span>
+								<span class="chip-count">{k.count}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+	</section>
+
+	<section>
 		<h2>Notifications</h2>
 		{#if !pushSupported}
 			<p class="hint">
@@ -1186,6 +1322,65 @@
 		font-style: normal;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		max-width: 34rem;
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.28rem 0.55rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-sm);
+		line-height: 1.2;
+	}
+	.chip-tag button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.05rem;
+		height: 1.05rem;
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-full);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-md);
+		line-height: 1;
+		cursor: pointer;
+	}
+	.chip-tag button:hover:not(:disabled) {
+		color: var(--error);
+	}
+	.chip-add {
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.chip-add:hover:not(:disabled) {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.chip-add:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.chip-count {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.ok {

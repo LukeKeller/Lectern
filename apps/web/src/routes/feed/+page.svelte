@@ -31,4 +31,5 @@
 		label: 'Delete all read',
 		confirm: "Delete all read articles from your feeds? This can't be undone."
 	}}
+	maintenance={{ location: 'feed' }}
 />

@@ -50,6 +50,7 @@
 		hideReadKey = undefined,
 		baseQuery,
 		bulkDelete,
+		maintenance,
 		sortBy = $bindable<ViewSortBy>('publishedAt'),
 		sortDir = $bindable<SortDir>('desc')
 	}: {
@@ -74,6 +75,13 @@
 		 * `confirm` is the message shown before it runs.
 		 */
 		bulkDelete?: { scope: BulkDeleteScope; label: string; confirm: string };
+		/**
+		 * Opts this list into the "Clean up" sweep (delete or mark-read items older
+		 * than a cutoff, or everything below the selected item). The facets scope the
+		 * server-side sweep to this list (e.g. the feed). Sized to fight a backend
+		 * that keeps re-serving stale items.
+		 */
+		maintenance?: { location?: Location; source?: Source; category?: Category };
 		sortBy?: ViewSortBy;
 		sortDir?: SortDir;
 	} = $props();
@@ -373,6 +381,77 @@
 		}
 	}
 
+	// ---- "Clean up" sweep (server-side, age- or anchor-based) ----
+	// Two scopes share one cutoff model: "older than <preset>" sends now − preset;
+	// "below the selected item" sends the selected card's timestamp. Either can
+	// delete (irreversible — removed at the source so the poll can't re-add) or
+	// mark read. The selected card is the keyboard/hover focus (selectedIndex).
+	const AGE_PRESETS = [
+		{ value: 7, label: '1 week' },
+		{ value: 14, label: '2 weeks' },
+		{ value: 30, label: '1 month' },
+		{ value: 90, label: '3 months' },
+		{ value: 180, label: '6 months' }
+	];
+	let cleanupOpen = $state(false);
+	let cleanupScope = $state<'age' | 'below'>('age');
+	let cleanupDays = $state(7);
+	let cleanupBusy = $state(false);
+	let cleanupResult = $state<string | null>(null);
+	let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+	const anchorCard = $derived(cards[selectedIndex]);
+	// MiniFlux publish date and a saved article's save date both live in savedAt;
+	// only an explicit "Updated" sort compares the backend's last-change time.
+	const cleanupDateField = $derived<'savedAt' | 'updatedAt'>(
+		sortBy === 'updatedAt' ? 'updatedAt' : 'savedAt'
+	);
+
+	function anchorTimestamp(card: Card): string {
+		if (sortBy === 'updatedAt') return card.updatedAt;
+		if (sortBy === 'savedAt') return card.savedAt;
+		return card.publishedAt ?? card.savedAt;
+	}
+
+	async function runCleanup(action: 'delete' | 'mark-read') {
+		if (!maintenance || cleanupBusy) return;
+		let before: string;
+		if (cleanupScope === 'below') {
+			if (!anchorCard) return;
+			before = anchorTimestamp(anchorCard);
+		} else {
+			before = new Date(Date.now() - cleanupDays * 86_400_000).toISOString();
+		}
+		const verb = action === 'delete' ? 'Delete' : 'Mark read';
+		const what =
+			cleanupScope === 'below'
+				? 'everything below the selected item'
+				: `items older than ${AGE_PRESETS.find((p) => p.value === cleanupDays)?.label ?? `${cleanupDays} days`}`;
+		const warn = action === 'delete' ? " This can't be undone." : '';
+		if (!confirm(`${verb} ${what}?${warn}`)) return;
+		cleanupBusy = true;
+		cleanupResult = null;
+		try {
+			const res = await getClient().bulkMaintenance({
+				action,
+				before,
+				dateField: cleanupDateField,
+				inclusive: false,
+				location: maintenance.location,
+				source: maintenance.source,
+				category: maintenance.category
+			});
+			await getSync().pull();
+			cleanupResult = `${res.action === 'delete' ? 'Deleted' : 'Marked read'} ${res.affected} item${res.affected === 1 ? '' : 's'}`;
+		} catch (err) {
+			cleanupResult = err instanceof Error ? err.message : 'Cleanup failed';
+		} finally {
+			cleanupBusy = false;
+			cleanupOpen = false;
+			if (cleanupTimer) clearTimeout(cleanupTimer);
+			cleanupTimer = setTimeout(() => (cleanupResult = null), 5000);
+		}
+	}
+
 	/** Snapshot this list's order so the reader can auto-advance after triage. */
 	function snapshotQueue() {
 		readingQueue.set(cards.map((c) => c.id));
@@ -577,7 +656,7 @@
 				</div>
 			{/if}
 
-			{#if cards.length || baseQuery || bulkDelete}
+			{#if cards.length || baseQuery || bulkDelete || maintenance}
 				<div class="pop-wrap">
 					<button
 						type="button"
@@ -628,6 +707,19 @@
 									}}
 								>
 									<Icon name="bookmark" size={15} /> Save as view
+								</button>
+							{/if}
+							{#if maintenance}
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										menuOpen = false;
+										cleanupScope = 'age';
+										cleanupOpen = true;
+									}}
+								>
+									<Icon name="trash" size={15} /> Clean up…
 								</button>
 							{/if}
 							{#if bulkDelete}
@@ -693,7 +785,83 @@
 			<span>{bulkDeleteResult}</span>
 		</div>
 	{/if}
+
+	{#if cleanupResult}
+		<div class="undo-toast" role="status">
+			<span>{cleanupResult}</span>
+		</div>
+	{/if}
 </section>
+
+{#if cleanupOpen && maintenance}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="cleanup-backdrop" onclick={() => (cleanupOpen = false)}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div
+			class="cleanup"
+			role="dialog"
+			tabindex="-1"
+			aria-label="Clean up list"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<h2>Clean up</h2>
+			<p class="cleanup-hint">
+				Remove old items in bulk. Deleting takes them out of the source too, so a re-syncing backend
+				can’t bring them back.
+			</p>
+			<div class="seg" role="group" aria-label="Clean up scope">
+				<button
+					type="button"
+					class:active={cleanupScope === 'age'}
+					aria-pressed={cleanupScope === 'age'}
+					onclick={() => (cleanupScope = 'age')}>By age</button
+				>
+				<button
+					type="button"
+					class:active={cleanupScope === 'below'}
+					aria-pressed={cleanupScope === 'below'}
+					disabled={!anchorCard}
+					onclick={() => (cleanupScope = 'below')}>Below selected</button
+				>
+			</div>
+			{#if cleanupScope === 'age'}
+				<label class="cleanup-field">
+					<span>Older than</span>
+					<div class="select block">
+						<select bind:value={cleanupDays}>
+							{#each AGE_PRESETS as p (p.value)}
+								<option value={p.value}>{p.label}</option>
+							{/each}
+						</select>
+					</div>
+				</label>
+			{:else if anchorCard}
+				<p class="cleanup-anchor">
+					Affects everything older than
+					<strong>{anchorCard.title || 'the selected item'}</strong>. Hover or arrow to a row to
+					choose the cut-off.
+				</p>
+			{/if}
+			<div class="cleanup-actions">
+				<button
+					type="button"
+					class="btn"
+					disabled={cleanupBusy || (cleanupScope === 'below' && !anchorCard)}
+					onclick={() => runCleanup('mark-read')}>Mark read</button
+				>
+				<button
+					type="button"
+					class="btn danger"
+					disabled={cleanupBusy || (cleanupScope === 'below' && !anchorCard)}
+					onclick={() => runCleanup('delete')}>Delete</button
+				>
+				<button type="button" class="text muted" onclick={() => (cleanupOpen = false)}
+					>Cancel</button
+				>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.head {
@@ -1016,5 +1184,96 @@
 		font-weight: 700;
 		cursor: pointer;
 		padding: 0.1rem 0.3rem;
+	}
+
+	.cleanup-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 80;
+		display: grid;
+		place-items: center;
+		padding: 1rem;
+		background: color-mix(in srgb, var(--bg) 55%, transparent);
+		backdrop-filter: blur(2px);
+	}
+	.cleanup {
+		width: min(26rem, 100%);
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+		padding: 1.1rem 1.2rem 1.2rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow-lg, var(--shadow-md));
+	}
+	.cleanup h2 {
+		font-size: var(--text-lg);
+		margin: 0;
+	}
+	.cleanup-hint {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	.cleanup-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	.cleanup-anchor {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	.cleanup-anchor strong {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.cleanup-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-top: 0.2rem;
+	}
+	.cleanup .btn {
+		padding: 0.45rem 0.95rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.cleanup .btn:hover:not(:disabled) {
+		border-color: var(--border-strong);
+		background: var(--surface-alt);
+	}
+	.cleanup .btn:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.cleanup .btn.danger {
+		color: var(--error);
+		border-color: color-mix(in srgb, var(--error) 40%, var(--border));
+	}
+	.cleanup .btn.danger:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--error) 12%, transparent);
+	}
+	.cleanup .text {
+		margin-left: auto;
+		border: 0;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		padding: 0.32rem 0.4rem;
 	}
 </style>

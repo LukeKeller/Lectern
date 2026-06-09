@@ -199,7 +199,15 @@ export async function pollEmail(): Promise<number> {
     baseUrl: config.READECK_URL,
     apiToken: config.READECK_API_TOKEN,
   });
+  // The exclude set is the static env list (addresses) UNION the user-managed
+  // ignore list (names/addresses) stored in the glue DB, re-read every poll so a
+  // Settings change takes effect on the next run without a restart.
+  const store = new DrizzleOverlayStore(db);
   const excluded = parseExcludedSenders(config.IMAP_EXCLUDE_SENDERS);
+  for (const s of await store.getEmailIgnoreList()) {
+    const t = s.trim().toLowerCase();
+    if (t) excluded.add(t);
+  }
   const cursor = parseEmailCursor(await getCursor("email"));
   const { uidValidity, messages } = await inbox.fetchNew(cursor);
   let saved = 0;

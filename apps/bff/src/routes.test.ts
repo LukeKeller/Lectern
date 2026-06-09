@@ -29,6 +29,7 @@ import {
   type DocumentRef,
   type DocumentsPage,
   type ListDocumentsParams,
+  type MaintenanceFilter,
   type Overlay,
   type OverlayPatch,
   type OverlayStore,
@@ -67,6 +68,9 @@ class FakeRssBackend implements RssBackend {
   }
   async setRead(sourceId: string, read: boolean): Promise<void> {
     this.reads.set(sourceId, read);
+  }
+  async setReadMany(sourceIds: string[], read: boolean): Promise<void> {
+    for (const id of sourceIds) this.reads.set(id, read);
   }
   removed: string[] = [];
   async setRemoved(sourceIds: string[]): Promise<void> {
@@ -306,6 +310,61 @@ class FakeOverlayStore implements OverlayStore {
         out.push({ id, source: card.source, sourceId: card.sourceId });
     }
     return out;
+  }
+
+  async listForMaintenance(filter: MaintenanceFilter): Promise<DocumentRef[]> {
+    const out: DocumentRef[] = [];
+    for (const [id, card] of this.index) {
+      if (this.deleted.has(id)) continue;
+      if (filter.location && card.location !== filter.location) continue;
+      if (filter.category && card.category !== filter.category) continue;
+      if (filter.source && card.source !== filter.source) continue;
+      const ts = new Date(filter.dateField === "updatedAt" ? card.updatedAt : card.savedAt);
+      const match = filter.inclusive ? ts <= filter.before : ts < filter.before;
+      if (match) out.push({ id, source: card.source, sourceId: card.sourceId });
+    }
+    return out;
+  }
+
+  async markIndexedReadMany(ids: string[], read: boolean): Promise<void> {
+    for (const id of ids) await this.markIndexedRead(id, read);
+  }
+
+  async listEmailSenders(): Promise<{ name: string; count: number }[]> {
+    const counts = new Map<string, number>();
+    for (const [id, card] of this.index) {
+      if (this.deleted.has(id) || card.category !== "email") continue;
+      const name = card.author ?? "";
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return [...counts].map(([name, count]) => ({ name, count }));
+  }
+
+  async listEmailDocsBySender(sender: string): Promise<DocumentRef[]> {
+    const target = sender.trim().toLowerCase();
+    const out: DocumentRef[] = [];
+    for (const [id, card] of this.index) {
+      if (this.deleted.has(id) || card.category !== "email") continue;
+      if ((card.author ?? "").toLowerCase() === target)
+        out.push({ id, source: card.source, sourceId: card.sourceId });
+    }
+    return out;
+  }
+
+  emailIgnore: string[] = [];
+  async getEmailIgnoreList(): Promise<string[]> {
+    return this.emailIgnore;
+  }
+  async setEmailIgnoreList(senders: string[]): Promise<void> {
+    const seen = new Set<string>();
+    this.emailIgnore = [];
+    for (const s of senders) {
+      const t = s.trim();
+      const k = t.toLowerCase();
+      if (!t || seen.has(k)) continue;
+      seen.add(k);
+      this.emailIgnore.push(t);
+    }
   }
 
   contents = new Map<string, string>();
@@ -954,6 +1013,117 @@ describe("documents", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ id: "readeck:b1", html: "<article>hello</article>" });
+    await a.close();
+  });
+});
+
+describe("bulk maintenance (age sweep)", () => {
+  it("deletes feed items older than the cutoff at the source and tombstones them", async () => {
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", savedAt: "2026-05-01T00:00:00Z" }),
+    );
+    harness.deps.rss.entries.set(
+      "2",
+      makeCard({ id: "miniflux:2", source: "miniflux", savedAt: "2026-06-08T00:00:00Z" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-maintenance",
+      headers: auth,
+      payload: {
+        action: "delete",
+        location: "feed",
+        before: "2026-06-01T00:00:00Z",
+        dateField: "savedAt",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ action: "delete", affected: 1 });
+    expect(harness.deps.rss.removed).toEqual(["1"]);
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("miniflux:2")).toBe(false);
+    await a.close();
+  });
+
+  it("marks old feed items read at the source without deleting them", async () => {
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", savedAt: "2026-05-01T00:00:00Z" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-maintenance",
+      headers: auth,
+      payload: { action: "mark-read", location: "feed", before: "2026-06-01T00:00:00Z" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ action: "mark-read", affected: 1 });
+    expect(harness.deps.rss.reads.get("1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(false);
+    const card = await harness.deps.overlay.getIndexedCard("miniflux:1");
+    expect(card?.readState).toBe("finished");
+    await a.close();
+  });
+});
+
+describe("newsletter ignore list", () => {
+  it("ignores a sender, persists it, and deletes its already-saved emails", async () => {
+    harness.deps.readLater.bookmarks.set(
+      "e1",
+      makeCard({ id: "readeck:e1", source: "readeck", category: "email", author: "Morning Brew" }),
+    );
+    harness.deps.readLater.bookmarks.set(
+      "e2",
+      makeCard({ id: "readeck:e2", source: "readeck", category: "email", author: "Stratechery" }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/settings/email-ignore",
+      headers: auth,
+      payload: { sender: "Morning Brew" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.senders).toContain("Morning Brew");
+    expect(body.removed).toBe(1);
+    expect(harness.deps.readLater.deleted).toContain("e1");
+    expect(harness.deps.overlay.deleted.has("readeck:e1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("readeck:e2")).toBe(false);
+    expect(await harness.deps.overlay.getEmailIgnoreList()).toEqual(["Morning Brew"]);
+    await a.close();
+  });
+
+  it("lists known senders and removes one from the ignore list", async () => {
+    harness.deps.readLater.bookmarks.set(
+      "e2",
+      makeCard({ id: "readeck:e2", source: "readeck", category: "email", author: "Stratechery" }),
+    );
+    await poll();
+    await harness.deps.overlay.setEmailIgnoreList(["spam@x.com"]);
+    const a = app();
+    const get = await a.inject({
+      method: "GET",
+      url: "/api/v1/settings/email-ignore",
+      headers: auth,
+    });
+    expect(get.statusCode).toBe(200);
+    expect(get.json().senders).toEqual(["spam@x.com"]);
+    expect(get.json().known).toContainEqual({ name: "Stratechery", count: 1 });
+    const del = await a.inject({
+      method: "DELETE",
+      url: "/api/v1/settings/email-ignore",
+      headers: auth,
+      payload: { sender: "spam@x.com" },
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().senders).toEqual([]);
     await a.close();
   });
 });

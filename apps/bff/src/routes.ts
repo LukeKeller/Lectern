@@ -2,7 +2,12 @@ import type { FastifyInstance } from "fastify";
 import {
   BulkDeleteRequest,
   BulkDeleteResponse,
+  BulkMaintenanceRequest,
+  BulkMaintenanceResponse,
   Card,
+  EmailIgnoreAddResponse,
+  EmailIgnoreSenderRequest,
+  EmailIgnoreSettings,
   CreateHighlightRequest,
   CreateViewRequest,
   ForceSyncResponse,
@@ -52,6 +57,7 @@ import {
 } from "@lectern/shared";
 import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
+import type { DocumentRef } from "./unify";
 import { accentFromUrl } from "./palette";
 import { podcastFeedUrl } from "./podcast";
 import { parseId } from "./ids";
@@ -235,21 +241,73 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       scope === "archive"
         ? await deps.overlay.listByLocation("archive")
         : await deps.overlay.listReadBySource("miniflux");
+    await deleteTargets(deps, targets);
+    return BulkDeleteResponse.parse({ deleted: targets.length });
+  });
 
-    // Batch MiniFlux into one `removed` PUT; delete Readeck bookmarks per-id with
-    // modest concurrency so a large archive doesn't open hundreds of sockets.
-    const minifluxIds = targets.filter((t) => t.source === "miniflux").map((t) => t.sourceId);
-    const readeckIds = targets.filter((t) => t.source === "readeck");
-    await deps.rss.setRemoved(minifluxIds);
-    const concurrency = 5;
-    for (let i = 0; i < readeckIds.length; i += concurrency) {
-      await Promise.all(
-        readeckIds.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)),
+  // Age-based sweep over the unified index: delete (remove at the source so the
+  // poll can't re-add them — the fix for a backend that re-serves stale entries)
+  // or mark-read every live document matching the facets whose timestamp is older
+  // than `before`. Powers "clean up items older than a week" and "clear
+  // everything below this item" (the anchor's timestamp is sent as `before`).
+  app.post<{ Body: unknown }>("/documents/bulk-maintenance", async (req) => {
+    const body = BulkMaintenanceRequest.parse(req.body);
+    const targets = await deps.overlay.listForMaintenance({
+      location: body.location,
+      source: body.source,
+      category: body.category,
+      before: new Date(body.before),
+      dateField: body.dateField,
+      inclusive: body.inclusive,
+    });
+    if (body.action === "delete") {
+      await deleteTargets(deps, targets);
+    } else {
+      // Mark-read: flip the read flag at the source (MiniFlux batch PUT; Readeck
+      // has no read enum, so completing its progress stands in) then mirror it
+      // into the index so the lists/sync reflect it immediately.
+      const minifluxIds = targets.filter((t) => t.source === "miniflux").map((t) => t.sourceId);
+      await deps.rss.setReadMany(minifluxIds, true);
+      const readeck = targets.filter((t) => t.source === "readeck");
+      const concurrency = 5;
+      for (let i = 0; i < readeck.length; i += concurrency) {
+        await Promise.all(
+          readeck
+            .slice(i, i + concurrency)
+            .map((t) => deps.readLater.setReadingProgress(t.sourceId, 1, null)),
+        );
+      }
+      await deps.overlay.markIndexedReadMany(
+        targets.map((t) => t.id),
+        true,
       );
     }
+    return BulkMaintenanceResponse.parse({ action: body.action, affected: targets.length });
+  });
 
-    await deps.overlay.softDelete(targets.map((t) => t.id));
-    return BulkDeleteResponse.parse({ deleted: targets.length });
+  // ---- newsletter ignore list --------------------------------------------
+  app.get("/settings/email-ignore", async () => emailIgnoreSettings(deps));
+
+  // Add a sender to the ignore list (skips its future emails at ingestion) AND
+  // delete its already-saved emails. Cleanup matches the card author (== the
+  // sender's display name), which is what the library and this list both show.
+  app.post<{ Body: unknown }>("/settings/email-ignore", async (req) => {
+    const { sender } = EmailIgnoreSenderRequest.parse(req.body);
+    const current = await deps.overlay.getEmailIgnoreList();
+    await deps.overlay.setEmailIgnoreList([...current, sender]);
+    const existing = await deps.overlay.listEmailDocsBySender(sender);
+    await deleteTargets(deps, existing);
+    const settings = await emailIgnoreSettings(deps);
+    return EmailIgnoreAddResponse.parse({ ...settings, removed: existing.length });
+  });
+
+  // Stop ignoring a sender. Existing emails are untouched (re-subscribe to get new).
+  app.delete<{ Body: unknown }>("/settings/email-ignore", async (req) => {
+    const { sender } = EmailIgnoreSenderRequest.parse(req.body);
+    const target = sender.trim().toLowerCase();
+    const current = await deps.overlay.getEmailIgnoreList();
+    await deps.overlay.setEmailIgnoreList(current.filter((s) => s.trim().toLowerCase() !== target));
+    return EmailIgnoreSettings.parse(await emailIgnoreSettings(deps));
   });
 
   app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
@@ -671,6 +729,36 @@ function requireParsed(id: string) {
   const parsed = parseId(id);
   if (!parsed) throw new NotFoundError(`invalid document id: ${id}`);
   return parsed;
+}
+
+/**
+ * Remove a set of index documents at their source, then tombstone the index
+ * rows so the deletions ride the next `/sync` delta out to other devices. Shared
+ * by every bulk-delete path (scope, age sweep, ignore-sender cleanup): one
+ * batched `removed` PUT for MiniFlux, per-id Readeck deletes with modest
+ * concurrency so a large set never opens hundreds of sockets.
+ */
+async function deleteTargets(deps: AppDeps, targets: DocumentRef[]): Promise<void> {
+  if (targets.length === 0) return;
+  const minifluxIds = targets.filter((t) => t.source === "miniflux").map((t) => t.sourceId);
+  const readeck = targets.filter((t) => t.source === "readeck");
+  await deps.rss.setRemoved(minifluxIds);
+  const concurrency = 5;
+  for (let i = 0; i < readeck.length; i += concurrency) {
+    await Promise.all(
+      readeck.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)),
+    );
+  }
+  await deps.overlay.softDelete(targets.map((t) => t.id));
+}
+
+/** The ignore list plus the senders currently in the library (for one-tap add). */
+async function emailIgnoreSettings(deps: AppDeps) {
+  const [senders, known] = await Promise.all([
+    deps.overlay.getEmailIgnoreList(),
+    deps.overlay.listEmailSenders(),
+  ]);
+  return EmailIgnoreSettings.parse({ senders, known });
 }
 
 /** Load a single document: live from Readeck (overlaid), from the index for RSS. */

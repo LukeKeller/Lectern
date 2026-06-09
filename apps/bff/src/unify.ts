@@ -145,6 +145,18 @@ export interface DocumentsPage {
   nextCursor: string | null;
 }
 
+/** Facets + age cutoff for a bulk maintenance sweep (delete / mark-read). The
+ * facets scope it; `before`/`dateField` select everything older than a cutoff. */
+export interface MaintenanceFilter {
+  location?: Location;
+  category?: string;
+  source?: Source;
+  before: Date;
+  dateField: "savedAt" | "updatedAt";
+  /** Match items whose timestamp equals `before` too (used to include an anchor). */
+  inclusive?: boolean;
+}
+
 /** A sync delta read straight from the index: changed cards + deleted ids. */
 export interface ChangedDocuments {
   cards: Card[];
@@ -222,6 +234,20 @@ export interface DocumentStore extends OverlayReader {
    */
   listReadBySource(source: Source): Promise<DocumentRef[]>;
   /**
+   * Live (non-tombstoned) documents matching the facets whose `dateField`
+   * precedes `before` — the targets of an age-based delete/mark-read sweep
+   * ("older than a week" / "everything below this item").
+   */
+  listForMaintenance(filter: MaintenanceFilter): Promise<DocumentRef[]>;
+  /** Batch-flip the read state on indexed backend cards (age-based mark-read). */
+  markIndexedReadMany(ids: string[], read: boolean): Promise<void>;
+  /** Live email-category documents grouped by sender (card author), with counts —
+   * powers the Settings ignore list's "senders in your library". */
+  listEmailSenders(): Promise<{ name: string; count: number }[]>;
+  /** Live email-category documents from `sender` (author, case-insensitive) —
+   * the existing emails removed when a sender is added to the ignore list. */
+  listEmailDocsBySender(sender: string): Promise<DocumentRef[]>;
+  /**
    * Soft-delete (tombstone) live documents of `source` whose id is not in
    * `presentIds` — the backend no longer has them. Returns how many were marked.
    */
@@ -278,6 +304,12 @@ export interface AssetStore {
     voiceId?: string;
     modelId?: string;
   }): Promise<void>;
+
+  // --- newsletter ignore list (matched against incoming From name/address) ---
+  /** Ignored newsletter senders (names and/or addresses). Empty when unset. */
+  getEmailIgnoreList(): Promise<string[]>;
+  /** Replace the ignored-sender list (normalized: trimmed, de-duped, no blanks). */
+  setEmailIgnoreList(senders: string[]): Promise<void>;
   /** Synthesized audio cached under a content hash, or null on a miss. */
   getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null>;
   /** Persist synthesized audio under its content hash (ignored if it exists). */

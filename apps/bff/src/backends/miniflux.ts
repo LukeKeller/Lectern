@@ -297,6 +297,16 @@ export class MinifluxBackend implements RssBackend {
     });
   }
 
+  /** Batch read/unread: one PUT for the whole set (a no-op on an empty list). */
+  async setReadMany(sourceIds: string[], read: boolean): Promise<void> {
+    const ids = sourceIds.map(Number).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) return;
+    await this.request("/v1/entries", {
+      method: "PUT",
+      body: { entry_ids: ids, status: read ? "read" : "unread" },
+    });
+  }
+
   /**
    * Hide entries from the feed: MiniFlux has no hard delete, so the `removed`
    * status takes an entry out of unread+read listings (and our poll excludes

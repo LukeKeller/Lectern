@@ -26,6 +26,8 @@ export interface RssBackend {
   listEntries(params: BackendListParams & { onlyUnread?: boolean }): Promise<BackendPage<Card>>;
   getEntryContent(sourceId: string): Promise<string>;
   setRead(sourceId: string, read: boolean): Promise<void>;
+  /** Batch read/unread for an age-based sweep. One request for the whole set. */
+  setReadMany(sourceIds: string[], read: boolean): Promise<void>;
   setStarred(sourceId: string, starred: boolean): Promise<void>;
   /**
    * Hide entries from the feed at the source. MiniFlux has no hard delete; the

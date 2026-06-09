@@ -76,10 +76,15 @@ export function parseExcludedSenders(value: string | undefined): Set<string> {
   );
 }
 
-/** True when a message's From address is on the exclude list (case-insensitive). */
+/**
+ * True when a message's From is on the exclude list (case-insensitive). Matches
+ * either the address OR the display name, so an entry added from the UI (which
+ * shows the sender's name) and one set via the env address list both work.
+ */
 export function isExcludedSender(msg: ParsedNewsletter, excluded: ReadonlySet<string>): boolean {
   const addr = msg.fromAddress.trim().toLowerCase();
-  return addr !== "" && excluded.has(addr);
+  const name = msg.fromName.trim().toLowerCase();
+  return (addr !== "" && excluded.has(addr)) || (name !== "" && excluded.has(name));
 }
 
 function escapeHtml(s: string): string {

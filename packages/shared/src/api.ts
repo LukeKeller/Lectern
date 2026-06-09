@@ -2,7 +2,13 @@ import { z } from "zod";
 import { Card, Category, Highlight, HighlightColor, Location, Source, Tag } from "./model";
 import { Feed, FeedFolder } from "./feeds";
 import { SyncPullResponse, SyncPushRequest, SyncPushResponse } from "./sync";
-import { BulkDeleteRequest, BulkDeleteResponse, ForceSyncResponse } from "./maintenance";
+import {
+  BulkDeleteRequest,
+  BulkDeleteResponse,
+  BulkMaintenanceRequest,
+  BulkMaintenanceResponse,
+  ForceSyncResponse,
+} from "./maintenance";
 import { SavedView } from "./views";
 import {
   FeedNotificationPref,
@@ -175,6 +181,35 @@ export type UpdateTtsSettingsRequest = z.infer<typeof UpdateTtsSettingsRequest>;
 export const TtsVoice = z.object({ id: z.string(), name: z.string() });
 export type TtsVoice = z.infer<typeof TtsVoice>;
 
+// ---- Email newsletter ignore list ------------------------------------------
+
+/** A newsletter sender present in the library: the display name (== the card
+ * author / sender label) and how many of its emails are currently saved. Drives
+ * the one-tap "ignore this sender" affordance in Settings. */
+export const EmailSender = z.object({ name: z.string(), count: z.number().int().nonnegative() });
+export type EmailSender = z.infer<typeof EmailSender>;
+
+/** The newsletter ignore list plus the senders currently in the library. An
+ * ignored entry is matched case-insensitively against each incoming message's
+ * From name AND address, so it can be either. */
+export const EmailIgnoreSettings = z.object({
+  senders: z.array(z.string()),
+  known: z.array(EmailSender),
+});
+export type EmailIgnoreSettings = z.infer<typeof EmailIgnoreSettings>;
+
+/** Add/remove a single sender from the ignore list. */
+export const EmailIgnoreSenderRequest = z.object({ sender: z.string().min(1) });
+export type EmailIgnoreSenderRequest = z.infer<typeof EmailIgnoreSenderRequest>;
+
+/** Adding a sender also deletes its already-ingested emails; `removed` counts them. */
+export const EmailIgnoreAddResponse = z.object({
+  senders: z.array(z.string()),
+  known: z.array(EmailSender),
+  removed: z.number().int().nonnegative(),
+});
+export type EmailIgnoreAddResponse = z.infer<typeof EmailIgnoreAddResponse>;
+
 export const TtsVoicesResponse = z.object({ voices: z.array(TtsVoice) });
 export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponse>;
 
@@ -324,6 +359,16 @@ export const endpoints: Endpoint[] = [
     tags: ["documents"],
     body: BulkDeleteRequest,
     response: BulkDeleteResponse,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/documents/bulk-maintenance",
+    operationId: "bulkMaintenance",
+    summary: "Delete or mark-read documents older than a cutoff (by location/source)",
+    tags: ["documents"],
+    body: BulkMaintenanceRequest,
+    response: BulkMaintenanceResponse,
     status: 200,
   },
   {
@@ -611,6 +656,35 @@ export const endpoints: Endpoint[] = [
     tags: ["tts"],
     body: PlayerState,
     response: PlayerState,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/settings/email-ignore",
+    operationId: "getEmailIgnore",
+    summary: "List ignored newsletter senders and the senders in the library",
+    tags: ["documents"],
+    response: EmailIgnoreSettings,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/settings/email-ignore",
+    operationId: "addEmailIgnore",
+    summary: "Ignore a newsletter sender and delete its already-saved emails",
+    tags: ["documents"],
+    body: EmailIgnoreSenderRequest,
+    response: EmailIgnoreAddResponse,
+    status: 200,
+  },
+  {
+    method: "DELETE",
+    path: "/settings/email-ignore",
+    operationId: "removeEmailIgnore",
+    summary: "Stop ignoring a newsletter sender (existing emails are unaffected)",
+    tags: ["documents"],
+    body: EmailIgnoreSenderRequest,
+    response: EmailIgnoreSettings,
     status: 200,
   },
   {

@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.22.0',
+		date: '2026-06-09',
+		title: 'Mute noisy newsletters and sweep out stale feed items',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Settings now has a Newsletter senders list. Add a sender — by name or email address — to skip its future emails when Lectern checks your mailbox, and Lectern also clears out the ones it already saved. The senders already in your library are listed for one-tap ignoring, so silencing a newsletter you never read takes a single tap.'
+			},
+			{
+				kind: 'added',
+				text: 'The feed has a new Clean up action for thinning out old items in bulk. Remove (or just mark read) everything older than a week, a month, or a few other presets, or clear everything below the item you have selected. Cleaning up by Delete also removes the items from the source, so a feed backend that keeps re-serving the same old entries can no longer bring them back.'
+			}
+		]
+	},
+	{
 		version: '0.21.0',
 		date: '2026-06-06',
 		title: 'Triage you can take back, and a calmer offline conscience',

@@ -8,6 +8,10 @@ import {
   ImportReadwiseResponse,
   BulkDeleteRequest,
   BulkDeleteResponse,
+  BulkMaintenanceRequest,
+  BulkMaintenanceResponse,
+  EmailIgnoreAddResponse,
+  EmailIgnoreSettings,
   ForceSyncResponse,
   SubscribeFeedRequest,
   UpdateFeedRequest,
@@ -135,11 +139,42 @@ export class LecternClient {
     });
   }
   /**
+   * Age-based bulk sweep: delete (removed at the source) or mark-read every live
+   * document matching the facets whose timestamp precedes `before`. Used for
+   * "clean up items older than a week" and "clear everything below this item".
+   */
+  bulkMaintenance(body: BulkMaintenanceRequest) {
+    return this.request("POST", "/documents/bulk-maintenance", {
+      body,
+      schema: BulkMaintenanceResponse,
+    });
+  }
+  /**
    * Force a full sync/reconcile on the server (re-index sources, prune deletions).
    * Returns per-source counts plus how many tombstones were created.
    */
   forceSync() {
     return this.request("POST", "/sync/force", { schema: ForceSyncResponse });
+  }
+
+  // ---- newsletter ignore list ----
+  /** The ignored newsletter senders plus the senders currently in the library. */
+  getEmailIgnore() {
+    return this.request("GET", "/settings/email-ignore", { schema: EmailIgnoreSettings });
+  }
+  /** Ignore a sender's future emails AND delete its already-saved ones. */
+  addEmailIgnore(sender: string) {
+    return this.request("POST", "/settings/email-ignore", {
+      body: { sender },
+      schema: EmailIgnoreAddResponse,
+    });
+  }
+  /** Stop ignoring a sender (existing emails are unaffected). */
+  removeEmailIgnore(sender: string) {
+    return this.request("DELETE", "/settings/email-ignore", {
+      body: { sender },
+      schema: EmailIgnoreSettings,
+    });
   }
   /**
    * Fetch a document's article HTML. Pass `refresh` to bypass the stored copy and
