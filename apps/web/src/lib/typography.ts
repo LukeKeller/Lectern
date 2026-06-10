@@ -102,11 +102,13 @@ export const THEME_SWATCHES: Record<ThemeMode, { label: string; bg: string; fg: 
 	contrast: { label: 'Contrast', bg: '#000000', fg: '#ffffff' }
 };
 
-/** Quick reading-width presets (px), surfaced as buttons in the settings UI. */
+/** Quick reading-width presets (px), surfaced as buttons in the settings UI.
+ *  Stored as raw px for now; an em-of-reader-size model (Narrow 28em /
+ *  Medium 34em / Wide 40em) is a future refactor. 760 is the measure cap. */
 export const WIDTH_PRESETS: { label: string; value: number }[] = [
 	{ label: 'Narrow', value: 580 },
 	{ label: 'Medium', value: 680 },
-	{ label: 'Wide', value: 820 }
+	{ label: 'Wide', value: 760 }
 ];
 
 const THEMES: Record<ThemeMode, true> = {
@@ -153,7 +155,7 @@ export function normalizeSettings(raw: unknown): ReaderSettings {
 		fontFamily: o.fontFamily && FONTS[o.fontFamily] ? o.fontFamily : DEFAULT_SETTINGS.fontFamily,
 		fontSize: clampNumber(o.fontSize, DEFAULT_SETTINGS.fontSize, 12, 28),
 		lineHeight: clampNumber(o.lineHeight, DEFAULT_SETTINGS.lineHeight, 1.2, 2.2),
-		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 1000),
+		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 760),
 		letterSpacing: clampNumber(o.letterSpacing, DEFAULT_SETTINGS.letterSpacing, -0.05, 0.15),
 		wordSpacing: clampNumber(o.wordSpacing, DEFAULT_SETTINGS.wordSpacing, 0, 0.5),
 		paragraphSpacing: clampNumber(o.paragraphSpacing, DEFAULT_SETTINGS.paragraphSpacing, 0.4, 2.4),

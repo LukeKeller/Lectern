@@ -874,7 +874,7 @@
 				<input
 					type="range"
 					min="480"
-					max="1000"
+					max="760"
 					step="20"
 					value={readerSettings.current.maxWidth}
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
