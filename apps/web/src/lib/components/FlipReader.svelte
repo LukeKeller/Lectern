@@ -8,6 +8,7 @@
 	import { getSync } from '$lib/sync';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
+	import { displayAuthor } from '$lib/author';
 
 	// Newspaper reading flows DOWN one column then UP for the next when the whole
 	// article is one tall balanced block. To keep scrolling essentially downward,
@@ -107,7 +108,7 @@
 
 	function byline(card: Card): string {
 		const parts: string[] = [];
-		if (card.author) parts.push(card.author);
+		if (card.author) parts.push(displayAuthor(card.author));
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
 		return parts.join(' \u00b7 ');
 	}

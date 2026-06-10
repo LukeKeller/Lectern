@@ -29,6 +29,7 @@
 		nearestAnchor,
 		type AnchorCandidate
 	} from '$lib/progress';
+	import { displayAuthor } from '$lib/author';
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { scrollIntoViewMotion, scrollBehavior } from '$lib/motion';
@@ -939,7 +940,7 @@
 		{#if card}
 			<h1>{card.title}</h1>
 			<p class="byline">
-				{card.siteName ?? card.author ?? new URL(card.url).hostname}
+				{card.siteName ?? (card.author ? displayAuthor(card.author) : new URL(card.url).hostname)}
 				{#if card.readingTimeMinutes}<span class="dot">·</span>{card.readingTimeMinutes} min read{/if}
 			</p>
 			<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
@@ -1004,7 +1005,7 @@
 				</div>
 				{#if card.author}<div>
 						<dt>Author</dt>
-						<dd>{card.author}</dd>
+						<dd>{displayAuthor(card.author)}</dd>
 					</div>{/if}
 				<div>
 					<dt>Type</dt>

@@ -8,6 +8,7 @@
 	import { getArticleHtml } from '$lib/content';
 	import Icon from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
+	import { displayAuthor } from '$lib/author';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { scrollIntoViewMotion } from '$lib/motion';
 
@@ -33,7 +34,7 @@
 	function meta(card: Card): string {
 		const parts: string[] = [];
 		if (card.siteName) parts.push(card.siteName);
-		if (card.author) parts.push(card.author);
+		if (card.author) parts.push(displayAuthor(card.author));
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
 		return parts.join(' · ');
 	}
