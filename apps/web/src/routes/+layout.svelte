@@ -39,6 +39,10 @@
 	let helpOpen = $state(false);
 	let pending: string | null = null;
 
+	// The reader supplies its own toolbar (with Back); on phones, the app top bar
+	// above it would stack two chrome bars, so it is hidden on that route.
+	const isReader = $derived(page.route.id === '/read/[id]');
+
 	interface NavItem {
 		id: string;
 		label: string;
@@ -319,7 +323,7 @@
 	});
 </script>
 
-<div class="topbar">
+<div class="topbar" class:reader-route={isReader}>
 	<button
 		type="button"
 		class="icon-btn"
@@ -628,7 +632,7 @@
 	</div>
 </aside>
 
-<main>
+<main class:reader-route={isReader}>
 	{@render children()}
 </main>
 
@@ -985,6 +989,16 @@
 		main {
 			margin-left: 0;
 			padding-top: calc(var(--topbar-h) + env(safe-area-inset-top) + 1rem);
+		}
+	}
+	/* Reader route on phones: the reader's own toolbar (with Back) is the only
+	   chrome — drop the app bar and the padding that reserved space for it. */
+	@media (max-width: 640px) {
+		.topbar.reader-route {
+			display: none;
+		}
+		main.reader-route {
+			padding-top: calc(env(safe-area-inset-top) + 0.75rem);
 		}
 	}
 </style>
