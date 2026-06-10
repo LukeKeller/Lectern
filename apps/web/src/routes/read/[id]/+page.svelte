@@ -2138,7 +2138,7 @@
 	   on dark themes. --hl-mix / --hl-blend come from the theme blocks in app.css
 	   and re-scope when .doc overrides the app theme via data-theme. */
 	.doc :global(mark.lectern-hl) {
-		background: color-mix(in srgb, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
+		background: color-mix(in oklab, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
 		mix-blend-mode: var(--hl-blend, multiply);
 		color: inherit;
 		border-radius: 2px;
@@ -2210,7 +2210,7 @@
 		transform: scaleX(-1);
 	}
 	.doc :global(mark.find-hit) {
-		background: color-mix(in srgb, var(--accent) 22%, transparent);
+		background: color-mix(in oklab, var(--accent) 22%, transparent);
 		border-radius: 2px;
 	}
 	.doc :global(mark.find-hit.current) {
