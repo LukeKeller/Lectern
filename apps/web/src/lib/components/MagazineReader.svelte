@@ -6,6 +6,7 @@
 	import { resolve } from '$app/paths';
 	import { getSync } from '$lib/sync';
 	import { getArticleHtml } from '$lib/content';
+	import { cleanArticleHtml } from '$lib/article-html';
 	import Icon from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
 	import { displayAuthor } from '$lib/author';
@@ -66,7 +67,7 @@
 		for (const card of magazine.cards) {
 			getArticleHtml(card.id)
 				.then((h) => {
-					html[card.id] = h;
+					html[card.id] = cleanArticleHtml(h, card.title);
 				})
 				.catch(() => {
 					failed[card.id] = true;

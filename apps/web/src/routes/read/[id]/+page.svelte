@@ -11,6 +11,7 @@
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import type { Location, Highlight, NewHighlight } from '@lectern/shared';
 	import { serializeRange, renderHighlights } from '$lib/highlight';
+	import { cleanArticleHtml } from '$lib/article-html';
 	import { liveQuery } from 'dexie';
 	import { readingQueue } from '$lib/reading-queue.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
@@ -652,8 +653,9 @@
 		try {
 			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
 			if (docId !== id) return;
-			// Sanitize before rendering untrusted article HTML on the client.
-			html = DOMPurify.sanitize(content.html);
+			// Sanitize before rendering untrusted article HTML on the client, then
+			// drop the duplicated leading h1 / demote in-content h1s.
+			html = cleanArticleHtml(DOMPurify.sanitize(content.html), initial?.title);
 		} catch (err) {
 			if (docId !== id) return;
 			error = err instanceof Error ? err.message : String(err);

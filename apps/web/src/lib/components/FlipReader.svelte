@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { getArticleHtml, prefetchArticles } from '$lib/content';
+	import { cleanArticleHtml } from '$lib/article-html';
 	import { getSync } from '$lib/sync';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
@@ -124,7 +125,7 @@
 		getArticleHtml(card.id)
 			.then((h) => {
 				if (cancelled) return;
-				html = h;
+				html = cleanArticleHtml(h, card.title);
 				loading = false;
 			})
 			.catch((e: unknown) => {
