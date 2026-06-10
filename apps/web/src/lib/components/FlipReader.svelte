@@ -17,10 +17,14 @@
 	// break the article into short stacked bands: each band is a bounded 2-column
 	// block, and headings/media/quotes/tables become full-width dividers between
 	// bands. Magazine never calls this — it keeps its single-measure flow.
-	type Band = { kind: 'flow' | 'full' | 'break'; html: string; lede?: boolean };
+	type Band = { kind: 'flow' | 'full' | 'break'; html: string; lede?: boolean; short?: boolean };
 	function splitBands(raw: string): Band[] {
 		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw, lede: true }];
 		const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html');
+		// Short items (RSS snippets) skip the broadsheet costume entirely: one
+		// ragged column, no drop cap (no `lede`), full-story link right below.
+		const totalWords = (doc.body.textContent ?? '').trim().split(/\s+/).filter(Boolean).length;
+		if (totalWords < 90) return [{ kind: 'flow', html: raw, short: true }];
 		// Headings, media, quotes, tables and preformatted blocks must break to
 		// full width so they read as section dividers. Lists are left to flow with
 		// the surrounding paragraphs (they're usually short and read fine in column).
@@ -115,6 +119,7 @@
 	const bands = $derived(
 		kind === 'newspaper' && !loading && !error && html ? splitBands(html) : null
 	);
+	const isShort = $derived(bands?.[0]?.short === true);
 	const SKELETON_WIDTHS = [78, 92, 85, 70, 96, 82, 90, 74];
 
 	function byline(card: Card): string {
@@ -266,7 +271,7 @@
 							<a href={resolve('/read/[id]', { id: current.id })}>Open it in the reader</a>.
 						</p>
 					{:else if bands}
-						<div class="fr-body fr-bands lectern-prose">
+						<div class="fr-body fr-bands lectern-prose" class:fr-short={isShort}>
 							{#each bands as band, i (i)}
 								{#if band.kind === 'break'}
 									<div class="fr-break" aria-hidden="true">❧</div>
@@ -279,6 +284,11 @@
 								{/if}
 							{/each}
 						</div>
+						{#if isShort}
+							<a class="open-full short-link" href={resolve('/read/[id]', { id: current.id })}>
+								Read the full story <Icon name="back" size={13} />
+							</a>
+						{/if}
 					{:else}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 						<div class="fr-body lectern-prose" class:drop-cap={kind === 'magazine'}>
@@ -286,13 +296,15 @@
 						</div>
 					{/if}
 
-					{#if !loading && !error}
+					{#if !loading && !error && !isShort}
 						<p class="endmark" aria-hidden="true">∎</p>
 					{/if}
 
-					<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
-						Open in full reader <Icon name="back" size={13} />
-					</a>
+					{#if !isShort}
+						<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
+							Open in full reader <Icon name="back" size={13} />
+						</a>
+					{/if}
 
 					<footer class="runfoot" aria-hidden="true">{index + 1}</footer>
 				</article>
@@ -531,6 +543,11 @@
 	.fr-band + .fr-band {
 		margin-top: 1.6em;
 	}
+	/* Short items: a single ragged column — no columns, no justification. */
+	.fr-short .fr-band {
+		columns: 1;
+		text-align: left;
+	}
 	/* An editorial floret between two flowing bands — a centered ornament flanked by
 	   hairlines, reading as a quiet section break rather than a hard rule. */
 	.fr-break {
@@ -622,6 +639,10 @@
 	}
 	.open-full:hover {
 		color: var(--accent);
+	}
+	/* For short items the link sits directly under the snippet. */
+	.open-full.short-link {
+		margin-top: 0.9rem;
 	}
 
 	.skeleton {
