@@ -108,6 +108,7 @@
 	let loading = $state(true);
 	let error = $state<string | undefined>(undefined);
 	let stageEl = $state<HTMLElement | null>(null);
+	let footEl = $state<HTMLElement | null>(null);
 
 	// Read state we apply locally for instant feedback; the markRead mutation is
 	// also queued to sync. Seeded from anything already finished.
@@ -164,6 +165,28 @@
 		const sync = getSync();
 		void sync.enqueue({ type: 'markRead', id: card.id, read }).then(() => sync.flush());
 	}
+
+	// The final page has no forward turn, so go()'s auto-mark can never fire for
+	// it. Instead, when the running foot of the last page scrolls into view, the
+	// story has been read to the end — mark it. The {#key index} block recreates
+	// the foot per page, so bind:this re-fires and this effect re-runs.
+	$effect(() => {
+		const el = footEl;
+		const card = current;
+		if (!el || !card || loading || error || index !== total - 1) return;
+		if (readIds.has(card.id)) return;
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					io.disconnect();
+					setRead(card, true);
+				}
+			},
+			{ root: stageEl, threshold: 0.5 }
+		);
+		io.observe(el);
+		return () => io.disconnect();
+	});
 
 	function go(delta: number) {
 		const next = index + delta;
@@ -317,7 +340,7 @@
 						</a>
 					{/if}
 
-					<footer class="runfoot" aria-hidden="true">{index + 1}</footer>
+					<footer class="runfoot" aria-hidden="true" bind:this={footEl}>{index + 1}</footer>
 				</article>
 			{/key}
 		{/if}
