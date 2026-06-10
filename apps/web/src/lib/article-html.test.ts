@@ -8,7 +8,10 @@ describe('titlesMatch', () => {
 
 	it('matches truncated variants when the overlap is substantial', () => {
 		expect(
-			titlesMatch('The Rise and Fall of Everything', 'The Rise and Fall of Everything — Example Site')
+			titlesMatch(
+				'The Rise and Fall of Everything',
+				'The Rise and Fall of Everything — Example Site'
+			)
 		).toBe(true);
 	});
 
