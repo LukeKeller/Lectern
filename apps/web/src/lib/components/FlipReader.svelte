@@ -336,10 +336,6 @@
 						</div>
 					{/if}
 
-					{#if !loading && !error && !isShort}
-						<p class="endmark" aria-hidden="true">∎</p>
-					{/if}
-
 					{#if !isShort}
 						<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
 							Open in full reader <Icon name="back" size={13} />
@@ -635,14 +631,13 @@
 		font-size: 1.3rem;
 		font-style: italic;
 	}
-	/* End-of-article mark and a running foot folio give each page a printed
-	   beginning-middle-end, the depth a real leaf carries. */
-	.endmark {
-		margin: 1.6rem 0 0;
-		text-align: right;
+	/* End-of-article tombstone on the final line of copy itself (no mark when
+	   the article ends in an image/embed — deliberate), plus a running foot
+	   folio so each page keeps a printed beginning-middle-end. */
+	.fr-body:not(.fr-bands) > :global(p:last-child)::after,
+	.fr-bands:not(.fr-short) > .fr-band:last-child > :global(p:last-child)::after {
+		content: '\2002\220E';
 		color: var(--text-muted);
-		font-size: 1.15rem;
-		line-height: 1;
 	}
 	.runfoot {
 		display: flex;

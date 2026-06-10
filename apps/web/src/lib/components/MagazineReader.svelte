@@ -183,7 +183,6 @@
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					<div class="mr-body lectern-prose drop-cap">{@html html[card.id]}</div>
-					<p class="mr-end" aria-hidden="true">∎</p>
 				{:else if failed[card.id]}
 					<p class="mr-fail">
 						Couldn’t load this article.
@@ -505,13 +504,11 @@
 		pointer-events: none;
 	}
 
-	/* End-of-article mark — a small printed full stop to the feature. */
-	.mr-end {
-		margin: 1.4rem 0 0;
-		text-align: right;
+	/* End-of-article tombstone, set on the final line of copy itself. Articles
+	   that end in an image/embed get no mark — deliberate, not a bug. */
+	.mr-body > :global(p:last-child)::after {
+		content: '\2002\220E';
 		color: var(--text-muted);
-		font-size: 1.15rem;
-		line-height: 1;
 	}
 
 	.mr-top {
