@@ -102,7 +102,7 @@
 		</div>
 	</header>
 
-	<nav class="mr-toc" aria-label="Contents">
+	<nav class="mr-toc" id="mr-contents" aria-label="Contents">
 		<h2>Contents</h2>
 		<ol>
 			{#each magazine.cards as card, i (card.id)}
@@ -193,7 +193,12 @@
 					<p class="mr-loading">Loading…</p>
 				{/if}
 
-				<button type="button" class="mr-top" onclick={() => jump(magazine.cards[0]!.id)}>
+				<button
+					type="button"
+					class="mr-top"
+					onclick={() =>
+						scrollIntoViewMotion(document.getElementById('mr-contents'), { block: 'start' })}
+				>
 					↑ Contents
 				</button>
 			</article>
@@ -302,6 +307,7 @@
 		padding: 1rem 1.25rem;
 		margin-bottom: 2.5rem;
 		background: var(--surface);
+		scroll-margin-top: 1.5rem;
 	}
 	.mr-toc h2 {
 		font-size: var(--text-2xs);
