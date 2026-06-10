@@ -416,18 +416,28 @@ body {
 	font-family: var(--font-ui);
 	font-size: var(--text-base);
 	line-height: 1.55;
-	background:
-		radial-gradient(
-			120% 55% at 50% -8%,
-			color-mix(in srgb, var(--accent) 6%, transparent),
-			transparent 60%
-		),
-		var(--bg);
-	background-attachment: fixed;
 	color: var(--text);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
+}
+
+/* The faint accent wash behind the whole app. Lives on a fixed pseudo-element
+   (own compositor layer) instead of body { background-attachment: fixed },
+   which forces repaint-on-scroll on iOS/low-end Android. The solid ground is
+   painted by `html` above; this sits between it and all content (z-index: -1,
+   body creates no stacking context, so content always paints over it). */
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+	background: radial-gradient(
+		120% 55% at 50% -8%,
+		color-mix(in srgb, var(--accent) 6%, transparent),
+		transparent 60%
+	);
 }
 
 h1,
