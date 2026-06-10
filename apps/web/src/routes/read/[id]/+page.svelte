@@ -579,6 +579,26 @@
 		goBack();
 	}
 
+	// End-of-article "Next up": the document after this one in the reading queue
+	// (the snapshot of the list the reader came from), looked up in the local
+	// Dexie mirror. Undefined when last-in-queue or opened via a direct link.
+	const nextId = $derived(card ? readingQueue.nextAfter(card.id) : undefined);
+	let nextCard = $state<Card | undefined>(undefined);
+	$effect(() => {
+		const nid = nextId;
+		if (!nid) {
+			nextCard = undefined;
+			return;
+		}
+		let cancelled = false;
+		void db.cards.get(nid).then((c) => {
+			if (!cancelled) nextCard = c;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	/**
 	 * Load (or reload) the document for the current route id. The reader is a
 	 * single reused component across reader→reader navigation, so this resets all
@@ -1009,6 +1029,48 @@
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html html}
 			</article>
+			<footer class="endmatter">
+				<span class="end-mark" aria-hidden="true">&#10086;</span>
+				{#if card}
+					<div class="end-triage" role="group" aria-label="Triage this document">
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('archive')}
+							title="Archive ( e )"
+						>
+							Archive
+						</button>
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('later')}
+							title="Later ( l )"
+						>
+							Later
+						</button>
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('shortlist')}
+							title="Shortlist ( s )"
+						>
+							Shortlist
+						</button>
+					</div>
+				{/if}
+				{#if nextCard}
+					<a class="next-up" href={resolve('/read/[id]', { id: nextCard.id })}>
+						<span class="next-kicker">Next up</span>
+						<span class="next-title">{nextCard.title}</span>
+						<span class="next-meta">
+							{nextCard.siteName ?? new URL(nextCard.url).hostname}
+							{#if nextCard.readingTimeMinutes}<span class="dot">·</span
+								>{nextCard.readingTimeMinutes} min read{/if}
+						</span>
+					</a>
+				{/if}
+			</footer>
 		{/if}
 	</div>
 	<aside class="rail panel">
@@ -1471,6 +1533,62 @@
 		margin-top: 0.5rem;
 		font-family: var(--font-mono);
 		font-size: var(--text-2xs);
+		color: var(--text-muted);
+	}
+	/* End-of-article: quiet end mark, triage row, next-up card. */
+	.endmatter {
+		margin: 3em 0 2em;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.4rem;
+	}
+	.end-mark {
+		font-family: var(--font-serif);
+		font-size: 1.1rem;
+		line-height: 1;
+		color: var(--text-muted);
+		user-select: none;
+	}
+	.end-triage {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.6rem;
+	}
+	.next-up {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		width: 100%;
+		max-width: 26rem;
+		padding: 0.85rem 1rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text);
+		text-decoration: none;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.next-up:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-alt);
+	}
+	.next-kicker {
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.next-title {
+		font-family: var(--font-serif);
+		font-size: var(--text-md);
+		line-height: 1.3;
+	}
+	.next-meta {
+		font-size: var(--text-sm);
 		color: var(--text-muted);
 	}
 	.hl-toast {
