@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Card } from '@lectern/shared';
-	import type { Magazine } from '$lib/magazine';
+	import { magazineTitle, type Magazine } from '$lib/magazine';
 	import { onMount, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
@@ -27,9 +27,7 @@
 	// Lead images that failed to load, keyed by card id, so we can hide them.
 	const coverFailed = new SvelteSet<string>();
 
-	const title = $derived(
-		magazine.tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
-	);
+	const title = $derived(magazineTitle(magazine.tag));
 
 	function meta(card: Card): string {
 		const parts: string[] = [];

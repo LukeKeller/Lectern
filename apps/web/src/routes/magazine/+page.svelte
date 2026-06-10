@@ -6,7 +6,7 @@
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
 	import { getSync } from '$lib/sync';
-	import { buildMagazines, type Magazine } from '$lib/magazine';
+	import { buildMagazines, magazineTitle, type Magazine } from '$lib/magazine';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
 	import MagazineReader from '$lib/components/MagazineReader.svelte';
@@ -149,7 +149,7 @@
 				<div class="cover hero-cover">
 					{@render coverArtLayers(featured.cards, featured.tag, true)}
 					<span class="masthead">Lectern</span>
-					<h2 class="cover-title">{featured.tag}</h2>
+					<h2 class="cover-title">{magazineTitle(featured.tag)}</h2>
 					<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
 					<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
 					<ul class="cover-lines" aria-hidden="true">
@@ -197,7 +197,7 @@
 						<button class="cover cover-btn" type="button" onclick={(e) => openMagazine(e, issue)}>
 							{@render coverArtLayers(issue.cards, issue.tag)}
 							<span class="masthead">Lectern</span>
-							<h2 class="cover-title">{issue.tag}</h2>
+							<h2 class="cover-title">{magazineTitle(issue.tag)}</h2>
 							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
 							<p class="cover-count">{plural(issue.cards.length, 'article')}</p>
 							<ul class="cover-lines" aria-hidden="true">
