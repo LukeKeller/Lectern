@@ -238,3 +238,23 @@
 	background: transparent;
 	font-size: 0.85em;
 }
+
+/* ---- Paragraph style: indented (book convention) ----
+   First-line indents replace the inter-paragraph gap. No indent on openers:
+   the first paragraph and any paragraph that follows a heading, quote, figure,
+   or rule starts flush. Toggled per the paragraphStyle reader setting. */
+
+.lectern-prose.prose-indented p {
+	margin-bottom: 0;
+	text-indent: 1.4em;
+}
+.lectern-prose.prose-indented p:first-of-type,
+.lectern-prose.prose-indented h1 + p,
+.lectern-prose.prose-indented h2 + p,
+.lectern-prose.prose-indented h3 + p,
+.lectern-prose.prose-indented h4 + p,
+.lectern-prose.prose-indented blockquote + p,
+.lectern-prose.prose-indented figure + p,
+.lectern-prose.prose-indented hr + p {
+	text-indent: 0;
+}

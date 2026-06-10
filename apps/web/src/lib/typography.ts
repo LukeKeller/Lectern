@@ -32,6 +32,10 @@ export type FontFamily =
 	| 'lexend'
 	| 'opendyslexic';
 
+/** Paragraph separation: `spaced` (web convention, inter-paragraph gap) or
+ *  `indented` (book convention, first-line indents and no gap). */
+export type ParagraphStyle = 'spaced' | 'indented';
+
 export interface ReaderSettings {
 	/** App-wide theme (drives `<html data-theme>`). */
 	theme: ThemeMode;
@@ -52,6 +56,8 @@ export interface ReaderSettings {
 	wordSpacing: number;
 	/** Inter-paragraph gap, in em. */
 	paragraphSpacing: number;
+	/** Paragraph separation: spacing between blocks, or book-style indents. */
+	paragraphStyle: ParagraphStyle;
 	/** After triaging in the reader, jump to the next document in the list. */
 	autoAdvance: boolean;
 }
@@ -67,6 +73,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	letterSpacing: 0,
 	wordSpacing: 0,
 	paragraphSpacing: 1,
+	paragraphStyle: 'spaced',
 	autoAdvance: true
 };
 
@@ -159,6 +166,7 @@ export function normalizeSettings(raw: unknown): ReaderSettings {
 		letterSpacing: clampNumber(o.letterSpacing, DEFAULT_SETTINGS.letterSpacing, -0.05, 0.15),
 		wordSpacing: clampNumber(o.wordSpacing, DEFAULT_SETTINGS.wordSpacing, 0, 0.5),
 		paragraphSpacing: clampNumber(o.paragraphSpacing, DEFAULT_SETTINGS.paragraphSpacing, 0.4, 2.4),
+		paragraphStyle: o.paragraphStyle === 'indented' ? 'indented' : DEFAULT_SETTINGS.paragraphStyle,
 		autoAdvance: typeof o.autoAdvance === 'boolean' ? o.autoAdvance : DEFAULT_SETTINGS.autoAdvance
 	};
 }

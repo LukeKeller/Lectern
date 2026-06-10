@@ -880,6 +880,25 @@
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
 				/>
 			</label>
+			<div class="field">
+				<span class="field-label">Paragraphs</span>
+				<div class="seg">
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'spaced'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'spaced' })}
+					>
+						Spaced
+					</button>
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'indented'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'indented' })}
+					>
+						Indented
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </nav>
@@ -983,7 +1002,13 @@
 			</div>
 		{:else}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<article class="lectern-prose" bind:this={articleEl}>{@html html}</article>
+			<article
+				class="lectern-prose"
+				class:prose-indented={readerSettings.current.paragraphStyle === 'indented'}
+				bind:this={articleEl}
+			>
+				{@html html}
+			</article>
 		{/if}
 	</div>
 	<aside class="rail panel">
