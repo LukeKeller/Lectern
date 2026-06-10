@@ -1213,6 +1213,14 @@
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow);
 	}
+	/* The Display popover specifically (the Info side rail also carries .panel):
+	   a touch wider so three columns of labels fit, and never taller than the
+	   viewport — scroll instead of clipping. */
+	.bar .panel {
+		width: min(22rem, 92vw);
+		max-height: calc(100dvh - 7rem);
+		overflow-y: auto;
+	}
 	.field {
 		display: flex;
 		flex-direction: column;
@@ -1228,15 +1236,18 @@
 		color: var(--text);
 		font-variant-numeric: tabular-nums;
 	}
+	/* Wrap the segments into an even grid so long labels (Newsprint, Contrast,
+	   OpenDyslexic) never clip off the popover edge. */
 	.seg {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
 		gap: 0.25rem;
 		padding: 0.2rem;
 		background: var(--surface-alt);
 		border-radius: var(--radius);
 	}
 	.seg button {
-		flex: 1;
+		min-width: 0;
 		padding: 0.34rem 0.4rem;
 		border: 0;
 		border-radius: calc(var(--radius) - 3px);
