@@ -391,7 +391,9 @@ textarea {
 }
 
 ::selection {
-	background: var(--accent-soft);
+	/* --accent-soft is near-invisible against the light papers (~1.1:1); a 25%
+	   accent-into-bg mix reads clearly on all six themes and keeps text AAA. */
+	background: color-mix(in srgb, var(--accent) 25%, var(--bg));
 	color: var(--text);
 }
 
