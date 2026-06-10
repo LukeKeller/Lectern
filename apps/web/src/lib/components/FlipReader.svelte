@@ -256,7 +256,7 @@
 							<a href={resolve('/read/[id]', { id: current.id })}>Open it in the reader</a>.
 						</p>
 					{:else if bands}
-						<div class="fr-body fr-bands">
+						<div class="fr-body fr-bands lectern-prose">
 							{#each bands as band, i (i)}
 								{#if i > 0 && band.kind === 'flow' && bands[i - 1].kind === 'flow'}
 									<div class="fr-break" aria-hidden="true">❧</div>
@@ -272,7 +272,7 @@
 						</div>
 					{:else}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						<div class="fr-body">{@html html}</div>
+						<div class="fr-body lectern-prose">{@html html}</div>
 					{/if}
 
 					{#if !loading && !error}
@@ -482,60 +482,14 @@
 		margin: 0.7rem 0 0;
 	}
 
-	/* Article body — shared base, then per-kind treatment. {@html} content needs
-	   :global selectors since it carries no Svelte scope attributes. */
+	/* Article body: the reader's typography at newspaper scale (×0.92; the
+	   magazine kind overrides to ×0.94 below). Content styling lives in the
+	   shared .lectern-prose layer; only this surface's voice (columns, bands,
+	   drop caps) is kept. */
 	.fr-body {
-		font-family: var(--font-serif);
-		color: var(--text);
-		font-size: 1.06rem;
-		line-height: 1.7;
-	}
-	.fr-body :global(p) {
-		margin: 0 0 1em;
-	}
-	.fr-body :global(h2),
-	.fr-body :global(h3) {
-		font-family: var(--font-serif);
-		line-height: 1.2;
-		margin: 1.4em 0 0.4em;
-	}
-	.fr-body :global(a) {
-		color: var(--accent);
-		text-decoration: underline;
-		text-underline-offset: 2px;
-	}
-	.fr-body :global(img) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-	}
-	.fr-body :global(figure) {
-		margin: 1.2em 0;
-	}
-	.fr-body :global(figcaption) {
-		font-family: var(--font-ui);
-		font-size: var(--text-xs);
-		color: var(--text-muted);
-		text-align: center;
-		margin-top: 0.4em;
-	}
-	.fr-body :global(blockquote) {
-		margin: 1.4em 0;
-		padding-left: 1.1em;
-		border-left: 1px solid var(--border-strong);
-		color: var(--text);
-		font-style: italic;
-		font-size: 1.06em;
-		line-height: 1.5;
-	}
-	.fr-body :global(pre) {
-		font-family: var(--font-mono);
-		font-size: var(--text-sm);
-		background: var(--bg-sunken);
-		padding: 0.9em 1em;
-		border-radius: var(--radius);
-		overflow-x: auto;
-		white-space: pre;
+		font-family: var(--reader-font, var(--font-serif));
+		font-size: calc(var(--reader-size, 19px) * 0.92);
+		line-height: calc(var(--reader-leading, 1.6) + var(--prose-leading-boost, 0));
 	}
 
 	/* Newspaper — short stacked bands so reading flows downward instead of all the
@@ -656,8 +610,7 @@
 		max-width: 42rem;
 	}
 	.flip.magazine .fr-body {
-		font-size: 1.12rem;
-		line-height: 1.75;
+		font-size: calc(var(--reader-size, 19px) * 0.94);
 	}
 	.flip.magazine .fr-body :global(p:first-of-type)::first-letter {
 		float: left;
