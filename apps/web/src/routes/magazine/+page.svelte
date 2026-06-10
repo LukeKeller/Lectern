@@ -28,13 +28,6 @@
 		return parts.join(' · ');
 	}
 
-	// A stable two-digit issue number per publication, so each cover wears a
-	// consistent "No." the way a real magazine masthead would.
-	function issueNo(tag: string): number {
-		let h = 7;
-		for (let i = 0; i < tag.length; i++) h = (h * 17 + tag.charCodeAt(i)) % 90;
-		return h + 9;
-	}
 	function pad(n: number): string {
 		return String(n).padStart(2, '0');
 	}
@@ -52,17 +45,13 @@
 	}
 	// Tags whose cover image failed to load — fall back to the gradient-only cover.
 	const failedArt = new SvelteSet<string>();
-	// Synthetic folios: front matter fills the opening leaves, then each article
-	// spans a couple of pages, giving the contents real ascending page numbers.
-	function folios(list: Card[]): number[] {
-		const out: number[] = [];
-		let page = 11;
-		for (const c of list) {
-			out.push(page);
-			const span = c.readingTimeMinutes ?? Math.max(1, Math.round((c.wordCount ?? 700) / 220));
-			page += Math.max(2, Math.ceil(span / 3) * 2);
-		}
-		return out;
+	// Honest folios: reading minutes per article (estimated from word count when
+	// the source didn't supply them) instead of invented page numbers.
+	function minutesOf(card: Card): number {
+		return card.readingTimeMinutes ?? Math.max(1, Math.round((card.wordCount ?? 700) / 220));
+	}
+	function totalMinutes(list: Card[]): number {
+		return list.reduce((sum, c) => sum + minutesOf(c), 0);
 	}
 
 	let opened = $state<{ magazine: Magazine; startId?: string } | null>(null);
@@ -81,7 +70,7 @@
 	});
 </script>
 
-{#snippet tocEntry(magazine: Magazine, index: number, num: number, folio: number)}
+{#snippet tocEntry(magazine: Magazine, index: number, num: number)}
 	{@const card = magazine.cards[index]}
 	{#if card}
 		<li>
@@ -94,7 +83,7 @@
 				<span class="entry-main">
 					<span class="entry-row">
 						<span class="entry-title">{card.title}</span>
-						<span class="folio">{folio}</span>
+						<span class="folio">{minutesOf(card)} min</span>
 					</span>
 					{#if meta(card)}<span class="entry-by">{meta(card)}</span>{/if}
 				</span>
@@ -142,7 +131,6 @@
 		{:else}
 			{@const featured = issues[0]}
 			{@const lead = featured.cards[0]}
-			{@const featFolios = folios(featured.cards)}
 			{@const rest = issues.slice(1)}
 
 			<section class="hero" style={`--hue:${hue(featured.tag)}`}>
@@ -150,8 +138,9 @@
 					{@render coverArtLayers(featured.cards, featured.tag, true)}
 					<span class="masthead">Lectern</span>
 					<h2 class="cover-title">{magazineTitle(featured.tag)}</h2>
-					<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
-					<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
+					<p class="cover-count">
+						{plural(featured.cards.length, 'article')} · {totalMinutes(featured.cards)} min
+					</p>
 					<ul class="cover-lines" aria-hidden="true">
 						{#each coverLines(featured.cards) as card (card.id)}
 							<li>{card.title}</li>
@@ -184,7 +173,7 @@
 						<p class="kicker also">Also inside</p>
 						<ol class="toc">
 							{#each featured.cards.slice(1) as card, i (card.id)}
-								{@render tocEntry(featured, i + 1, i + 1, featFolios[i + 1])}
+								{@render tocEntry(featured, i + 1, i + 1)}
 							{/each}
 						</ol>
 					{/if}
@@ -198,8 +187,9 @@
 							{@render coverArtLayers(issue.cards, issue.tag)}
 							<span class="masthead">Lectern</span>
 							<h2 class="cover-title">{magazineTitle(issue.tag)}</h2>
-							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
-							<p class="cover-count">{plural(issue.cards.length, 'article')}</p>
+							<p class="cover-count">
+								{plural(issue.cards.length, 'article')} · {totalMinutes(issue.cards)} min
+							</p>
 							<ul class="cover-lines" aria-hidden="true">
 								{#each coverLines(issue.cards) as card (card.id)}
 									<li>{card.title}</li>
@@ -369,14 +359,6 @@
 		line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-	}
-	.cover-no {
-		font-family: var(--font-ui);
-		font-size: var(--text-2xs);
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		margin: 0;
-		color: color-mix(in srgb, white 80%, hsl(var(--hue) 45% 30%));
 	}
 	.cover-count {
 		font-family: var(--font-ui);
