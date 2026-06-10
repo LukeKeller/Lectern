@@ -1555,6 +1555,27 @@
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow-sm);
 	}
+	/* The same paper grain the print surfaces wear (see FlipReader.svelte) —
+	   the reading column has tooth, not glass. Soft-light over the page ground
+	   (or the .themed pane's own surface), under all content. */
+	.doc::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		border-radius: inherit;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	/* Keep the title lockup, prose, and panels above the grain so text is never
+	   blended or selection-tinted. */
+	.doc > * {
+		position: relative;
+		z-index: 1;
+	}
 	.focus-bar {
 		position: absolute;
 		left: -0.9rem;
