@@ -81,7 +81,7 @@ export const FONT_STACKS: Record<FontFamily, string> = {
 	serif: '"Iowan Old Style", Charter, "Literata", Georgia, serif',
 	sans: 'system-ui, -apple-system, "Segoe UI", sans-serif',
 	mono: '"SF Mono", "JetBrains Mono", ui-monospace, monospace',
-	literata: '"Literata", Georgia, "Times New Roman", serif',
+	literata: '"Literata", "Literata-fallback", Georgia, "Times New Roman", serif',
 	atkinson: '"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif',
 	lexend: '"Lexend", system-ui, -apple-system, sans-serif',
 	opendyslexic: '"OpenDyslexic", Comic Sans MS, system-ui, sans-serif'
