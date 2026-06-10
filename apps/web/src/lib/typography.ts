@@ -175,6 +175,15 @@ export function parseSettings(raw: string | null): ReaderSettings {
 	}
 }
 
+/** Faces designed for reading accessibility. When one is active, in-article
+ *  headings follow the body face instead of the editorial serif — headings are
+ *  the elements readers scan by, so they must not regress to a hard face. */
+const ACCESSIBILITY_FONTS: ReadonlySet<FontFamily> = new Set([
+	'atkinson',
+	'lexend',
+	'opendyslexic'
+]);
+
 /** The CSS custom properties that drive the reader's typography. */
 export function readerCssVars(s: ReaderSettings): Record<string, string> {
 	return {
@@ -184,7 +193,12 @@ export function readerCssVars(s: ReaderSettings): Record<string, string> {
 		'--reader-width': `${s.maxWidth}px`,
 		'--reader-tracking': `${s.letterSpacing}em`,
 		'--reader-word-spacing': `${s.wordSpacing}em`,
-		'--reader-para-gap': `${s.paragraphSpacing}em`
+		'--reader-para-gap': `${s.paragraphSpacing}em`,
+		// Consumed by .lectern-prose headings (lib/styles/prose.css). Resolves
+		// on the reader's .doc, overriding the :root default (--font-serif).
+		'--prose-heading-font': ACCESSIBILITY_FONTS.has(s.fontFamily)
+			? 'var(--reader-font)'
+			: 'var(--font-serif)'
 	};
 }
 
