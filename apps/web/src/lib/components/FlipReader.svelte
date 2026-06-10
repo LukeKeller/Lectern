@@ -17,7 +17,7 @@
 	// break the article into short stacked bands: each band is a bounded 2-column
 	// block, and headings/media/quotes/tables become full-width dividers between
 	// bands. Magazine never calls this — it keeps its single-measure flow.
-	type Band = { kind: 'flow' | 'full'; html: string; lede?: boolean };
+	type Band = { kind: 'flow' | 'full' | 'break'; html: string; lede?: boolean };
 	function splitBands(raw: string): Band[] {
 		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw, lede: true }];
 		const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html');
@@ -34,7 +34,6 @@
 			'H2',
 			'H3',
 			'H4',
-			'HR',
 			'VIDEO',
 			'IFRAME'
 		]);
@@ -52,6 +51,12 @@
 			const el = node.nodeType === 1 ? (node as Element) : null;
 			if (!el && !(node.textContent ?? '').trim()) continue;
 			const tag = el?.tagName ?? '';
+			if (el && tag === 'HR') {
+				// A source-authored thematic break — the one place the floret belongs.
+				flush();
+				out.push({ kind: 'break', html: '' });
+				continue;
+			}
 			if (el && FULL.has(tag)) {
 				flush();
 				out.push({ kind: 'full', html: el.outerHTML });
@@ -263,10 +268,9 @@
 					{:else if bands}
 						<div class="fr-body fr-bands lectern-prose">
 							{#each bands as band, i (i)}
-								{#if i > 0 && band.kind === 'flow' && bands[i - 1].kind === 'flow'}
+								{#if band.kind === 'break'}
 									<div class="fr-break" aria-hidden="true">❧</div>
-								{/if}
-								{#if band.kind === 'full'}
+								{:else if band.kind === 'full'}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									<div class="fr-full">{@html band.html}</div>
 								{:else}
@@ -522,8 +526,8 @@
 		hyphenate-limit-chars: 6 3 2;
 		text-wrap: pretty;
 	}
-	/* Breathing room between consecutive bands; the floret rule (.fr-break) carries
-	   the visible separation, so no border is needed when bands sit back-to-back. */
+	/* Continuation bands separate with margin alone — the floret (.fr-break) is
+	   reserved for source-authored <hr> breaks. */
 	.fr-band + .fr-band {
 		margin-top: 1.6em;
 	}
