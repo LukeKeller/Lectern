@@ -547,13 +547,17 @@
 		flex-direction: column;
 	}
 	/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
-	   columns and collapses to a single column on narrow screens. */
+	   columns and collapses to a single column on narrow screens. Ragged-right:
+	   greedy line-breaking justified ~31ch columns into rivers, so keep the left
+	   axis and let hyphenation + pretty wrapping tidy the rag. */
 	.fr-band {
 		columns: 2 17rem;
 		column-gap: 2.4rem;
 		column-rule: 1px solid var(--border);
-		text-align: justify;
+		text-align: left;
 		hyphens: auto;
+		hyphenate-limit-chars: 6 3 2;
+		text-wrap: pretty;
 	}
 	/* Breathing room between consecutive bands; the floret rule (.fr-break) carries
 	   the visible separation, so no border is needed when bands sit back-to-back. */
