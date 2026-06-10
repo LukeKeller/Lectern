@@ -2,12 +2,14 @@
 	import type { Card } from '@lectern/shared';
 	import { onMount, untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { getArticleHtml, prefetchArticles } from '$lib/content';
 	import { cleanArticleHtml } from '$lib/article-html';
 	import '$lib/styles/drop-cap.css';
 	import { getSync } from '$lib/sync';
+	import { prefersReducedMotion } from '$lib/motion';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
 	import { displayAuthor } from '$lib/author';
@@ -171,7 +173,16 @@
 		if (delta > 0) setRead(pages[index], true);
 		dir = delta;
 		index = next;
-		stageEl?.scrollTo({ top: 0 });
+		stageEl?.scrollTo({ top: 0, behavior: 'instant' });
+	}
+
+	// Page-turn motion: one short eased slide. The scroll reset above is instant
+	// so the two never animate against each other, and the slide is skipped
+	// entirely under prefers-reduced-motion (Svelte transitions ignore the CSS
+	// media query, so gate it here).
+	function pageFly() {
+		if (prefersReducedMotion()) return { duration: 0 };
+		return { x: dir >= 0 ? 24 : -24, duration: 180, easing: cubicOut, opacity: 0 };
 	}
 
 	function isEditable(t: EventTarget | null): boolean {
@@ -251,7 +262,7 @@
 	>
 		{#if current}
 			{#key index}
-				<article class="page" in:fly={{ x: dir >= 0 ? 36 : -36, duration: 220, opacity: 0 }}>
+				<article class="page" in:fly={pageFly()}>
 					<div class="head">
 						<span class="kicker">
 							<SourceAvatar url={current.url} siteName={current.siteName} size={18} />
@@ -463,7 +474,6 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		scroll-behavior: smooth;
 	}
 	.page {
 		max-width: 56rem;
