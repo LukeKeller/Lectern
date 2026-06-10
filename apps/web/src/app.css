@@ -153,6 +153,12 @@
 	   --grain-strength on any surface. */
 	--grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 	--grain-strength: 0.12;
+
+	/* Highlight-mark rendering, theme-scoped: light themes paint solid marker ink
+	   multiplied into the paper; dark themes use a translucent tint (multiply
+	   would crush light text into black). Each [data-theme] block overrides. */
+	--hl-mix: 100%;
+	--hl-blend: multiply;
 }
 
 /* Themes use bare attribute selectors (not `:root[...]`) so a theme can be
@@ -182,6 +188,8 @@
 	--bg-sunken: #efece4;
 	--shadow-md: 0 6px 20px rgba(31, 28, 22, 0.1), 0 1px 3px rgba(31, 28, 22, 0.06);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+	--hl-mix: 100%;
+	--hl-blend: multiply;
 }
 
 /* Sepia — warm cream paper with brown ink; easy on the eyes in dim rooms. */
@@ -205,6 +213,8 @@
 	--bg-sunken: #ece2c9;
 	--shadow-md: 0 6px 20px rgba(67, 54, 31, 0.12), 0 1px 3px rgba(67, 54, 31, 0.07);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+	--hl-mix: 100%;
+	--hl-blend: multiply;
 }
 
 /* Newsprint — aged-newspaper stock with ink-brown headlines (after stackwise). */
@@ -228,6 +238,8 @@
 	--bg-sunken: #e9dcbd;
 	--shadow-md: 0 6px 20px rgba(43, 31, 16, 0.12), 0 1px 3px rgba(43, 31, 16, 0.07);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+	--hl-mix: 100%;
+	--hl-blend: multiply;
 }
 
 [data-theme='dark'] {
@@ -250,6 +262,8 @@
 	--bg-sunken: #141210;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	--hl-mix: 26%;
+	--hl-blend: normal;
 }
 
 /* True black — for OLED screens at night. */
@@ -273,6 +287,8 @@
 	--bg-sunken: #000000;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.5);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	--hl-mix: 26%;
+	--hl-blend: normal;
 }
 
 /* High contrast — black ground, pure-white ink, bright accent, strong borders;
@@ -297,6 +313,8 @@
 	--bg-sunken: #000000;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.18);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+	--hl-mix: 32%;
+	--hl-blend: normal;
 }
 
 /* `auto`: no data-theme attribute → follow the OS. Mirrors the dark palette. */
@@ -321,6 +339,8 @@
 		--bg-sunken: #141210;
 		--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
 		--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+		--hl-mix: 26%;
+		--hl-blend: normal;
 	}
 }
 

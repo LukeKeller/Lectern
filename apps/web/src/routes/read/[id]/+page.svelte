@@ -1851,8 +1851,12 @@
 		box-shadow: var(--shadow);
 		cursor: pointer;
 	}
+	/* Marker-on-paper on light themes (solid ink, multiplied); translucent tint
+	   on dark themes. --hl-mix / --hl-blend come from the theme blocks in app.css
+	   and re-scope when .doc overrides the app theme via data-theme. */
 	.doc :global(mark.lectern-hl) {
-		background: color-mix(in srgb, var(--hl, #e0b341) 38%, transparent);
+		background: color-mix(in srgb, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
+		mix-blend-mode: var(--hl-blend, multiply);
 		color: inherit;
 		border-radius: 2px;
 		padding: 0.05em 0;
