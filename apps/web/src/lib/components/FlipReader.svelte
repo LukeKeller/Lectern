@@ -615,6 +615,20 @@
 	.fr-full :global(pre) {
 		max-width: 100%;
 	}
+	/* Full-width blockquotes read as pull quotes, not 90ch walls: a bounded,
+	   centered measure with rules above and below instead of the side stripe.
+	   .fr-body .fr-full out-specifies the base .fr-body blockquote rule. */
+	.fr-body .fr-full :global(blockquote) {
+		max-width: 30em;
+		margin: 1.8em auto;
+		padding: 0.9em 0;
+		border: 0;
+		border-top: 1px solid var(--border-strong);
+		border-bottom: 1px solid var(--border-strong);
+		text-align: center;
+		font-size: 1.3rem;
+		font-style: italic;
+	}
 	/* End-of-article mark and a running foot folio give each page a printed
 	   beginning-middle-end, the depth a real leaf carries. */
 	.endmark {
