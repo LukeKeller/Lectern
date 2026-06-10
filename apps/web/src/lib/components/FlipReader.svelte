@@ -330,8 +330,8 @@
 							</a>
 						{/if}
 					{:else}
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 						<div class="fr-body lectern-prose" class:drop-cap={kind === 'magazine'}>
+							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 							{@html html}
 						</div>
 					{/if}

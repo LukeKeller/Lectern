@@ -38,11 +38,28 @@
 	function coverLines(list: Card[]): Card[] {
 		return list.slice(0, 3);
 	}
-	// The cover art is the first article in the issue that carries an image.
-	function coverArt(list: Card[]): string | null {
-		for (const c of list) if (c.coverImage) return c.coverImage;
-		return null;
-	}
+	// Each cover claims a distinct image: walk the issues in display order and
+	// let each take the first article image no earlier issue already claimed.
+	// When the pool is exhausted the cover falls back to the typographic
+	// (gradient-only) treatment.
+	const coverArtByTag = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const used = new Set<string>();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, string | null>();
+		for (const issue of issues) {
+			let art: string | null = null;
+			for (const c of issue.cards) {
+				if (c.coverImage && !used.has(c.coverImage)) {
+					art = c.coverImage;
+					used.add(c.coverImage);
+					break;
+				}
+			}
+			map.set(issue.tag, art);
+		}
+		return map;
+	});
 	// Tags whose cover image failed to load — fall back to the gradient-only cover.
 	const failedArt = new SvelteSet<string>();
 	// Honest folios: reading minutes per article (estimated from word count when
@@ -92,8 +109,8 @@
 	{/if}
 {/snippet}
 
-{#snippet coverArtLayers(list: Card[], tag: string, eager = false)}
-	{@const art = coverArt(list)}
+{#snippet coverArtLayers(tag: string, eager = false)}
+	{@const art = coverArtByTag.get(tag) ?? null}
 	{#if art && !failedArt.has(tag)}
 		<img
 			class="cover-art"
@@ -135,7 +152,7 @@
 
 			<section class="hero" style={`--hue:${hue(featured.tag)}`}>
 				<div class="cover hero-cover">
-					{@render coverArtLayers(featured.cards, featured.tag, true)}
+					{@render coverArtLayers(featured.tag, true)}
 					<span class="masthead">Lectern</span>
 					<h2 class="cover-title">{magazineTitle(featured.tag)}</h2>
 					<p class="cover-count">
@@ -184,7 +201,7 @@
 				{#each rest as issue (issue.tag)}
 					<article class="zine" style={`--hue:${hue(issue.tag)}`}>
 						<button class="cover cover-btn" type="button" onclick={(e) => openMagazine(e, issue)}>
-							{@render coverArtLayers(issue.cards, issue.tag)}
+							{@render coverArtLayers(issue.tag)}
 							<span class="masthead">Lectern</span>
 							<h2 class="cover-title">{magazineTitle(issue.tag)}</h2>
 							<p class="cover-count">
@@ -381,7 +398,7 @@
 		font-size: clamp(0.95rem, 1.4vw, 1.1rem);
 		line-height: 1.22;
 		padding-left: 0.6rem;
-		border-left: 2px solid color-mix(in srgb, white 55%, transparent);
+		border-left: 1px solid color-mix(in srgb, white 55%, transparent);
 		color: color-mix(in srgb, white 88%, hsl(var(--hue) 50% 28%));
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
@@ -399,15 +416,8 @@
 	}
 	.foil {
 		display: block;
-		height: 2px;
-		border-radius: var(--radius-full);
-		background: linear-gradient(
-			90deg,
-			transparent,
-			color-mix(in srgb, white 78%, transparent),
-			color-mix(in srgb, white 30%, transparent),
-			transparent
-		);
+		height: 1px;
+		background: color-mix(in srgb, white 40%, transparent);
 	}
 	.cover-foot-row {
 		display: flex;
