@@ -1018,7 +1018,8 @@
 				{/each}
 			</nav>
 		{:else}
-			<p class="rail-empty">No headings.</p>
+			<p class="rail-empty">No headings in this article.</p>
+			<p class="rail-empty">Press <kbd>[</kbd> to close.</p>
 		{/if}
 	</aside>
 	<div
@@ -1922,6 +1923,34 @@
 		}
 		.rail.panel {
 			flex: 0 0 17rem;
+		}
+	}
+	/* Measure guard: below 1520px the flex layout cannot hold a 40rem article
+	   beside both rails (15rem sidebar + 2×3rem main padding + 13rem + 17rem
+	   rails + 2×2rem gaps + 40rem column = 1520px), so open rails float over the
+	   content as fixed cards instead of compressing it. */
+	@media (min-width: 980px) and (max-width: 1519px) {
+		.reader.toc-open .rail.toc,
+		.reader.panel-open .rail.panel {
+			position: fixed;
+			top: 4.5rem;
+			bottom: 1.25rem;
+			max-height: none;
+			z-index: 23;
+			overflow-y: auto;
+			padding: 1rem;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			box-shadow: var(--shadow-md);
+		}
+		.reader.toc-open .rail.toc {
+			left: calc(var(--sidebar-w) + 1.25rem);
+			width: 14rem;
+		}
+		.reader.panel-open .rail.panel {
+			right: 1.25rem;
+			width: 18rem;
 		}
 	}
 	.rail-tabs {
