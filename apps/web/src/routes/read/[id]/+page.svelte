@@ -1403,9 +1403,10 @@
 	}
 
 	/* Focus mode: spotlight the focused block by fading the rest of the prose.
-	   Uses colour (not opacity) so nested blocks never double-dim. */
+	   Uses colour (not opacity) so nested blocks never double-dim. Residual ink
+	   is per-theme (--focus-dim): light paper keeps 38%, dark grounds 30%. */
 	.doc.focus-on article {
-		color: color-mix(in srgb, var(--text) 30%, var(--bg));
+		color: color-mix(in srgb, var(--text) var(--focus-dim, 30%), var(--bg));
 		transition: color var(--dur) var(--ease);
 	}
 	.doc.focus-on article :global(.lectern-focus) {

@@ -168,6 +168,9 @@
 	   --grain-strength on any surface. */
 	--grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 	--grain-strength: 0.12;
+	/* Focus-mode residual ink: % of --text kept on non-focused prose. Light
+	   paper needs more residual than dark grounds to stay skimmable. */
+	--focus-dim: 38%;
 
 	/* Prose layer (lib/styles/prose.css). These hold var() references that
 	   resolve against the consuming element's theme, so they are defined once;
@@ -219,6 +222,7 @@
 	--prose-img-filter: none;
 	--hl-mix: 100%;
 	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 /* Sepia — warm cream paper with brown ink; easy on the eyes in dim rooms. */
@@ -246,6 +250,7 @@
 	--prose-img-filter: none;
 	--hl-mix: 100%;
 	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 /* Newsprint — aged-newspaper stock with ink-brown headlines (after stackwise). */
@@ -273,6 +278,7 @@
 	--prose-img-filter: none;
 	--hl-mix: 100%;
 	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 [data-theme='dark'] {
@@ -301,6 +307,7 @@
 	--prose-img-filter: brightness(0.86) contrast(1.02);
 	--hl-mix: 26%;
 	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* True black — for OLED screens at night. */
@@ -328,6 +335,7 @@
 	--prose-img-filter: brightness(0.86) contrast(1.02);
 	--hl-mix: 26%;
 	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* High contrast — black ground, pure-white ink, bright accent, strong borders;
@@ -357,6 +365,7 @@
 	--prose-img-filter: none;
 	--hl-mix: 32%;
 	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* `auto`: no data-theme attribute → follow the OS. Mirrors the dark palette. */
@@ -385,6 +394,7 @@
 		--prose-img-filter: brightness(0.86) contrast(1.02);
 		--hl-mix: 26%;
 		--hl-blend: normal;
+		--focus-dim: 30%;
 	}
 }
 
