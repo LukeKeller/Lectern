@@ -1057,11 +1057,22 @@
 			<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
 		{/if}
 		{#if card}
+			<div class="eyebrow">{card.siteName ?? new URL(card.url).hostname}</div>
 			<h1>{card.title}</h1>
-			<p class="byline">
-				{card.siteName ?? (card.author ? displayAuthor(card.author) : new URL(card.url).hostname)}
-				{#if card.readingTimeMinutes}<span class="dot">·</span>{card.readingTimeMinutes} min read{/if}
-			</p>
+			{#if card.author || card.publishedAt || card.readingTimeMinutes}
+				<p class="byline">
+					{#if card.author}By {displayAuthor(card.author)}{/if}
+					{#if card.publishedAt}
+						{#if card.author}<span class="dot">·</span>{/if}{new Date(
+							card.publishedAt
+						).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+					{/if}
+					{#if card.readingTimeMinutes}
+						{#if card.author || card.publishedAt}<span class="dot">·</span>
+						{/if}{card.readingTimeMinutes} min read
+					{/if}
+				</p>
+			{/if}
 			<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
 		{/if}
 
@@ -1567,18 +1578,31 @@
 			transition: none;
 		}
 	}
+	/* Title lockup: source eyebrow → balanced title → byline. The eyebrow
+	   carries the lockup's 1.2rem top space; the h1 sits 0.5rem under it. */
+	.eyebrow {
+		margin: 1.2rem 0 0;
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
 	h1 {
 		font-family: var(--font-serif);
 		font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
 		line-height: 1.15;
 		letter-spacing: -0.015em;
+		margin: 0.5rem 0 0.65rem;
 		text-wrap: balance;
-		margin: 0.5rem 0 0.5rem;
 	}
 	.byline {
-		margin: 0 0 1.1rem;
+		margin: 0 0 1.4rem;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
 	}
 	.dot {
 		margin: 0 0.4rem;
