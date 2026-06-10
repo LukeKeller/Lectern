@@ -181,7 +181,7 @@
 				{#if html[card.id]}
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<div class="mr-body">{@html html[card.id]}</div>
+					<div class="mr-body lectern-prose">{@html html[card.id]}</div>
 					<p class="mr-end" aria-hidden="true">∎</p>
 				{:else if failed[card.id]}
 					<p class="mr-fail">
@@ -465,18 +465,13 @@
 		border-radius: var(--radius);
 	}
 
-	/* Article body typography. The HTML is sanitized upstream. Body copy reads in
-	   the reading serif (via --reader-font when a reader pane ever provides it),
-	   not the UI sans the page chrome uses; serif at this size wants slightly
-	   tighter leading than the sans did. */
+	/* Article body: the reader's own typography at full scale (×1). Content
+	   styling lives in the shared .lectern-prose layer; only the magazine's
+	   voice (drop cap, pull-quote, separators) is kept below. */
 	.mr-body {
 		font-family: var(--reader-font, var(--font-serif));
-		font-size: var(--text-lg);
-		line-height: 1.6;
-		color: var(--text);
-	}
-	.mr-body :global(p) {
-		margin: 0 0 1.1rem;
+		font-size: calc(var(--reader-size, 19px) * 1);
+		line-height: calc(var(--reader-leading, 1.6) + var(--prose-leading-boost, 0));
 	}
 	/* Serif drop cap on the opening paragraph of each feature. */
 	.mr-body :global(p:first-of-type)::first-letter {
@@ -492,32 +487,6 @@
 	.mr-body :global(p:first-of-type)::first-line {
 		font-variant-caps: small-caps;
 		letter-spacing: 0.02em;
-	}
-	.mr-body :global(h1),
-	.mr-body :global(h2),
-	.mr-body :global(h3),
-	.mr-body :global(h4) {
-		line-height: 1.25;
-		margin: 1.8rem 0 0.8rem;
-	}
-	.mr-body :global(img),
-	.mr-body :global(figure) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-		margin: 1.2rem 0;
-	}
-	.mr-body :global(figure img) {
-		margin: 0;
-	}
-	.mr-body :global(figcaption) {
-		font-size: var(--text-sm);
-		color: var(--text-muted);
-		text-align: center;
-		margin-top: 0.4rem;
-	}
-	.mr-body :global(a) {
-		color: var(--accent);
 	}
 	/* Pull-quote treatment: a hanging open-quote and a hairline, set in emphatic
 	   serif italic — editorial, not the heavy accent stripe. */
@@ -542,25 +511,6 @@
 		line-height: 1;
 		color: var(--border-strong);
 		pointer-events: none;
-	}
-	.mr-body :global(ul),
-	.mr-body :global(ol) {
-		margin: 0 0 1.1rem;
-		padding-left: 1.4rem;
-	}
-	.mr-body :global(li) {
-		margin: 0.3rem 0;
-	}
-	.mr-body :global(pre) {
-		overflow-x: auto;
-		padding: 0.9rem;
-		border-radius: var(--radius);
-		background: var(--surface-alt);
-		font-size: var(--text-sm);
-	}
-	.mr-body :global(code) {
-		font-family: var(--font-mono, ui-monospace, monospace);
-		font-size: 0.9em;
 	}
 
 	/* End-of-article mark — a small printed full stop to the feature. */
