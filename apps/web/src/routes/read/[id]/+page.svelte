@@ -1420,6 +1420,29 @@
 		max-height: calc(100dvh - 7rem);
 		overflow-y: auto;
 	}
+	/* Phones: the bar-anchored popover would land below the viewport, so render
+	   it as a fixed bottom sheet under a visible scrim. `.bar .panel` scopes the
+	   override to the Display popover (not the aside.rail.panel). */
+	@media (max-width: 640px) {
+		.display-scrim {
+			z-index: 45;
+			background: rgba(20, 16, 10, 0.32);
+		}
+		.bar .panel {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			top: auto;
+			z-index: 46;
+			width: auto;
+			max-height: 70vh;
+			overflow-y: auto;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			border-bottom: 0;
+			padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+		}
+	}
 	.field {
 		display: flex;
 		flex-direction: column;
