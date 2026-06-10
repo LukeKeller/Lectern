@@ -6,7 +6,7 @@
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
 	import { getSync } from '$lib/sync';
-	import { buildMagazines, type Magazine } from '$lib/magazine';
+	import { buildMagazines, magazineTitle, type Magazine } from '$lib/magazine';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
 	import MagazineReader from '$lib/components/MagazineReader.svelte';
@@ -28,13 +28,6 @@
 		return parts.join(' · ');
 	}
 
-	// A stable two-digit issue number per publication, so each cover wears a
-	// consistent "No." the way a real magazine masthead would.
-	function issueNo(tag: string): number {
-		let h = 7;
-		for (let i = 0; i < tag.length; i++) h = (h * 17 + tag.charCodeAt(i)) % 90;
-		return h + 9;
-	}
 	function pad(n: number): string {
 		return String(n).padStart(2, '0');
 	}
@@ -45,24 +38,37 @@
 	function coverLines(list: Card[]): Card[] {
 		return list.slice(0, 3);
 	}
-	// The cover art is the first article in the issue that carries an image.
-	function coverArt(list: Card[]): string | null {
-		for (const c of list) if (c.coverImage) return c.coverImage;
-		return null;
-	}
+	// Each cover claims a distinct image: walk the issues in display order and
+	// let each take the first article image no earlier issue already claimed.
+	// When the pool is exhausted the cover falls back to the typographic
+	// (gradient-only) treatment.
+	const coverArtByTag = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const used = new Set<string>();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const map = new Map<string, string | null>();
+		for (const issue of issues) {
+			let art: string | null = null;
+			for (const c of issue.cards) {
+				if (c.coverImage && !used.has(c.coverImage)) {
+					art = c.coverImage;
+					used.add(c.coverImage);
+					break;
+				}
+			}
+			map.set(issue.tag, art);
+		}
+		return map;
+	});
 	// Tags whose cover image failed to load — fall back to the gradient-only cover.
 	const failedArt = new SvelteSet<string>();
-	// Synthetic folios: front matter fills the opening leaves, then each article
-	// spans a couple of pages, giving the contents real ascending page numbers.
-	function folios(list: Card[]): number[] {
-		const out: number[] = [];
-		let page = 11;
-		for (const c of list) {
-			out.push(page);
-			const span = c.readingTimeMinutes ?? Math.max(1, Math.round((c.wordCount ?? 700) / 220));
-			page += Math.max(2, Math.ceil(span / 3) * 2);
-		}
-		return out;
+	// Honest folios: reading minutes per article (estimated from word count when
+	// the source didn't supply them) instead of invented page numbers.
+	function minutesOf(card: Card): number {
+		return card.readingTimeMinutes ?? Math.max(1, Math.round((card.wordCount ?? 700) / 220));
+	}
+	function totalMinutes(list: Card[]): number {
+		return list.reduce((sum, c) => sum + minutesOf(c), 0);
 	}
 
 	let opened = $state<{ magazine: Magazine; startId?: string } | null>(null);
@@ -81,7 +87,7 @@
 	});
 </script>
 
-{#snippet tocEntry(magazine: Magazine, index: number, num: number, folio: number)}
+{#snippet tocEntry(magazine: Magazine, index: number, num: number)}
 	{@const card = magazine.cards[index]}
 	{#if card}
 		<li>
@@ -94,7 +100,7 @@
 				<span class="entry-main">
 					<span class="entry-row">
 						<span class="entry-title">{card.title}</span>
-						<span class="folio">{folio}</span>
+						<span class="folio">{minutesOf(card)} min</span>
 					</span>
 					{#if meta(card)}<span class="entry-by">{meta(card)}</span>{/if}
 				</span>
@@ -103,8 +109,8 @@
 	{/if}
 {/snippet}
 
-{#snippet coverArtLayers(list: Card[], tag: string, eager = false)}
-	{@const art = coverArt(list)}
+{#snippet coverArtLayers(tag: string, eager = false)}
+	{@const art = coverArtByTag.get(tag) ?? null}
 	{#if art && !failedArt.has(tag)}
 		<img
 			class="cover-art"
@@ -142,16 +148,16 @@
 		{:else}
 			{@const featured = issues[0]}
 			{@const lead = featured.cards[0]}
-			{@const featFolios = folios(featured.cards)}
 			{@const rest = issues.slice(1)}
 
 			<section class="hero" style={`--hue:${hue(featured.tag)}`}>
 				<div class="cover hero-cover">
-					{@render coverArtLayers(featured.cards, featured.tag, true)}
+					{@render coverArtLayers(featured.tag, true)}
 					<span class="masthead">Lectern</span>
-					<h2 class="cover-title">{featured.tag}</h2>
-					<p class="cover-no">Issue No. {pad(issueNo(featured.tag))}</p>
-					<p class="cover-count">{plural(featured.cards.length, 'article')}</p>
+					<h2 class="cover-title">{magazineTitle(featured.tag)}</h2>
+					<p class="cover-count">
+						{plural(featured.cards.length, 'article')} · {totalMinutes(featured.cards)} min
+					</p>
 					<ul class="cover-lines" aria-hidden="true">
 						{#each coverLines(featured.cards) as card (card.id)}
 							<li>{card.title}</li>
@@ -184,7 +190,7 @@
 						<p class="kicker also">Also inside</p>
 						<ol class="toc">
 							{#each featured.cards.slice(1) as card, i (card.id)}
-								{@render tocEntry(featured, i + 1, i + 1, featFolios[i + 1])}
+								{@render tocEntry(featured, i + 1, i + 1)}
 							{/each}
 						</ol>
 					{/if}
@@ -195,11 +201,12 @@
 				{#each rest as issue (issue.tag)}
 					<article class="zine" style={`--hue:${hue(issue.tag)}`}>
 						<button class="cover cover-btn" type="button" onclick={(e) => openMagazine(e, issue)}>
-							{@render coverArtLayers(issue.cards, issue.tag)}
+							{@render coverArtLayers(issue.tag)}
 							<span class="masthead">Lectern</span>
-							<h2 class="cover-title">{issue.tag}</h2>
-							<p class="cover-no">Issue No. {pad(issueNo(issue.tag))}</p>
-							<p class="cover-count">{plural(issue.cards.length, 'article')}</p>
+							<h2 class="cover-title">{magazineTitle(issue.tag)}</h2>
+							<p class="cover-count">
+								{plural(issue.cards.length, 'article')} · {totalMinutes(issue.cards)} min
+							</p>
 							<ul class="cover-lines" aria-hidden="true">
 								{#each coverLines(issue.cards) as card (card.id)}
 									<li>{card.title}</li>
@@ -370,14 +377,6 @@
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
-	.cover-no {
-		font-family: var(--font-ui);
-		font-size: var(--text-2xs);
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		margin: 0;
-		color: color-mix(in srgb, white 80%, hsl(var(--hue) 45% 30%));
-	}
 	.cover-count {
 		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
@@ -399,7 +398,7 @@
 		font-size: clamp(0.95rem, 1.4vw, 1.1rem);
 		line-height: 1.22;
 		padding-left: 0.6rem;
-		border-left: 2px solid color-mix(in srgb, white 55%, transparent);
+		border-left: 1px solid color-mix(in srgb, white 55%, transparent);
 		color: color-mix(in srgb, white 88%, hsl(var(--hue) 50% 28%));
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
@@ -417,15 +416,8 @@
 	}
 	.foil {
 		display: block;
-		height: 2px;
-		border-radius: var(--radius-full);
-		background: linear-gradient(
-			90deg,
-			transparent,
-			color-mix(in srgb, white 78%, transparent),
-			color-mix(in srgb, white 30%, transparent),
-			transparent
-		);
+		height: 1px;
+		background: color-mix(in srgb, white 40%, transparent);
 	}
 	.cover-foot-row {
 		display: flex;

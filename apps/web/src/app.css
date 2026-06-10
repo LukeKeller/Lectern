@@ -69,6 +69,21 @@
 	src: url('/fonts/literata-400-italic.woff2') format('woff2');
 }
 @font-face {
+	font-family: 'Literata';
+	font-style: italic;
+	font-weight: 600;
+	font-display: swap;
+	src: url('/fonts/literata-600-italic.woff2') format('woff2');
+}
+/* Metric-matched Georgia stand-in shown while Literata downloads — size-adjust
+   keeps line wraps stable so the swap doesn't reflow the column. */
+@font-face {
+	font-family: 'Literata-fallback';
+	src: local('Georgia');
+	size-adjust: 94%;
+	ascent-override: 92%;
+}
+@font-face {
 	font-family: 'OpenDyslexic';
 	font-style: normal;
 	font-weight: 400;
@@ -86,8 +101,8 @@
 :root {
 	/* Typography */
 	--font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-	--font-serif: 'Iowan Old Style', Charter, Georgia, 'Times New Roman', serif;
-	--font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+	--font-serif: 'Iowan Old Style', Charter, 'Literata', Georgia, serif;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
 
 	--text-2xs: 0.6875rem;
 	--text-xs: 0.75rem;
@@ -127,7 +142,7 @@
 	--surface: #fdfcf9;
 	--surface-alt: #ece7dd;
 	--text: #2a2620;
-	--text-muted: #6b6457;
+	--text-muted: #56503f;
 	--border: #e4ded1;
 	--border-strong: #d6cfbf;
 	--accent: #3a5e8c;
@@ -153,6 +168,27 @@
 	   --grain-strength on any surface. */
 	--grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 	--grain-strength: 0.12;
+	/* Focus-mode residual ink: % of --text kept on non-focused prose. Light
+	   paper needs more residual than dark grounds to stay skimmable. */
+	--focus-dim: 38%;
+
+	/* Prose layer (lib/styles/prose.css). These hold var() references that
+	   resolve against the consuming element's theme, so they are defined once;
+	   only the dark-compensation pair below varies per theme block. */
+	--prose-fg: var(--text);
+	--prose-faded: var(--text-muted);
+	--prose-quote-fg: var(--text);
+	--prose-link: var(--accent);
+	--prose-code-bg: var(--surface-alt);
+	--prose-heading-font: var(--font-serif);
+	--prose-leading-boost: 0;
+	--prose-img-filter: none;
+
+	/* Highlight-mark rendering, theme-scoped: light themes paint solid marker ink
+	   multiplied into the paper; dark themes use a translucent tint (multiply
+	   would crush light text into black). Each [data-theme] block overrides. */
+	--hl-mix: 100%;
+	--hl-blend: multiply;
 }
 
 /* Themes use bare attribute selectors (not `:root[...]`) so a theme can be
@@ -168,7 +204,7 @@
 	--surface: #fdfcf9;
 	--surface-alt: #ece7dd;
 	--text: #2a2620;
-	--text-muted: #6b6457;
+	--text-muted: #56503f;
 	--border: #e4ded1;
 	--border-strong: #d6cfbf;
 	--accent: #3a5e8c;
@@ -182,6 +218,11 @@
 	--bg-sunken: #efece4;
 	--shadow-md: 0 6px 20px rgba(31, 28, 22, 0.1), 0 1px 3px rgba(31, 28, 22, 0.06);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+	--prose-leading-boost: 0;
+	--prose-img-filter: none;
+	--hl-mix: 100%;
+	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 /* Sepia — warm cream paper with brown ink; easy on the eyes in dim rooms. */
@@ -191,7 +232,7 @@
 	--surface: #faf4e3;
 	--surface-alt: #ece0c5;
 	--text: #43361f;
-	--text-muted: #6f5d3f;
+	--text-muted: #564a2e;
 	--border: #e3d6ba;
 	--border-strong: #d3c19f;
 	--accent: #8f5026;
@@ -205,6 +246,11 @@
 	--bg-sunken: #ece2c9;
 	--shadow-md: 0 6px 20px rgba(67, 54, 31, 0.12), 0 1px 3px rgba(67, 54, 31, 0.07);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+	--prose-leading-boost: 0;
+	--prose-img-filter: none;
+	--hl-mix: 100%;
+	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 /* Newsprint — aged-newspaper stock with ink-brown headlines (after stackwise). */
@@ -228,6 +274,11 @@
 	--bg-sunken: #e9dcbd;
 	--shadow-md: 0 6px 20px rgba(43, 31, 16, 0.12), 0 1px 3px rgba(43, 31, 16, 0.07);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+	--prose-leading-boost: 0;
+	--prose-img-filter: none;
+	--hl-mix: 100%;
+	--hl-blend: multiply;
+	--focus-dim: 38%;
 }
 
 [data-theme='dark'] {
@@ -236,7 +287,7 @@
 	--surface: #221f1b;
 	--surface-alt: #2c2823;
 	--text: #e8e3d7;
-	--text-muted: #a39c8d;
+	--text-muted: #aea797;
 	--border: #322e27;
 	--border-strong: #423d34;
 	--accent: #86abd8;
@@ -250,6 +301,13 @@
 	--bg-sunken: #141210;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	/* Light-on-dark reads optically thinner/tighter; open the leading slightly
+	   and pull full-brightness images back from the flashlight effect. */
+	--prose-leading-boost: 0.06;
+	--prose-img-filter: brightness(0.86) contrast(1.02);
+	--hl-mix: 26%;
+	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* True black — for OLED screens at night. */
@@ -258,8 +316,8 @@
 	--bg: #000000;
 	--surface: #0c0c0d;
 	--surface-alt: #171719;
-	--text: #dcdcdc;
-	--text-muted: #8c8c8c;
+	--text: #cfcdc8;
+	--text-muted: #a09a90;
 	--border: #1f1f21;
 	--border-strong: #2e2e31;
 	--accent: #86abd8;
@@ -273,6 +331,11 @@
 	--bg-sunken: #000000;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.5);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	--prose-leading-boost: 0.06;
+	--prose-img-filter: brightness(0.86) contrast(1.02);
+	--hl-mix: 26%;
+	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* High contrast — black ground, pure-white ink, bright accent, strong borders;
@@ -297,6 +360,12 @@
 	--bg-sunken: #000000;
 	--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.18);
 	--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+	--prose-leading-boost: 0.06;
+	/* Low-vision theme: keep images at full brightness. */
+	--prose-img-filter: none;
+	--hl-mix: 32%;
+	--hl-blend: normal;
+	--focus-dim: 30%;
 }
 
 /* `auto`: no data-theme attribute → follow the OS. Mirrors the dark palette. */
@@ -307,7 +376,7 @@
 		--surface: #221f1b;
 		--surface-alt: #2c2823;
 		--text: #e8e3d7;
-		--text-muted: #a39c8d;
+		--text-muted: #aea797;
 		--border: #322e27;
 		--border-strong: #423d34;
 		--accent: #86abd8;
@@ -321,6 +390,11 @@
 		--bg-sunken: #141210;
 		--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
 		--edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+		--prose-leading-boost: 0.06;
+		--prose-img-filter: brightness(0.86) contrast(1.02);
+		--hl-mix: 26%;
+		--hl-blend: normal;
+		--focus-dim: 30%;
 	}
 }
 
@@ -342,18 +416,28 @@ body {
 	font-family: var(--font-ui);
 	font-size: var(--text-base);
 	line-height: 1.55;
-	background:
-		radial-gradient(
-			120% 55% at 50% -8%,
-			color-mix(in srgb, var(--accent) 6%, transparent),
-			transparent 60%
-		),
-		var(--bg);
-	background-attachment: fixed;
 	color: var(--text);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
+}
+
+/* The faint accent wash behind the whole app. Lives on a fixed pseudo-element
+   (own compositor layer) instead of body { background-attachment: fixed },
+   which forces repaint-on-scroll on iOS/low-end Android. The solid ground is
+   painted by `html` above; this sits between it and all content (z-index: -1,
+   body creates no stacking context, so content always paints over it). */
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+	background: radial-gradient(
+		120% 55% at 50% -8%,
+		color-mix(in srgb, var(--accent) 6%, transparent),
+		transparent 60%
+	);
 }
 
 h1,
@@ -391,8 +475,18 @@ textarea {
 }
 
 ::selection {
-	background: var(--accent-soft);
+	/* --accent-soft is near-invisible against the light papers (~1.1:1); a 25%
+	   accent-into-bg mix reads clearly on all six themes and keeps text AAA. */
+	background: color-mix(in srgb, var(--accent) 25%, var(--bg));
 	color: var(--text);
+}
+
+/* Thin, theme-tinted scrollbars (Firefox; Chromium 121+). macOS overlay
+   scrollbars ignore these. Keeps heavy UA chrome off the prose column on
+   Windows/Linux. */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) transparent;
 }
 
 /* Shared centered reading column for non-reader pages. */

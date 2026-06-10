@@ -42,3 +42,18 @@ export function buildMagazines(cards: Card[], minItems = 2): Magazine[] {
 	issues.sort((a, b) => b.cards.length - a.cards.length || a.tag.localeCompare(b.tag));
 	return issues;
 }
+
+/**
+ * Human title for a magazine issue. Tags can arrive carrying serialization
+ * fragments (`['rss'`, `'article'`, `politics-society]`) — strip bracket/quote
+ * syntax, turn separators into spaces, and title-case each word. Falls back to
+ * the raw tag if stripping leaves nothing.
+ */
+export function magazineTitle(tag: string): string {
+	const words = tag
+		.replace(/[[\]{}'"`]/g, ' ')
+		.replace(/[-_]+/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return words ? words.replace(/\b\p{L}/gu, (m) => m.toUpperCase()) : tag;
+}

@@ -1,0 +1,260 @@
+/**
+ * Lectern shared prose layer.
+ *
+ * `.lectern-prose` is the single home for article-body typography across the
+ * three reading surfaces (full reader, magazine, newspaper/flip). Surfaces keep
+ * their own voice (drop caps, columns, measures) in component styles; anything
+ * that styles the *content* of an article lives here.
+ *
+ * Driven by two families of custom properties:
+ *  - `--reader-*` : user typography settings (emitted by readerCssVars onto the
+ *    full reader's `.doc`; the print surfaces fall back to sensible defaults).
+ *  - `--prose-*`  : prose tokens defined in app.css (`:root` for the invariant
+ *    ones; per-theme blocks override the dark-compensation pair).
+ *
+ * Each surface owns `font-family`, `font-size` and `line-height` on the
+ * container — line-height must include `var(--prose-leading-boost, 0)` so dark
+ * themes read at the same optical density as light ones.
+ */
+
+.lectern-prose {
+	color: var(--prose-fg, var(--text));
+	font-kerning: normal;
+	font-variant-ligatures: common-ligatures;
+	font-variant-numeric: oldstyle-nums proportional-nums;
+	/* Progressive enhancement (Safari): hang opening quotes into the margin. */
+	hanging-punctuation: first allow-end;
+}
+
+/* ---- Block rhythm ---- */
+
+.lectern-prose p,
+.lectern-prose ul,
+.lectern-prose ol,
+.lectern-prose blockquote,
+.lectern-prose pre,
+.lectern-prose figure,
+.lectern-prose table {
+	margin: 0 0 var(--reader-para-gap, 1em);
+}
+
+.lectern-prose p {
+	text-wrap: pretty;
+	hyphens: auto;
+}
+
+/* ---- Headings ----
+   No `color` here: headings inherit the container ink so the full reader's
+   focus-mode dimming (which recolours the container) still applies to them.
+   Weight 600, never 650 — the bundled cuts are 400/600 and anything else
+   synthesizes. In-content h1 gets the h2 treatment as a post-demotion safety
+   net for articles whose lead h1 survives sanitize. */
+
+.lectern-prose h1,
+.lectern-prose h2,
+.lectern-prose h3,
+.lectern-prose h4 {
+	font-family: var(--prose-heading-font, var(--font-serif));
+	font-weight: 600;
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+.lectern-prose h1,
+.lectern-prose h2 {
+	font-size: 1.45em;
+	margin: 2em 0 0.65em;
+}
+.lectern-prose h3 {
+	font-size: 1.2em;
+	margin: 1.6em 0 0.5em;
+}
+/* h4 as a letterspaced uppercase eyebrow — a small kicker level. */
+.lectern-prose h4 {
+	font-size: 0.85em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	margin: 1.6em 0 0.5em;
+}
+
+/* ---- Links ----
+   Body links keep the text ink with an accent-tinted underline; full accent
+   arrives on hover. Link-dense articles stop reading blue-speckled. */
+
+.lectern-prose a {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-decoration-color: color-mix(in srgb, var(--prose-link, var(--accent)) 60%, transparent);
+	text-underline-offset: 0.16em;
+}
+.lectern-prose a:hover {
+	color: var(--prose-link, var(--accent));
+	text-decoration-color: var(--prose-link, var(--accent));
+}
+
+/* ---- Blockquote ----
+   One signal (the rule), full ink, slightly smaller — not border + italic +
+   muted all at once. */
+
+.lectern-prose blockquote {
+	color: var(--prose-quote-fg, var(--text));
+	font-style: normal;
+	font-size: 0.97em;
+	border-left: 2px solid var(--border-strong);
+	padding-left: 1.2em;
+}
+
+/* ---- Tables ----
+   Editorial rules: horizontal only, heavier head rule, lining tabular figures.
+   `display: block; overflow-x: auto` lets wide tables scroll instead of
+   blowing out the measure. */
+
+.lectern-prose table {
+	display: block;
+	overflow-x: auto;
+	max-width: 100%;
+	border-collapse: collapse;
+	font-size: 0.92em;
+}
+.lectern-prose th,
+.lectern-prose td {
+	padding: 0.5em 0.7em;
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+	font-variant-numeric: tabular-nums lining-nums;
+}
+.lectern-prose thead th {
+	border-bottom-width: 2px;
+	font-size: 0.85em;
+	letter-spacing: 0.02em;
+}
+
+/* ---- Images, video, figures ---- */
+
+.lectern-prose img,
+.lectern-prose video {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin-block: 0 var(--reader-para-gap, 1em);
+	margin-inline: auto;
+	border-radius: 2px;
+	filter: var(--prose-img-filter, none);
+}
+.lectern-prose figure img,
+.lectern-prose figure video {
+	margin-block: 0;
+}
+.lectern-prose figure {
+	margin-inline: 0;
+}
+.lectern-prose figcaption {
+	margin-top: 0.5em;
+	font-family: var(--font-ui);
+	font-size: 0.8em;
+	line-height: 1.45;
+	color: var(--prose-faded, var(--text-muted));
+	text-align: left;
+}
+
+/* ---- Horizontal rule: a short centered rest, not border-to-border ---- */
+
+.lectern-prose hr {
+	width: 5rem;
+	margin: 2.6em auto;
+	border: 0;
+	border-top: 1px solid var(--border-strong);
+}
+
+/* ---- Lists ----
+   Hanging-marker approximation: zero list padding, indent the items, so
+   markers sit in the margin and text stays on the measure. */
+
+.lectern-prose ul,
+.lectern-prose ol {
+	padding-left: 0;
+}
+.lectern-prose li {
+	margin-left: 1.4em;
+	margin-bottom: 0.4em;
+}
+.lectern-prose li::marker {
+	color: var(--prose-faded, var(--text-muted));
+}
+.lectern-prose li li {
+	margin-bottom: 0.2em;
+}
+.lectern-prose li ul,
+.lectern-prose li ol {
+	margin-top: 0.2em;
+	margin-bottom: 0;
+}
+
+/* ---- Superscript / subscript: never disturb the leading ---- */
+
+.lectern-prose sup,
+.lectern-prose sub {
+	font-size: 0.72em;
+	line-height: 0;
+	position: relative;
+}
+.lectern-prose sup {
+	top: -0.45em;
+}
+.lectern-prose sub {
+	top: 0.25em;
+}
+
+/* ---- Code ----
+   Reset the user's prose tracking/word-spacing and the oldstyle figures;
+   code wants its own metrics. */
+
+.lectern-prose code {
+	font-family: var(--font-mono);
+	font-size: 0.88em;
+	padding: 0.12em 0.36em;
+	border-radius: var(--radius-sm);
+	background: var(--prose-code-bg, var(--surface-alt));
+	letter-spacing: 0;
+	word-spacing: 0;
+	font-variant-numeric: normal;
+}
+.lectern-prose pre {
+	padding: 1em 1.1em;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--prose-code-bg, var(--surface-alt));
+	overflow-x: auto;
+	line-height: 1.5;
+	letter-spacing: 0;
+	word-spacing: 0;
+	tab-size: 2;
+	font-variant-numeric: normal;
+}
+.lectern-prose pre code {
+	padding: 0;
+	background: transparent;
+	font-size: 0.85em;
+}
+
+/* ---- Paragraph style: indented (book convention) ----
+   First-line indents replace the inter-paragraph gap. No indent on openers:
+   the first paragraph and any paragraph that follows a heading, quote, figure,
+   or rule starts flush. Toggled per the paragraphStyle reader setting. */
+
+.lectern-prose.prose-indented p {
+	margin-bottom: 0;
+	text-indent: 1.4em;
+}
+.lectern-prose.prose-indented p:first-of-type,
+.lectern-prose.prose-indented h1 + p,
+.lectern-prose.prose-indented h2 + p,
+.lectern-prose.prose-indented h3 + p,
+.lectern-prose.prose-indented h4 + p,
+.lectern-prose.prose-indented blockquote + p,
+.lectern-prose.prose-indented figure + p,
+.lectern-prose.prose-indented hr + p {
+	text-indent: 0;
+}

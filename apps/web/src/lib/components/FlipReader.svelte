@@ -2,22 +2,31 @@
 	import type { Card } from '@lectern/shared';
 	import { onMount, untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { getArticleHtml, prefetchArticles } from '$lib/content';
+	import { cleanArticleHtml } from '$lib/article-html';
+	import '$lib/styles/drop-cap.css';
 	import { getSync } from '$lib/sync';
+	import { prefersReducedMotion } from '$lib/motion';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
+	import { displayAuthor } from '$lib/author';
 
 	// Newspaper reading flows DOWN one column then UP for the next when the whole
 	// article is one tall balanced block. To keep scrolling essentially downward,
 	// break the article into short stacked bands: each band is a bounded 2-column
 	// block, and headings/media/quotes/tables become full-width dividers between
 	// bands. Magazine never calls this — it keeps its single-measure flow.
-	type Band = { kind: 'flow' | 'full'; html: string };
+	type Band = { kind: 'flow' | 'full' | 'break'; html: string; lede?: boolean; short?: boolean };
 	function splitBands(raw: string): Band[] {
-		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw }];
+		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw, lede: true }];
 		const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html');
+		// Short items (RSS snippets) skip the broadsheet costume entirely: one
+		// ragged column, no drop cap (no `lede`), full-story link right below.
+		const totalWords = (doc.body.textContent ?? '').trim().split(/\s+/).filter(Boolean).length;
+		if (totalWords < 90) return [{ kind: 'flow', html: raw, short: true }];
 		// Headings, media, quotes, tables and preformatted blocks must break to
 		// full width so they read as section dividers. Lists are left to flow with
 		// the surrounding paragraphs (they're usually short and read fine in column).
@@ -31,7 +40,6 @@
 			'H2',
 			'H3',
 			'H4',
-			'HR',
 			'VIDEO',
 			'IFRAME'
 		]);
@@ -49,6 +57,12 @@
 			const el = node.nodeType === 1 ? (node as Element) : null;
 			if (!el && !(node.textContent ?? '').trim()) continue;
 			const tag = el?.tagName ?? '';
+			if (el && tag === 'HR') {
+				// A source-authored thematic break — the one place the floret belongs.
+				flush();
+				out.push({ kind: 'break', html: '' });
+				continue;
+			}
 			if (el && FULL.has(tag)) {
 				flush();
 				out.push({ kind: 'full', html: el.outerHTML });
@@ -62,7 +76,11 @@
 			if (words >= 130) flush();
 		}
 		flush();
-		return out.length ? out : [{ kind: 'flow', html: raw }];
+		// The drop cap belongs to the first *flow* band — image-led articles whose
+		// first band is a full-width figure would otherwise never get one.
+		const firstFlow = out.find((b) => b.kind === 'flow');
+		if (firstFlow) firstFlow.lede = true;
+		return out.length ? out : [{ kind: 'flow', html: raw, lede: true }];
 	}
 
 	let {
@@ -90,6 +108,7 @@
 	let loading = $state(true);
 	let error = $state<string | undefined>(undefined);
 	let stageEl = $state<HTMLElement | null>(null);
+	let footEl = $state<HTMLElement | null>(null);
 
 	// Read state we apply locally for instant feedback; the markRead mutation is
 	// also queued to sync. Seeded from anything already finished.
@@ -103,11 +122,12 @@
 	const bands = $derived(
 		kind === 'newspaper' && !loading && !error && html ? splitBands(html) : null
 	);
+	const isShort = $derived(bands?.[0]?.short === true);
 	const SKELETON_WIDTHS = [78, 92, 85, 70, 96, 82, 90, 74];
 
 	function byline(card: Card): string {
 		const parts: string[] = [];
-		if (card.author) parts.push(card.author);
+		if (card.author) parts.push(displayAuthor(card.author));
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
 		return parts.join(' \u00b7 ');
 	}
@@ -123,7 +143,7 @@
 		getArticleHtml(card.id)
 			.then((h) => {
 				if (cancelled) return;
-				html = h;
+				html = cleanArticleHtml(h, card.title);
 				loading = false;
 			})
 			.catch((e: unknown) => {
@@ -146,6 +166,28 @@
 		void sync.enqueue({ type: 'markRead', id: card.id, read }).then(() => sync.flush());
 	}
 
+	// The final page has no forward turn, so go()'s auto-mark can never fire for
+	// it. Instead, when the running foot of the last page scrolls into view, the
+	// story has been read to the end — mark it. The {#key index} block recreates
+	// the foot per page, so bind:this re-fires and this effect re-runs.
+	$effect(() => {
+		const el = footEl;
+		const card = current;
+		if (!el || !card || loading || error || index !== total - 1) return;
+		if (readIds.has(card.id)) return;
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					io.disconnect();
+					setRead(card, true);
+				}
+			},
+			{ root: stageEl, threshold: 0.5 }
+		);
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
 	function go(delta: number) {
 		const next = index + delta;
 		if (next < 0 || next >= total) return;
@@ -154,7 +196,16 @@
 		if (delta > 0) setRead(pages[index], true);
 		dir = delta;
 		index = next;
-		stageEl?.scrollTo({ top: 0 });
+		stageEl?.scrollTo({ top: 0, behavior: 'instant' });
+	}
+
+	// Page-turn motion: one short eased slide. The scroll reset above is instant
+	// so the two never animate against each other, and the slide is skipped
+	// entirely under prefers-reduced-motion (Svelte transitions ignore the CSS
+	// media query, so gate it here).
+	function pageFly() {
+		if (prefersReducedMotion()) return { duration: 0 };
+		return { x: dir >= 0 ? 24 : -24, duration: 180, easing: cubicOut, opacity: 0 };
 	}
 
 	function isEditable(t: EventTarget | null): boolean {
@@ -178,11 +229,17 @@
 
 	let touchX = 0;
 	let touchY = 0;
+	// A swipe that starts inside a horizontally pannable embed is panning that
+	// embed, never a page turn.
+	let touchInPannable = false;
 	function onTouchStart(e: TouchEvent) {
 		touchX = e.changedTouches[0]?.clientX ?? 0;
 		touchY = e.changedTouches[0]?.clientY ?? 0;
+		const target = e.target instanceof Element ? e.target : null;
+		touchInPannable = !!target?.closest('pre, table, iframe, video');
 	}
 	function onTouchEnd(e: TouchEvent) {
+		if (touchInPannable) return;
 		const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX;
 		const dy = (e.changedTouches[0]?.clientY ?? 0) - touchY;
 		if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
@@ -234,7 +291,7 @@
 	>
 		{#if current}
 			{#key index}
-				<article class="page" in:fly={{ x: dir >= 0 ? 36 : -36, duration: 220, opacity: 0 }}>
+				<article class="page" in:fly={pageFly()}>
 					<div class="head">
 						<span class="kicker">
 							<SourceAvatar url={current.url} siteName={current.siteName} size={18} />
@@ -254,34 +311,38 @@
 							<a href={resolve('/read/[id]', { id: current.id })}>Open it in the reader</a>.
 						</p>
 					{:else if bands}
-						<div class="fr-body fr-bands">
+						<div class="fr-body fr-bands lectern-prose" class:fr-short={isShort}>
 							{#each bands as band, i (i)}
-								{#if i > 0 && band.kind === 'flow' && bands[i - 1].kind === 'flow'}
+								{#if band.kind === 'break'}
 									<div class="fr-break" aria-hidden="true">❧</div>
-								{/if}
-								{#if band.kind === 'full'}
+								{:else if band.kind === 'full'}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									<div class="fr-full">{@html band.html}</div>
 								{:else}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									<div class="fr-band">{@html band.html}</div>
+									<div class="fr-band" class:drop-cap={band.lede}>{@html band.html}</div>
 								{/if}
 							{/each}
 						</div>
+						{#if isShort}
+							<a class="open-full short-link" href={resolve('/read/[id]', { id: current.id })}>
+								Read the full story <Icon name="back" size={13} />
+							</a>
+						{/if}
 					{:else}
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						<div class="fr-body">{@html html}</div>
+						<div class="fr-body lectern-prose" class:drop-cap={kind === 'magazine'}>
+							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+							{@html html}
+						</div>
 					{/if}
 
-					{#if !loading && !error}
-						<p class="endmark" aria-hidden="true">∎</p>
+					{#if !isShort}
+						<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
+							Open in full reader <Icon name="back" size={13} />
+						</a>
 					{/if}
 
-					<a class="open-full" href={resolve('/read/[id]', { id: current.id })}>
-						Open in full reader <Icon name="back" size={13} />
-					</a>
-
-					<footer class="runfoot" aria-hidden="true">{index + 1}</footer>
+					<footer class="runfoot" aria-hidden="true" bind:this={footEl}>{index + 1}</footer>
 				</article>
 			{/key}
 		{/if}
@@ -438,7 +499,6 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		scroll-behavior: smooth;
 	}
 	.page {
 		max-width: 56rem;
@@ -480,60 +540,14 @@
 		margin: 0.7rem 0 0;
 	}
 
-	/* Article body — shared base, then per-kind treatment. {@html} content needs
-	   :global selectors since it carries no Svelte scope attributes. */
+	/* Article body: the reader's typography at newspaper scale (×0.92; the
+	   magazine kind overrides to ×0.94 below). Content styling lives in the
+	   shared .lectern-prose layer; only this surface's voice (columns, bands,
+	   drop caps) is kept. */
 	.fr-body {
-		font-family: var(--font-serif);
-		color: var(--text);
-		font-size: 1.06rem;
-		line-height: 1.7;
-	}
-	.fr-body :global(p) {
-		margin: 0 0 1em;
-	}
-	.fr-body :global(h2),
-	.fr-body :global(h3) {
-		font-family: var(--font-serif);
-		line-height: 1.2;
-		margin: 1.4em 0 0.4em;
-	}
-	.fr-body :global(a) {
-		color: var(--accent);
-		text-decoration: underline;
-		text-underline-offset: 2px;
-	}
-	.fr-body :global(img) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-	}
-	.fr-body :global(figure) {
-		margin: 1.2em 0;
-	}
-	.fr-body :global(figcaption) {
-		font-family: var(--font-ui);
-		font-size: var(--text-xs);
-		color: var(--text-muted);
-		text-align: center;
-		margin-top: 0.4em;
-	}
-	.fr-body :global(blockquote) {
-		margin: 1.4em 0;
-		padding-left: 1.1em;
-		border-left: 1px solid var(--border-strong);
-		color: var(--text);
-		font-style: italic;
-		font-size: 1.06em;
-		line-height: 1.5;
-	}
-	.fr-body :global(pre) {
-		font-family: var(--font-mono);
-		font-size: var(--text-sm);
-		background: var(--bg-sunken);
-		padding: 0.9em 1em;
-		border-radius: var(--radius);
-		overflow-x: auto;
-		white-space: pre;
+		font-family: var(--reader-font, var(--font-serif));
+		font-size: calc(var(--reader-size, 19px) * 0.92);
+		line-height: calc(var(--reader-leading, 1.6) + var(--prose-leading-boost, 0));
 	}
 
 	/* Newspaper — short stacked bands so reading flows downward instead of all the
@@ -547,18 +561,27 @@
 		flex-direction: column;
 	}
 	/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
-	   columns and collapses to a single column on narrow screens. */
+	   columns and collapses to a single column on narrow screens. Ragged-right:
+	   greedy line-breaking justified ~31ch columns into rivers, so keep the left
+	   axis and let hyphenation + pretty wrapping tidy the rag. */
 	.fr-band {
 		columns: 2 17rem;
 		column-gap: 2.4rem;
 		column-rule: 1px solid var(--border);
-		text-align: justify;
+		text-align: left;
 		hyphens: auto;
+		hyphenate-limit-chars: 6 3 2;
+		text-wrap: pretty;
 	}
-	/* Breathing room between consecutive bands; the floret rule (.fr-break) carries
-	   the visible separation, so no border is needed when bands sit back-to-back. */
+	/* Continuation bands separate with margin alone — the floret (.fr-break) is
+	   reserved for source-authored <hr> breaks. */
 	.fr-band + .fr-band {
 		margin-top: 1.6em;
+	}
+	/* Short items: a single ragged column — no columns, no justification. */
+	.fr-short .fr-band {
+		columns: 1;
+		text-align: left;
 	}
 	/* An editorial floret between two flowing bands — a centered ornament flanked by
 	   hairlines, reading as a quiet section break rather than a hard rule. */
@@ -594,29 +617,27 @@
 	.fr-full :global(pre) {
 		max-width: 100%;
 	}
-	/* Drop cap on the very first paragraph of the first band only. */
-	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-letter {
-		float: left;
-		font-family: var(--font-serif);
-		font-weight: 800;
-		font-size: 3.1em;
-		line-height: 0.72;
-		padding: 0.06em 0.08em 0 0;
+	/* Full-width blockquotes read as pull quotes, not 90ch walls: a bounded,
+	   centered measure with rules above and below instead of the side stripe.
+	   .fr-body .fr-full out-specifies the base .fr-body blockquote rule. */
+	.fr-body .fr-full :global(blockquote) {
+		max-width: 30em;
+		margin: 1.8em auto;
+		padding: 0.9em 0;
+		border: 0;
+		border-top: 1px solid var(--border-strong);
+		border-bottom: 1px solid var(--border-strong);
+		text-align: center;
+		font-size: 1.3rem;
+		font-style: italic;
 	}
-	/* Small-caps lead-in on the opening line — the classic newspaper entry. */
-	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.03em;
-	}
-
-	/* End-of-article mark and a running foot folio give each page a printed
-	   beginning-middle-end, the depth a real leaf carries. */
-	.endmark {
-		margin: 1.6rem 0 0;
-		text-align: right;
+	/* End-of-article tombstone on the final line of copy itself (no mark when
+	   the article ends in an image/embed — deliberate), plus a running foot
+	   folio so each page keeps a printed beginning-middle-end. */
+	.fr-body:not(.fr-bands) > :global(p:last-child)::after,
+	.fr-bands:not(.fr-short) > .fr-band:last-child > :global(p:last-child)::after {
+		content: '\2002\220E';
 		color: var(--text-muted);
-		font-size: 1.15rem;
-		line-height: 1;
 	}
 	.runfoot {
 		display: flex;
@@ -650,22 +671,8 @@
 		max-width: 42rem;
 	}
 	.flip.magazine .fr-body {
-		font-size: 1.12rem;
-		line-height: 1.75;
+		font-size: calc(var(--reader-size, 19px) * 0.94);
 	}
-	.flip.magazine .fr-body :global(p:first-of-type)::first-letter {
-		float: left;
-		font-weight: 800;
-		font-size: 3.4em;
-		line-height: 0.7;
-		padding: 0.04em 0.1em 0 0;
-		color: var(--accent);
-	}
-	.flip.magazine .fr-body :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.02em;
-	}
-
 	.open-full {
 		display: inline-flex;
 		align-items: center;
@@ -680,6 +687,10 @@
 	}
 	.open-full:hover {
 		color: var(--accent);
+	}
+	/* For short items the link sits directly under the snippet. */
+	.open-full.short-link {
+		margin-top: 0.9rem;
 	}
 
 	.skeleton {

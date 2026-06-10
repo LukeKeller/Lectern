@@ -1,0 +1,36 @@
+/**
+ * Shared drop-cap recipe for the print surfaces (MagazineReader, FlipReader).
+ * Plain global stylesheet — the capped paragraphs come from sanitized {@html}
+ * content, which carries no Svelte scope attribute. Apply the `drop-cap` class
+ * to the DIRECT parent of the article's paragraphs; set `--dc-leading` on that
+ * container to its body line-height (defaults to 1.7) so the float fallback
+ * spans exactly two lines. The cap is ink (var(--text)), never accent, and it
+ * inherits the body face by design.
+ *
+ * Known limitation: when the opening paragraph starts with a quotation mark,
+ * ::first-letter (and initial-letter) style the quote + letter pair together,
+ * producing an oversized "W. CSS cannot exclude those paragraphs; the ink
+ * color keeps the worst case quiet.
+ *
+ * Fold into the shared prose.css when the prose layer (Phase B) lands.
+ */
+.drop-cap > p:first-of-type::first-letter {
+	font-weight: 700;
+	color: var(--text);
+}
+@supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
+	.drop-cap > p:first-of-type::first-letter {
+		-webkit-initial-letter: 3;
+		initial-letter: 3;
+		margin-right: 0.12em;
+	}
+}
+@supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
+	.drop-cap > p:first-of-type::first-letter {
+		float: left;
+		/* cap height ≈ 0.74em, so 2 lines of leading ÷ 0.74 fills exactly 2 lines */
+		font-size: calc(2 * var(--dc-leading, 1.7) * 0.74em);
+		line-height: 1;
+		padding-right: 0.08em;
+	}
+}

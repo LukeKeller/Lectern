@@ -32,6 +32,10 @@ export type FontFamily =
 	| 'lexend'
 	| 'opendyslexic';
 
+/** Paragraph separation: `spaced` (web convention, inter-paragraph gap) or
+ *  `indented` (book convention, first-line indents and no gap). */
+export type ParagraphStyle = 'spaced' | 'indented';
+
 export interface ReaderSettings {
 	/** App-wide theme (drives `<html data-theme>`). */
 	theme: ThemeMode;
@@ -52,6 +56,8 @@ export interface ReaderSettings {
 	wordSpacing: number;
 	/** Inter-paragraph gap, in em. */
 	paragraphSpacing: number;
+	/** Paragraph separation: spacing between blocks, or book-style indents. */
+	paragraphStyle: ParagraphStyle;
 	/** After triaging in the reader, jump to the next document in the list. */
 	autoAdvance: boolean;
 }
@@ -67,14 +73,15 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	letterSpacing: 0,
 	wordSpacing: 0,
 	paragraphSpacing: 1,
+	paragraphStyle: 'spaced',
 	autoAdvance: true
 };
 
 export const FONT_STACKS: Record<FontFamily, string> = {
-	serif: '"Iowan Old Style", Charter, Georgia, "Times New Roman", serif',
+	serif: '"Iowan Old Style", Charter, "Literata", Georgia, serif',
 	sans: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-	mono: '"SF Mono", "JetBrains Mono", ui-monospace, monospace',
-	literata: '"Literata", Georgia, "Times New Roman", serif',
+	mono: 'ui-monospace, "SF Mono", "JetBrains Mono", monospace',
+	literata: '"Literata", "Literata-fallback", Georgia, "Times New Roman", serif',
 	atkinson: '"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif',
 	lexend: '"Lexend", system-ui, -apple-system, sans-serif',
 	opendyslexic: '"OpenDyslexic", Comic Sans MS, system-ui, sans-serif'
@@ -98,15 +105,17 @@ export const THEME_SWATCHES: Record<ThemeMode, { label: string; bg: string; fg: 
 	sepia: { label: 'Sepia', bg: '#f4ecd8', fg: '#43361f' },
 	newsprint: { label: 'Newsprint', bg: '#f1e4c8', fg: '#2b1f10' },
 	dark: { label: 'Dark', bg: '#1a1815', fg: '#e8e3d7' },
-	black: { label: 'Black', bg: '#000000', fg: '#d9d9d9' },
+	black: { label: 'Black', bg: '#000000', fg: '#cfcdc8' },
 	contrast: { label: 'Contrast', bg: '#000000', fg: '#ffffff' }
 };
 
-/** Quick reading-width presets (px), surfaced as buttons in the settings UI. */
+/** Quick reading-width presets (px), surfaced as buttons in the settings UI.
+ *  Stored as raw px for now; an em-of-reader-size model (Narrow 28em /
+ *  Medium 34em / Wide 40em) is a future refactor. 760 is the measure cap. */
 export const WIDTH_PRESETS: { label: string; value: number }[] = [
 	{ label: 'Narrow', value: 580 },
 	{ label: 'Medium', value: 680 },
-	{ label: 'Wide', value: 820 }
+	{ label: 'Wide', value: 760 }
 ];
 
 const THEMES: Record<ThemeMode, true> = {
@@ -153,10 +162,11 @@ export function normalizeSettings(raw: unknown): ReaderSettings {
 		fontFamily: o.fontFamily && FONTS[o.fontFamily] ? o.fontFamily : DEFAULT_SETTINGS.fontFamily,
 		fontSize: clampNumber(o.fontSize, DEFAULT_SETTINGS.fontSize, 12, 28),
 		lineHeight: clampNumber(o.lineHeight, DEFAULT_SETTINGS.lineHeight, 1.2, 2.2),
-		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 1000),
+		maxWidth: clampNumber(o.maxWidth, DEFAULT_SETTINGS.maxWidth, 480, 760),
 		letterSpacing: clampNumber(o.letterSpacing, DEFAULT_SETTINGS.letterSpacing, -0.05, 0.15),
 		wordSpacing: clampNumber(o.wordSpacing, DEFAULT_SETTINGS.wordSpacing, 0, 0.5),
 		paragraphSpacing: clampNumber(o.paragraphSpacing, DEFAULT_SETTINGS.paragraphSpacing, 0.4, 2.4),
+		paragraphStyle: o.paragraphStyle === 'indented' ? 'indented' : DEFAULT_SETTINGS.paragraphStyle,
 		autoAdvance: typeof o.autoAdvance === 'boolean' ? o.autoAdvance : DEFAULT_SETTINGS.autoAdvance
 	};
 }
@@ -175,6 +185,15 @@ export function parseSettings(raw: string | null): ReaderSettings {
 	}
 }
 
+/** Faces designed for reading accessibility. When one is active, in-article
+ *  headings follow the body face instead of the editorial serif — headings are
+ *  the elements readers scan by, so they must not regress to a hard face. */
+const ACCESSIBILITY_FONTS: ReadonlySet<FontFamily> = new Set([
+	'atkinson',
+	'lexend',
+	'opendyslexic'
+]);
+
 /** The CSS custom properties that drive the reader's typography. */
 export function readerCssVars(s: ReaderSettings): Record<string, string> {
 	return {
@@ -184,7 +203,12 @@ export function readerCssVars(s: ReaderSettings): Record<string, string> {
 		'--reader-width': `${s.maxWidth}px`,
 		'--reader-tracking': `${s.letterSpacing}em`,
 		'--reader-word-spacing': `${s.wordSpacing}em`,
-		'--reader-para-gap': `${s.paragraphSpacing}em`
+		'--reader-para-gap': `${s.paragraphSpacing}em`,
+		// Consumed by .lectern-prose headings (lib/styles/prose.css). Resolves
+		// on the reader's .doc, overriding the :root default (--font-serif).
+		'--prose-heading-font': ACCESSIBILITY_FONTS.has(s.fontFamily)
+			? 'var(--reader-font)'
+			: 'var(--font-serif)'
 	};
 }
 
@@ -218,6 +242,87 @@ export const THEME_BG: Record<Exclude<ThemeMode, 'auto'>, string> = {
 	black: '#000000',
 	contrast: '#000000'
 };
+
+/** Each theme's body-text colour, mirroring `--text` in app.css. Used as the
+ *  mix target when clamping adaptive accents for contrast. Keep in sync. */
+export const THEME_TEXT: Record<Exclude<ThemeMode, 'auto'>, string> = {
+	light: '#2a2620',
+	sepia: '#43361f',
+	newsprint: '#2b1f10',
+	dark: '#e8e3d7',
+	black: '#cfcdc8',
+	contrast: '#ffffff'
+};
+
+/** Parse `#rgb` / `#rrggbb` (leading `#` optional) into 0-255 channels. */
+export function parseHex(hex: string): [number, number, number] | null {
+	const t = hex.trim().replace(/^#/, '');
+	if (/^[0-9a-f]{3}$/i.test(t)) {
+		return [parseInt(t[0] + t[0], 16), parseInt(t[1] + t[1], 16), parseInt(t[2] + t[2], 16)];
+	}
+	if (/^[0-9a-f]{6}$/i.test(t)) {
+		const n = parseInt(t, 16);
+		return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+	}
+	return null;
+}
+
+function toHex(rgb: [number, number, number]): string {
+	return (
+		'#' +
+		rgb
+			.map((c) =>
+				Math.max(0, Math.min(255, Math.round(c)))
+					.toString(16)
+					.padStart(2, '0')
+			)
+			.join('')
+	);
+}
+
+/** WCAG 2.x relative luminance of an sRGB colour (channels 0-255). */
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+	const lin = (c: number) => {
+		const s = c / 255;
+		return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+	};
+	return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio (1-21) between two sRGB colours (channels 0-255). */
+export function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
+	const la = relativeLuminance(a);
+	const lb = relativeLuminance(b);
+	const hi = Math.max(la, lb);
+	const lo = Math.min(la, lb);
+	return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Linear per-channel mix: `a` moved fraction `t` (0-1) toward `b`. */
+function mixRgb(
+	a: [number, number, number],
+	b: [number, number, number],
+	t: number
+): [number, number, number] {
+	return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/**
+ * Clamp an adaptive accent for legibility: while its contrast against `bgHex`
+ * is below 4.5:1, mix it 15% toward `textHex` (at most 5 iterations, which is
+ * enough to lift any colour on every bundled theme). Non-hex input (or a
+ * malformed map entry) passes through unchanged — fail open to the raw colour.
+ */
+export function clampAccentContrast(accentHex: string, bgHex: string, textHex: string): string {
+	const bg = parseHex(bgHex);
+	const text = parseHex(textHex);
+	let cur = parseHex(accentHex);
+	if (!bg || !text || !cur) return accentHex;
+	for (let i = 0; i < 5 && contrastRatio(cur, bg) < 4.5; i++) {
+		cur = mixRgb(cur, text, 0.15);
+	}
+	return toHex(cur);
+}
 
 /**
  * Resolve a theme to its `{ bg, dark }` chrome values. `auto` defers to the OS

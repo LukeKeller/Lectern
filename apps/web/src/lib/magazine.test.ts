@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Card } from '@lectern/shared';
-import { buildMagazines, isLibraryItem } from './magazine';
+import { buildMagazines, isLibraryItem, magazineTitle } from './magazine';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
 	return Card.parse({
@@ -52,5 +52,22 @@ describe('buildMagazines', () => {
 
 	it('honours a custom minimum', () => {
 		expect(buildMagazines(cards, 3)).toEqual([]);
+	});
+});
+
+describe('magazineTitle', () => {
+	it('strips leaked tag syntax and title-cases the words', () => {
+		expect(magazineTitle("['rss'")).toBe('Rss');
+		expect(magazineTitle("'article'")).toBe('Article');
+		expect(magazineTitle('politics-society]')).toBe('Politics Society');
+	});
+
+	it('turns separators into spaces and capitalizes each word', () => {
+		expect(magazineTitle('machine_learning')).toBe('Machine Learning');
+		expect(magazineTitle('long-reads')).toBe('Long Reads');
+	});
+
+	it('falls back to the raw tag when stripping leaves nothing', () => {
+		expect(magazineTitle("[]''")).toBe("[]''");
 	});
 });

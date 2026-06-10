@@ -11,16 +11,21 @@
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import type { Location, Highlight, NewHighlight } from '@lectern/shared';
 	import { serializeRange, renderHighlights } from '$lib/highlight';
+	import { cleanArticleHtml } from '$lib/article-html';
 	import { liveQuery } from 'dexie';
 	import { readingQueue } from '$lib/reading-queue.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import {
+		clampAccentContrast,
 		readerCssVars,
 		readerThemeAttr,
 		FONT_LABELS,
+		THEME_BG,
 		THEME_SWATCHES,
+		THEME_TEXT,
 		type FontFamily,
+		type ReaderTheme,
 		type ThemeMode
 	} from '$lib/typography';
 	import {
@@ -29,6 +34,7 @@
 		nearestAnchor,
 		type AnchorCandidate
 	} from '$lib/progress';
+	import { displayAuthor } from '$lib/author';
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { scrollIntoViewMotion, scrollBehavior } from '$lib/motion';
@@ -73,13 +79,6 @@
 			cancelled = true;
 		};
 	});
-	// Override the pane's accent custom properties when an adaptive colour is live.
-	const accentStyle = $derived(
-		readerSettings.current.adaptiveAccent && accentColor
-			? `--accent:${accentColor};--accent-soft:color-mix(in srgb, ${accentColor} 16%, transparent)`
-			: ''
-	);
-
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
@@ -87,6 +86,7 @@
 	let articleEl = $state<HTMLElement | null>(null);
 	let progress = $state(0);
 	let showDisplay = $state(false);
+	let menuOpen = $state(false);
 	let ready = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let raf = 0;
@@ -94,6 +94,8 @@
 	let focusIndex = $state(-1);
 	let barTop = $state(0);
 	let barH = $state(0);
+	let barHidden = $state(false);
+	let lastBarY = 0;
 	let blocks: HTMLElement[] = [];
 	let tocOpen = $state(loadBool('lectern.reader.toc', false));
 	let panelOpen = $state(loadBool('lectern.reader.panel', false));
@@ -131,15 +133,39 @@
 		label: FONT_LABELS[value].label
 	}));
 
-	const THEMES = (Object.keys(THEME_SWATCHES) as ThemeMode[]).map((value) => ({
-		value,
-		label: THEME_SWATCHES[value].label
-	}));
+	// Reader-pane theme options: `match` follows the app theme; the rest override
+	// the reader pane only (doc-scoped via `.doc.themed` + data-theme), never the
+	// global app theme — that lives in Settings → Reading and the sidebar toggle.
+	const READER_THEME_OPTIONS: { value: ReaderTheme; label: string }[] = [
+		{ value: 'match', label: 'Match' },
+		...(Object.keys(THEME_SWATCHES) as ThemeMode[])
+			.filter((t): t is Exclude<ThemeMode, 'auto'> => t !== 'auto')
+			.map((t) => ({ value: t as ReaderTheme, label: THEME_SWATCHES[t].label }))
+	];
 
 	// Reader-pane theme: the explicit override, or the app theme when matching.
 	const readerThemeValue = $derived(
 		readerThemeAttr(readerSettings.current.theme, readerSettings.current.readerTheme)
 	);
+
+	// Resolve the pane's effective palette for contrast math: the data-theme
+	// value, or the OS scheme when app + reader are both on auto/match (the same
+	// resolution chromeForTheme uses; ssr=false so window is always available).
+	const effectiveReaderTheme = $derived.by((): Exclude<ThemeMode, 'auto'> => {
+		if (readerThemeValue) return readerThemeValue as Exclude<ThemeMode, 'auto'>;
+		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+	});
+	// Override the pane's accent custom properties when an adaptive colour is
+	// live, clamped to >= 4.5:1 contrast against the active theme background.
+	const accentStyle = $derived.by(() => {
+		if (!readerSettings.current.adaptiveAccent || !accentColor) return '';
+		const safe = clampAccentContrast(
+			accentColor,
+			THEME_BG[effectiveReaderTheme],
+			THEME_TEXT[effectiveReaderTheme]
+		);
+		return `--accent:${safe};--accent-soft:color-mix(in srgb, ${safe} 16%, transparent)`;
+	});
 
 	function candidates(): AnchorCandidate[] {
 		if (!articleEl) return [];
@@ -181,6 +207,12 @@
 				raf = 0;
 				const m = scrollMetrics();
 				progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
+				// Auto-hide the toolbar: hide scrolling down past 200px, reveal on
+				// scroll-up or near the top. 4px hysteresis avoids jitter.
+				if (m.scrollTop <= 200) barHidden = false;
+				else if (m.scrollTop > lastBarY + 4) barHidden = true;
+				else if (m.scrollTop < lastBarY - 4) barHidden = false;
+				lastBarY = m.scrollTop;
 				// Scroll-spy: the last heading scrolled above the top band is "active".
 				let cur = '';
 				for (const h of headings) {
@@ -316,6 +348,28 @@
 			void refetchContent();
 			e.preventDefault();
 		}
+	}
+
+	// Layered Escape: close the topmost reader overlay (Display popover, find bar,
+	// highlight popover) instead of leaving the reader. Capture phase so it runs
+	// before the layout's bubble-phase Escape-goes-back shortcut.
+	function onEscapeCapture(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		if (showDisplay) {
+			showDisplay = false;
+		} else if (menuOpen) {
+			menuOpen = false;
+		} else if (findOpen) {
+			closeFind();
+		} else if (selRect) {
+			selRect = null;
+			pendingHighlight = null;
+			window.getSelection()?.removeAllRanges();
+		} else {
+			return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
 	}
 
 	// In-document find (Cmd/Ctrl+F). Matches are wrapped in <mark.find-hit> by
@@ -557,6 +611,26 @@
 		goBack();
 	}
 
+	// End-of-article "Next up": the document after this one in the reading queue
+	// (the snapshot of the list the reader came from), looked up in the local
+	// Dexie mirror. Undefined when last-in-queue or opened via a direct link.
+	const nextId = $derived(card ? readingQueue.nextAfter(card.id) : undefined);
+	let nextCard = $state<Card | undefined>(undefined);
+	$effect(() => {
+		const nid = nextId;
+		if (!nid) {
+			nextCard = undefined;
+			return;
+		}
+		let cancelled = false;
+		void db.cards.get(nid).then((c) => {
+			if (!cancelled) nextCard = c;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	/**
 	 * Load (or reload) the document for the current route id. The reader is a
 	 * single reused component across reader→reader navigation, so this resets all
@@ -606,6 +680,8 @@
 		ready = false;
 		html = '';
 		progress = 0;
+		barHidden = false;
+		lastBarY = 0;
 		focusIndex = -1;
 		blocks = [];
 		headings = [];
@@ -631,8 +707,9 @@
 		try {
 			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
 			if (docId !== id) return;
-			// Sanitize before rendering untrusted article HTML on the client.
-			html = DOMPurify.sanitize(content.html);
+			// Sanitize before rendering untrusted article HTML on the client, then
+			// drop the duplicated leading h1 / demote in-content h1s.
+			html = cleanArticleHtml(DOMPurify.sanitize(content.html), initial?.title);
 		} catch (err) {
 			if (docId !== id) return;
 			error = err instanceof Error ? err.message : String(err);
@@ -661,6 +738,7 @@
 		activeList.set(controller);
 		// Global listeners live for the component's whole life; they no-op while
 		// !ready, so they stay attached across reader→reader reloads.
+		window.addEventListener('keydown', onEscapeCapture, true);
 		window.addEventListener('keydown', onFindKey);
 		window.addEventListener('scroll', onScroll, { passive: true });
 		window.addEventListener('keydown', onKey);
@@ -671,6 +749,7 @@
 			capture();
 			if (timer) clearTimeout(timer);
 			if (raf) cancelAnimationFrame(raf);
+			window.removeEventListener('keydown', onEscapeCapture, true);
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('keydown', onKey);
 			window.removeEventListener('resize', updateBar);
@@ -691,7 +770,7 @@
 
 <div class="progress" aria-hidden="true" style={`--p:${progress}`}></div>
 
-<nav class="bar">
+<nav class="bar" class:bar-hidden={barHidden && !showDisplay && !menuOpen}>
 	<button class="back" type="button" onclick={goBack} aria-label="Back">
 		<Icon name="back" size={18} />
 		<span>Back</span>
@@ -733,59 +812,101 @@
 		>
 			<Icon name="book" size={16} />
 		</button>
-		{#if card}
-			<button
-				type="button"
-				class="rail-btn rail-listen"
-				onclick={() => ttsPlayer.listen({ id: card!.id, title: card!.title })}
-				title="Listen"
-				aria-label="Listen to this article"
-			>
-				<Icon name="headphones" size={16} />
-			</button>
-			<button
-				type="button"
-				class="rail-btn rail-podcast"
-				class:on={podcastState === 'done'}
-				class:spin={podcastState === 'busy'}
-				disabled={podcastState === 'busy'}
-				onclick={addToPodcast}
-				title={podcastMsg ?? 'Add to podcast feed'}
-				aria-label="Add this article to your podcast feed"
-			>
-				<Icon name={podcastState === 'done' ? 'check' : 'rss'} size={16} />
-			</button>
-		{/if}
 		<button
 			type="button"
-			class="rail-btn rail-refetch"
-			class:spin={refetching}
-			onclick={refetchContent}
-			disabled={refetching}
-			title="Re-fetch full content from original ( r )"
-			aria-label="Re-fetch full content from original"
+			class="rail-btn rail-more"
+			class:on={menuOpen}
+			aria-expanded={menuOpen}
+			aria-haspopup="menu"
+			onclick={() => {
+				showDisplay = false;
+				menuOpen = !menuOpen;
+			}}
+			title="More actions"
+			aria-label="More actions"
 		>
-			<Icon name="refresh" size={16} />
+			<Icon name="more" size={16} />
 		</button>
-		{#if card}
-			<!-- card.url is an external absolute URL, not an internal route -->
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-			<a class="orig" href={card.url} target="_blank" rel="noopener noreferrer">
-				<span>Original</span>
-				<Icon name="external" size={15} />
-			</a>
-		{/if}
 		<button
 			type="button"
 			class="display-btn"
 			class:on={showDisplay}
 			aria-expanded={showDisplay}
-			onclick={() => (showDisplay = !showDisplay)}
+			onclick={() => {
+				menuOpen = false;
+				showDisplay = !showDisplay;
+			}}
 		>
 			<Icon name="sliders" size={16} />
 			<span>Display</span>
 		</button>
 	</div>
+
+	{#if menuOpen}
+		<button
+			type="button"
+			class="display-scrim"
+			aria-label="Close menu"
+			onclick={() => (menuOpen = false)}
+		></button>
+		<div class="more-menu" role="menu" aria-label="More actions">
+			{#if card}
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={() => {
+						ttsPlayer.listen({ id: card!.id, title: card!.title });
+						menuOpen = false;
+					}}
+				>
+					<Icon name="headphones" size={16} />
+					<span>Listen</span>
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					class:spin={podcastState === 'busy'}
+					disabled={podcastState === 'busy'}
+					onclick={addToPodcast}
+					title={podcastMsg ?? 'Add to podcast feed'}
+				>
+					<Icon name={podcastState === 'done' ? 'check' : 'rss'} size={16} />
+					<span>{podcastState === 'done' ? 'Added to podcast' : 'Add to podcast'}</span>
+				</button>
+			{/if}
+			<button
+				type="button"
+				role="menuitem"
+				class="menu-item"
+				disabled={refetching}
+				onclick={() => {
+					void refetchContent();
+					menuOpen = false;
+				}}
+			>
+				<Icon name="refresh" size={16} />
+				<span>Re-fetch content</span>
+			</button>
+			{#if card}
+				<!-- card.url is an external absolute URL, not an internal route -->
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
+				<a
+					role="menuitem"
+					class="menu-item"
+					href={card.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					onclick={() => (menuOpen = false)}
+				>
+					<Icon name="external" size={16} />
+					<span>Open original</span>
+				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/if}
+		</div>
+	{/if}
 
 	{#if showDisplay}
 		<button
@@ -796,13 +917,14 @@
 		></button>
 		<div class="panel" role="dialog" aria-label="Display settings">
 			<div class="field">
-				<span class="field-label">Theme</span>
+				<span class="field-label">Reader theme</span>
 				<div class="seg">
-					{#each THEMES as t (t.value)}
+					{#each READER_THEME_OPTIONS as t (t.value)}
 						<button
 							type="button"
-							class:active={readerSettings.current.theme === t.value}
-							onclick={() => readerSettings.update({ theme: t.value })}
+							class:active={readerSettings.current.readerTheme === t.value}
+							aria-pressed={readerSettings.current.readerTheme === t.value}
+							onclick={() => readerSettings.update({ readerTheme: t.value })}
 						>
 							{t.label}
 						</button>
@@ -849,12 +971,31 @@
 				<input
 					type="range"
 					min="480"
-					max="1000"
+					max="760"
 					step="20"
 					value={readerSettings.current.maxWidth}
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
 				/>
 			</label>
+			<div class="field">
+				<span class="field-label">Paragraphs</span>
+				<div class="seg">
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'spaced'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'spaced' })}
+					>
+						Spaced
+					</button>
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'indented'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'indented' })}
+					>
+						Indented
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </nav>
@@ -900,7 +1041,8 @@
 				{/each}
 			</nav>
 		{:else}
-			<p class="rail-empty">No headings.</p>
+			<p class="rail-empty">No headings in this article.</p>
+			<p class="rail-empty">Press <kbd>[</kbd> to close.</p>
 		{/if}
 	</aside>
 	<div
@@ -915,11 +1057,22 @@
 			<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
 		{/if}
 		{#if card}
+			<div class="eyebrow">{card.siteName ?? new URL(card.url).hostname}</div>
 			<h1>{card.title}</h1>
-			<p class="byline">
-				{card.siteName ?? card.author ?? new URL(card.url).hostname}
-				{#if card.readingTimeMinutes}<span class="dot">·</span>{card.readingTimeMinutes} min read{/if}
-			</p>
+			{#if card.author || card.publishedAt || card.readingTimeMinutes}
+				<p class="byline">
+					{#if card.author}By {displayAuthor(card.author)}{/if}
+					{#if card.publishedAt}
+						{#if card.author}<span class="dot">·</span>{/if}{new Date(
+							card.publishedAt
+						).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+					{/if}
+					{#if card.readingTimeMinutes}
+						{#if card.author || card.publishedAt}<span class="dot">·</span>
+						{/if}{card.readingTimeMinutes} min read
+					{/if}
+				</p>
+			{/if}
 			<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
 		{/if}
 
@@ -957,8 +1110,56 @@
 				<p class="err-detail">{error}</p>
 			</div>
 		{:else}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<article bind:this={articleEl}>{@html html}</article>
+			<article
+				class="lectern-prose"
+				class:prose-indented={readerSettings.current.paragraphStyle === 'indented'}
+				bind:this={articleEl}
+			>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html html}
+			</article>
+			<footer class="endmatter">
+				<span class="end-mark" aria-hidden="true">&#10086;</span>
+				{#if card}
+					<div class="end-triage" role="group" aria-label="Triage this document">
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('archive')}
+							title="Archive ( e )"
+						>
+							Archive
+						</button>
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('later')}
+							title="Later ( l )"
+						>
+							Later
+						</button>
+						<button
+							type="button"
+							class="err-btn"
+							onclick={() => controller.triage('shortlist')}
+							title="Shortlist ( s )"
+						>
+							Shortlist
+						</button>
+					</div>
+				{/if}
+				{#if nextCard}
+					<a class="next-up" href={resolve('/read/[id]', { id: nextCard.id })}>
+						<span class="next-kicker">Next up</span>
+						<span class="next-title">{nextCard.title}</span>
+						<span class="next-meta">
+							{nextCard.siteName ?? new URL(nextCard.url).hostname}
+							{#if nextCard.readingTimeMinutes}<span class="dot">·</span
+								>{nextCard.readingTimeMinutes} min read{/if}
+						</span>
+					</a>
+				{/if}
+			</footer>
 		{/if}
 	</div>
 	<aside class="rail panel">
@@ -982,7 +1183,7 @@
 				</div>
 				{#if card.author}<div>
 						<dt>Author</dt>
-						<dd>{card.author}</dd>
+						<dd>{displayAuthor(card.author)}</dd>
 					</div>{/if}
 				<div>
 					<dt>Type</dt>
@@ -1125,9 +1326,17 @@
 		margin: -0.4rem 0 1.4rem;
 		padding: 0.5rem 0;
 		background: var(--bg);
+		transition: transform 180ms var(--ease);
+	}
+	.bar.bar-hidden {
+		transform: translateY(-100%);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.bar {
+			transition: none;
+		}
 	}
 	.back,
-	.orig,
 	.display-btn {
 		display: inline-flex;
 		align-items: center;
@@ -1146,7 +1355,6 @@
 			background var(--dur-fast) var(--ease);
 	}
 	.back:hover,
-	.orig:hover,
 	.display-btn:hover,
 	.display-btn.on {
 		color: var(--text);
@@ -1157,11 +1365,59 @@
 		align-items: center;
 		gap: 0.3rem;
 	}
+	/* Overflow "…" menu: same scrim + bar-anchored popover pattern as Display. */
+	.more-menu {
+		position: absolute;
+		top: calc(100% + 0.3rem);
+		right: 0;
+		z-index: 25;
+		min-width: 13.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding: 0.35rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow);
+	}
+	.menu-item {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		width: 100%;
+		min-height: 2.75rem;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.menu-item:hover {
+		background: var(--surface-alt);
+	}
+	.menu-item:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.menu-item :global(svg) {
+		flex-shrink: 0;
+		color: var(--text-muted);
+	}
 
 	/* Focus mode: spotlight the focused block by fading the rest of the prose.
-	   Uses colour (not opacity) so nested blocks never double-dim. */
+	   Uses colour (not opacity) so nested blocks never double-dim. Residual ink
+	   is per-theme (--focus-dim): light paper keeps 38%, dark grounds 30%. */
 	.doc.focus-on article {
-		color: color-mix(in srgb, var(--text) 30%, var(--bg));
+		color: color-mix(in srgb, var(--text) var(--focus-dim, 30%), var(--bg));
 		transition: color var(--dur) var(--ease);
 	}
 	.doc.focus-on article :global(.lectern-focus) {
@@ -1191,6 +1447,37 @@
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow);
 	}
+	/* The Display popover specifically (the Info side rail also carries .panel):
+	   a touch wider so three columns of labels fit, and never taller than the
+	   viewport — scroll instead of clipping. */
+	.bar .panel {
+		width: min(22rem, 92vw);
+		max-height: calc(100dvh - 7rem);
+		overflow-y: auto;
+	}
+	/* Phones: the bar-anchored popover would land below the viewport, so render
+	   it as a fixed bottom sheet under a visible scrim. `.bar .panel` scopes the
+	   override to the Display popover (not the aside.rail.panel). */
+	@media (max-width: 640px) {
+		.display-scrim {
+			z-index: 45;
+			background: rgba(20, 16, 10, 0.32);
+		}
+		.bar .panel {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			top: auto;
+			z-index: 46;
+			width: auto;
+			max-height: 70vh;
+			overflow-y: auto;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			border-bottom: 0;
+			padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+		}
+	}
 	.field {
 		display: flex;
 		flex-direction: column;
@@ -1206,15 +1493,18 @@
 		color: var(--text);
 		font-variant-numeric: tabular-nums;
 	}
+	/* Wrap the segments into an even grid so long labels (Newsprint, Contrast,
+	   OpenDyslexic) never clip off the popover edge. */
 	.seg {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
 		gap: 0.25rem;
 		padding: 0.2rem;
 		background: var(--surface-alt);
 		border-radius: var(--radius);
 	}
 	.seg button {
-		flex: 1;
+		min-width: 0;
 		padding: 0.34rem 0.4rem;
 		border: 0;
 		border-radius: calc(var(--radius) - 3px);
@@ -1265,6 +1555,27 @@
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow-sm);
 	}
+	/* The same paper grain the print surfaces wear (see FlipReader.svelte) —
+	   the reading column has tooth, not glass. Soft-light over the page ground
+	   (or the .themed pane's own surface), under all content. */
+	.doc::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		border-radius: inherit;
+		background-image: var(--grain);
+		background-size: 180px 180px;
+		opacity: var(--grain-strength);
+		mix-blend-mode: soft-light;
+	}
+	/* Keep the title lockup, prose, and panels above the grain so text is never
+	   blended or selection-tinted. */
+	.doc > * {
+		position: relative;
+		z-index: 1;
+	}
 	.focus-bar {
 		position: absolute;
 		left: -0.9rem;
@@ -1288,17 +1599,31 @@
 			transition: none;
 		}
 	}
+	/* Title lockup: source eyebrow → balanced title → byline. The eyebrow
+	   carries the lockup's 1.2rem top space; the h1 sits 0.5rem under it. */
+	.eyebrow {
+		margin: 1.2rem 0 0;
+		font-family: var(--font-ui);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
 	h1 {
 		font-family: var(--font-serif);
 		font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
 		line-height: 1.15;
 		letter-spacing: -0.015em;
-		margin: 0.5rem 0 0.5rem;
+		margin: 0.5rem 0 0.65rem;
+		text-wrap: balance;
 	}
 	.byline {
-		margin: 0 0 1.1rem;
+		margin: 0 0 1.4rem;
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
 	}
 	.dot {
 		margin: 0 0.4rem;
@@ -1411,6 +1736,62 @@
 		font-size: var(--text-2xs);
 		color: var(--text-muted);
 	}
+	/* End-of-article: quiet end mark, triage row, next-up card. */
+	.endmatter {
+		margin: 3em 0 2em;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.4rem;
+	}
+	.end-mark {
+		font-family: var(--font-serif);
+		font-size: 1.1rem;
+		line-height: 1;
+		color: var(--text-muted);
+		user-select: none;
+	}
+	.end-triage {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.6rem;
+	}
+	.next-up {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		width: 100%;
+		max-width: 26rem;
+		padding: 0.85rem 1rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text);
+		text-decoration: none;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.next-up:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-alt);
+	}
+	.next-kicker {
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.next-title {
+		font-family: var(--font-serif);
+		font-size: var(--text-md);
+		line-height: 1.3;
+	}
+	.next-meta {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
 	.hl-toast {
 		position: fixed;
 		left: 50%;
@@ -1455,103 +1836,14 @@
 		color: var(--text-muted);
 	}
 
+	/* Surface plumbing only — all content styling lives in the shared
+	   .lectern-prose layer (lib/styles/prose.css). */
 	article {
 		font-family: var(--reader-font);
 		font-size: var(--reader-size);
-		line-height: var(--reader-leading);
+		line-height: calc(var(--reader-leading) + var(--prose-leading-boost, 0));
 		letter-spacing: var(--reader-tracking, 0);
 		word-spacing: var(--reader-word-spacing, 0);
-		color: var(--text);
-	}
-	article :global(p),
-	article :global(ul),
-	article :global(ol),
-	article :global(blockquote),
-	article :global(pre),
-	article :global(figure),
-	article :global(table) {
-		margin: 0 0 var(--reader-para-gap, 1.15em);
-	}
-	article :global(h2),
-	article :global(h3),
-	article :global(h4) {
-		font-family: var(--font-serif);
-		line-height: 1.25;
-		margin: 1.8em 0 0.6em;
-	}
-	article :global(h2) {
-		font-size: 1.45em;
-	}
-	article :global(h3) {
-		font-size: 1.2em;
-	}
-	article :global(a) {
-		color: var(--accent);
-		text-decoration: underline;
-		text-decoration-thickness: 1px;
-		text-underline-offset: 0.16em;
-	}
-	article :global(img),
-	article :global(video) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-	}
-	article :global(figure) {
-		margin-inline: 0;
-	}
-	article :global(figcaption) {
-		margin-top: 0.5em;
-		font-size: 0.82em;
-		color: var(--text-muted);
-		text-align: center;
-	}
-	article :global(blockquote) {
-		padding-left: 1.1em;
-		border-left: 3px solid var(--border-strong);
-		color: var(--text-muted);
-		font-style: italic;
-	}
-	article :global(ul),
-	article :global(ol) {
-		padding-left: 1.4em;
-	}
-	article :global(li) {
-		margin-bottom: 0.4em;
-	}
-	article :global(hr) {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 2.2em 0;
-	}
-	article :global(code) {
-		font-family: var(--font-mono);
-		font-size: 0.88em;
-		padding: 0.12em 0.36em;
-		border-radius: var(--radius-sm);
-		background: var(--surface-alt);
-	}
-	article :global(pre) {
-		padding: 1em 1.1em;
-		border-radius: var(--radius);
-		background: var(--surface-alt);
-		overflow-x: auto;
-	}
-	article :global(pre code) {
-		padding: 0;
-		background: transparent;
-		font-size: 0.85em;
-	}
-	article :global(table) {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.92em;
-	}
-	article :global(th),
-	article :global(td) {
-		padding: 0.5em 0.7em;
-		border: 1px solid var(--border);
-		text-align: left;
 	}
 
 	@media (max-width: 820px) {
@@ -1560,6 +1852,14 @@
 		}
 		.bar {
 			position: static;
+		}
+	}
+	@media (max-width: 640px) {
+		/* The app top bar is hidden on the reader route at this width (see
+		   +layout.svelte), so this bar is the only chrome: sticky + auto-hiding. */
+		.bar {
+			position: sticky;
+			padding-top: calc(0.5rem + env(safe-area-inset-top));
 		}
 	}
 	.sr-status {
@@ -1599,7 +1899,7 @@
 	.rail-btn:disabled {
 		cursor: default;
 	}
-	.rail-btn.spin :global(svg) {
+	.menu-item.spin :global(svg) {
 		animation: rail-spin 0.8s linear infinite;
 	}
 	@keyframes rail-spin {
@@ -1608,7 +1908,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.rail-btn.spin :global(svg) {
+		.menu-item.spin :global(svg) {
 			animation: none;
 		}
 	}
@@ -1695,7 +1995,7 @@
 		text-decoration: underline;
 	}
 	@media (max-width: 979px) {
-		.rail-btn:not(.rail-listen):not(.rail-refetch) {
+		.rail-btn:not(.rail-more) {
 			display: none;
 		}
 	}
@@ -1715,6 +2015,34 @@
 		}
 		.rail.panel {
 			flex: 0 0 17rem;
+		}
+	}
+	/* Measure guard: below 1520px the flex layout cannot hold a 40rem article
+	   beside both rails (15rem sidebar + 2×3rem main padding + 13rem + 17rem
+	   rails + 2×2rem gaps + 40rem column = 1520px), so open rails float over the
+	   content as fixed cards instead of compressing it. */
+	@media (min-width: 980px) and (max-width: 1519px) {
+		.reader.toc-open .rail.toc,
+		.reader.panel-open .rail.panel {
+			position: fixed;
+			top: 4.5rem;
+			bottom: 1.25rem;
+			max-height: none;
+			z-index: 23;
+			overflow-y: auto;
+			padding: 1rem;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			box-shadow: var(--shadow-md);
+		}
+		.reader.toc-open .rail.toc {
+			left: calc(var(--sidebar-w) + 1.25rem);
+			width: 14rem;
+		}
+		.reader.panel-open .rail.panel {
+			right: 1.25rem;
+			width: 18rem;
 		}
 	}
 	.rail-tabs {
@@ -1851,8 +2179,12 @@
 		box-shadow: var(--shadow);
 		cursor: pointer;
 	}
+	/* Marker-on-paper on light themes (solid ink, multiplied); translucent tint
+	   on dark themes. --hl-mix / --hl-blend come from the theme blocks in app.css
+	   and re-scope when .doc overrides the app theme via data-theme. */
 	.doc :global(mark.lectern-hl) {
-		background: color-mix(in srgb, var(--hl, #e0b341) 38%, transparent);
+		background: color-mix(in oklab, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
+		mix-blend-mode: var(--hl-blend, multiply);
 		color: inherit;
 		border-radius: 2px;
 		padding: 0.05em 0;
@@ -1923,7 +2255,7 @@
 		transform: scaleX(-1);
 	}
 	.doc :global(mark.find-hit) {
-		background: color-mix(in srgb, var(--accent) 22%, transparent);
+		background: color-mix(in oklab, var(--accent) 22%, transparent);
 		border-radius: 2px;
 	}
 	.doc :global(mark.find-hit.current) {

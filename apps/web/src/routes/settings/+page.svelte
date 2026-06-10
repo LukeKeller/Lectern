@@ -612,7 +612,7 @@
 				<input
 					type="range"
 					min="480"
-					max="1000"
+					max="760"
 					step="20"
 					value={readerSettings.current.maxWidth}
 					oninput={(e) => readerSettings.update({ maxWidth: Number(e.currentTarget.value) })}
@@ -654,6 +654,28 @@
 						readerSettings.update({ paragraphSpacing: Number(e.currentTarget.value) })}
 				/>
 			</label>
+			<div class="field">
+				<span class="flabel">Paragraph style</span>
+				<div class="seg">
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'spaced'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'spaced' })}
+					>
+						Spaced
+					</button>
+					<button
+						type="button"
+						class:active={readerSettings.current.paragraphStyle === 'indented'}
+						onclick={() => readerSettings.update({ paragraphStyle: 'indented' })}
+					>
+						Indented
+					</button>
+				</div>
+				<span class="fhint"
+					>Spaced paragraphs (web convention) or first-line indents (book convention).</span
+				>
+			</div>
 			<label class="toggle">
 				<input
 					type="checkbox"

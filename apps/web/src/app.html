@@ -35,7 +35,8 @@
 					};
 					var DARKS = { dark: 1, black: 1, contrast: 1 };
 					var raw = localStorage.getItem('lectern.reader');
-					var t = raw ? JSON.parse(raw).theme || 'auto' : 'auto';
+					var s = (raw ? JSON.parse(raw) : null) || {};
+					var t = s.theme || 'auto';
 					if (t !== 'auto' && BG[t]) document.documentElement.setAttribute('data-theme', t);
 					var resolved =
 						t === 'auto'
@@ -46,6 +47,29 @@
 					document.documentElement.style.colorScheme = DARKS[resolved] ? 'dark' : 'light';
 					var meta = document.querySelector('meta[name="theme-color"]');
 					if (meta) meta.setAttribute('content', BG[resolved] || '#f6f4ee');
+					// Preload the active bundled reading face (regular + italic where
+					// bundled) so the first article never swaps mid-read. System stacks
+					// (serif/sans/mono) preload nothing: Literata sits mid-stack in the
+					// default serif and is only fetched by engines that lack Iowan/Charter.
+					var FONT_FILES = {
+						literata: ['/fonts/literata-400.woff2', '/fonts/literata-400-italic.woff2'],
+						atkinson: [
+							'/fonts/atkinson-hyperlegible-400.woff2',
+							'/fonts/atkinson-hyperlegible-400-italic.woff2'
+						],
+						lexend: ['/fonts/lexend-400.woff2'],
+						opendyslexic: ['/fonts/opendyslexic-400.woff2']
+					};
+					var faces = FONT_FILES[s.fontFamily] || [];
+					for (var i = 0; i < faces.length; i++) {
+						var link = document.createElement('link');
+						link.rel = 'preload';
+						link.as = 'font';
+						link.type = 'font/woff2';
+						link.crossOrigin = 'anonymous';
+						link.href = faces[i];
+						document.head.appendChild(link);
+					}
 				} catch (e) {}
 			})();
 		</script>

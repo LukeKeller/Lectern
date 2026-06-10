@@ -1,15 +1,18 @@
 <script lang="ts">
 	import type { Card } from '@lectern/shared';
-	import type { Magazine } from '$lib/magazine';
+	import { magazineTitle, type Magazine } from '$lib/magazine';
 	import { onMount, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { getSync } from '$lib/sync';
 	import { getArticleHtml } from '$lib/content';
+	import { cleanArticleHtml } from '$lib/article-html';
 	import Icon from './Icon.svelte';
 	import SourceAvatar from './SourceAvatar.svelte';
+	import { displayAuthor } from '$lib/author';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { scrollIntoViewMotion } from '$lib/motion';
+	import '$lib/styles/drop-cap.css';
 
 	let {
 		magazine,
@@ -26,14 +29,12 @@
 	// Lead images that failed to load, keyed by card id, so we can hide them.
 	const coverFailed = new SvelteSet<string>();
 
-	const title = $derived(
-		magazine.tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
-	);
+	const title = $derived(magazineTitle(magazine.tag));
 
 	function meta(card: Card): string {
 		const parts: string[] = [];
 		if (card.siteName) parts.push(card.siteName);
-		if (card.author) parts.push(card.author);
+		if (card.author) parts.push(displayAuthor(card.author));
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
 		return parts.join(' · ');
 	}
@@ -67,7 +68,7 @@
 		for (const card of magazine.cards) {
 			getArticleHtml(card.id)
 				.then((h) => {
-					html[card.id] = h;
+					html[card.id] = cleanArticleHtml(h, card.title);
 				})
 				.catch(() => {
 					failed[card.id] = true;
@@ -101,7 +102,7 @@
 		</div>
 	</header>
 
-	<nav class="mr-toc" aria-label="Contents">
+	<nav class="mr-toc" id="mr-contents" aria-label="Contents">
 		<h2>Contents</h2>
 		<ol>
 			{#each magazine.cards as card, i (card.id)}
@@ -127,7 +128,6 @@
 					<div class="mr-article-meta">
 						<span class="mr-kicker">
 							{i + 1} / {magazine.cards.length}
-							{#if marked[card.id]}· {marked[card.id]}{/if}
 						</span>
 						<h2>
 							<a href={resolve('/read/[id]', { id: card.id })}>{card.title}</a>
@@ -181,8 +181,7 @@
 				{#if html[card.id]}
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<div class="mr-body">{@html html[card.id]}</div>
-					<p class="mr-end" aria-hidden="true">∎</p>
+					<div class="mr-body lectern-prose drop-cap">{@html html[card.id]}</div>
 				{:else if failed[card.id]}
 					<p class="mr-fail">
 						Couldn’t load this article.
@@ -192,7 +191,12 @@
 					<p class="mr-loading">Loading…</p>
 				{/if}
 
-				<button type="button" class="mr-top" onclick={() => jump(magazine.cards[0]!.id)}>
+				<button
+					type="button"
+					class="mr-top"
+					onclick={() =>
+						scrollIntoViewMotion(document.getElementById('mr-contents'), { block: 'start' })}
+				>
 					↑ Contents
 				</button>
 			</article>
@@ -301,6 +305,7 @@
 		padding: 1rem 1.25rem;
 		margin-bottom: 2.5rem;
 		background: var(--surface);
+		scroll-margin-top: 1.5rem;
 	}
 	.mr-toc h2 {
 		font-size: var(--text-2xs);
@@ -391,13 +396,16 @@
 		gap: 1rem;
 		margin-bottom: var(--space-5);
 	}
+	/* Kicker matches FlipReader's spec: UI face, 0.14em tracking, uppercase,
+	   muted ink. Triage state lives on the action buttons, not in the kicker. */
 	.mr-kicker {
 		display: inline-block;
-		font-family: var(--font-mono, ui-monospace, monospace);
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		color: var(--accent);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.mr-article-head h2 {
 		font-family: var(--font-serif);
@@ -465,55 +473,13 @@
 		border-radius: var(--radius);
 	}
 
-	/* Article body typography. The HTML is sanitized upstream. */
+	/* Article body: the reader's own typography at full scale (×1). Content
+	   styling lives in the shared .lectern-prose layer; only the magazine's
+	   voice (drop cap, pull-quote, separators) is kept below. */
 	.mr-body {
-		font-size: var(--text-lg);
-		line-height: 1.7;
-		color: var(--text);
-	}
-	.mr-body :global(p) {
-		margin: 0 0 1.1rem;
-	}
-	/* Serif drop cap on the opening paragraph of each feature. */
-	.mr-body :global(p:first-of-type)::first-letter {
-		float: left;
-		font-family: var(--font-serif);
-		font-size: 3.2em;
-		line-height: 0.72;
-		font-weight: 700;
-		padding: 0.02em 0.08em 0 0;
-		color: var(--accent);
-	}
-	/* Small-caps lead-in on the opening line, paired with the drop cap. */
-	.mr-body :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.02em;
-	}
-	.mr-body :global(h1),
-	.mr-body :global(h2),
-	.mr-body :global(h3),
-	.mr-body :global(h4) {
-		line-height: 1.25;
-		margin: 1.8rem 0 0.8rem;
-	}
-	.mr-body :global(img),
-	.mr-body :global(figure) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-		margin: 1.2rem 0;
-	}
-	.mr-body :global(figure img) {
-		margin: 0;
-	}
-	.mr-body :global(figcaption) {
-		font-size: var(--text-sm);
-		color: var(--text-muted);
-		text-align: center;
-		margin-top: 0.4rem;
-	}
-	.mr-body :global(a) {
-		color: var(--accent);
+		font-family: var(--reader-font, var(--font-serif));
+		font-size: calc(var(--reader-size, 19px) * 1);
+		line-height: calc(var(--reader-leading, 1.6) + var(--prose-leading-boost, 0));
 	}
 	/* Pull-quote treatment: a hanging open-quote and a hairline, set in emphatic
 	   serif italic — editorial, not the heavy accent stripe. */
@@ -539,33 +505,12 @@
 		color: var(--border-strong);
 		pointer-events: none;
 	}
-	.mr-body :global(ul),
-	.mr-body :global(ol) {
-		margin: 0 0 1.1rem;
-		padding-left: 1.4rem;
-	}
-	.mr-body :global(li) {
-		margin: 0.3rem 0;
-	}
-	.mr-body :global(pre) {
-		overflow-x: auto;
-		padding: 0.9rem;
-		border-radius: var(--radius);
-		background: var(--surface-alt);
-		font-size: var(--text-sm);
-	}
-	.mr-body :global(code) {
-		font-family: var(--font-mono, ui-monospace, monospace);
-		font-size: 0.9em;
-	}
 
-	/* End-of-article mark — a small printed full stop to the feature. */
-	.mr-end {
-		margin: 1.4rem 0 0;
-		text-align: right;
+	/* End-of-article tombstone, set on the final line of copy itself. Articles
+	   that end in an image/embed get no mark — deliberate, not a bug. */
+	.mr-body > :global(p:last-child)::after {
+		content: '\2002\220E';
 		color: var(--text-muted);
-		font-size: 1.15rem;
-		line-height: 1;
 	}
 
 	.mr-top {
