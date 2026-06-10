@@ -22,6 +22,7 @@
 		FONT_LABELS,
 		THEME_SWATCHES,
 		type FontFamily,
+		type ReaderTheme,
 		type ThemeMode
 	} from '$lib/typography';
 	import {
@@ -136,10 +137,15 @@
 		label: FONT_LABELS[value].label
 	}));
 
-	const THEMES = (Object.keys(THEME_SWATCHES) as ThemeMode[]).map((value) => ({
-		value,
-		label: THEME_SWATCHES[value].label
-	}));
+	// Reader-pane theme options: `match` follows the app theme; the rest override
+	// the reader pane only (doc-scoped via `.doc.themed` + data-theme), never the
+	// global app theme — that lives in Settings → Reading and the sidebar toggle.
+	const READER_THEME_OPTIONS: { value: ReaderTheme; label: string }[] = [
+		{ value: 'match', label: 'Match' },
+		...(Object.keys(THEME_SWATCHES) as ThemeMode[])
+			.filter((t): t is Exclude<ThemeMode, 'auto'> => t !== 'auto')
+			.map((t) => ({ value: t as ReaderTheme, label: THEME_SWATCHES[t].label }))
+	];
 
 	// Reader-pane theme: the explicit override, or the app theme when matching.
 	const readerThemeValue = $derived(
@@ -895,13 +901,14 @@
 		></button>
 		<div class="panel" role="dialog" aria-label="Display settings">
 			<div class="field">
-				<span class="field-label">Theme</span>
+				<span class="field-label">Reader theme</span>
 				<div class="seg">
-					{#each THEMES as t (t.value)}
+					{#each READER_THEME_OPTIONS as t (t.value)}
 						<button
 							type="button"
-							class:active={readerSettings.current.theme === t.value}
-							onclick={() => readerSettings.update({ theme: t.value })}
+							class:active={readerSettings.current.readerTheme === t.value}
+							aria-pressed={readerSettings.current.readerTheme === t.value}
+							onclick={() => readerSettings.update({ readerTheme: t.value })}
 						>
 							{t.label}
 						</button>
