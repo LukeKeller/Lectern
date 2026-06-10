@@ -102,7 +102,7 @@
 	/* Typography */
 	--font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
 	--font-serif: 'Iowan Old Style', Charter, 'Literata', Georgia, serif;
-	--font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
 
 	--text-2xs: 0.6875rem;
 	--text-xs: 0.75rem;
