@@ -12,6 +12,7 @@
 	import { displayAuthor } from '$lib/author';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { scrollIntoViewMotion } from '$lib/motion';
+	import '$lib/styles/drop-cap.css';
 
 	let {
 		magazine,
@@ -181,7 +182,7 @@
 				{#if html[card.id]}
 					<!-- content.ts sanitizes with DOMPurify before caching -->
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<div class="mr-body lectern-prose">{@html html[card.id]}</div>
+					<div class="mr-body lectern-prose drop-cap">{@html html[card.id]}</div>
 					<p class="mr-end" aria-hidden="true">∎</p>
 				{:else if failed[card.id]}
 					<p class="mr-fail">
@@ -472,21 +473,6 @@
 		font-family: var(--reader-font, var(--font-serif));
 		font-size: calc(var(--reader-size, 19px) * 1);
 		line-height: calc(var(--reader-leading, 1.6) + var(--prose-leading-boost, 0));
-	}
-	/* Serif drop cap on the opening paragraph of each feature. */
-	.mr-body :global(p:first-of-type)::first-letter {
-		float: left;
-		font-family: var(--font-serif);
-		font-size: 3.2em;
-		line-height: 0.72;
-		font-weight: 700;
-		padding: 0.02em 0.08em 0 0;
-		color: var(--accent);
-	}
-	/* Small-caps lead-in on the opening line, paired with the drop cap. */
-	.mr-body :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.02em;
 	}
 	/* Pull-quote treatment: a hanging open-quote and a hairline, set in emphatic
 	   serif italic — editorial, not the heavy accent stripe. */

@@ -6,6 +6,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { getArticleHtml, prefetchArticles } from '$lib/content';
 	import { cleanArticleHtml } from '$lib/article-html';
+	import '$lib/styles/drop-cap.css';
 	import { getSync } from '$lib/sync';
 	import Icon from '$lib/components/Icon.svelte';
 	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
@@ -16,9 +17,9 @@
 	// break the article into short stacked bands: each band is a bounded 2-column
 	// block, and headings/media/quotes/tables become full-width dividers between
 	// bands. Magazine never calls this — it keeps its single-measure flow.
-	type Band = { kind: 'flow' | 'full'; html: string };
+	type Band = { kind: 'flow' | 'full'; html: string; lede?: boolean };
 	function splitBands(raw: string): Band[] {
-		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw }];
+		if (typeof DOMParser === 'undefined' || !raw) return [{ kind: 'flow', html: raw, lede: true }];
 		const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html');
 		// Headings, media, quotes, tables and preformatted blocks must break to
 		// full width so they read as section dividers. Lists are left to flow with
@@ -64,7 +65,11 @@
 			if (words >= 130) flush();
 		}
 		flush();
-		return out.length ? out : [{ kind: 'flow', html: raw }];
+		// The drop cap belongs to the first *flow* band — image-led articles whose
+		// first band is a full-width figure would otherwise never get one.
+		const firstFlow = out.find((b) => b.kind === 'flow');
+		if (firstFlow) firstFlow.lede = true;
+		return out.length ? out : [{ kind: 'flow', html: raw, lede: true }];
 	}
 
 	let {
@@ -266,13 +271,15 @@
 									<div class="fr-full">{@html band.html}</div>
 								{:else}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									<div class="fr-band">{@html band.html}</div>
+									<div class="fr-band" class:drop-cap={band.lede}>{@html band.html}</div>
 								{/if}
 							{/each}
 						</div>
 					{:else}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						<div class="fr-body lectern-prose">{@html html}</div>
+						<div class="fr-body lectern-prose" class:drop-cap={kind === 'magazine'}>
+							{@html html}
+						</div>
 					{/if}
 
 					{#if !loading && !error}
@@ -554,21 +561,6 @@
 	.fr-full :global(pre) {
 		max-width: 100%;
 	}
-	/* Drop cap on the very first paragraph of the first band only. */
-	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-letter {
-		float: left;
-		font-family: var(--font-serif);
-		font-weight: 800;
-		font-size: 3.1em;
-		line-height: 0.72;
-		padding: 0.06em 0.08em 0 0;
-	}
-	/* Small-caps lead-in on the opening line — the classic newspaper entry. */
-	.flip.newspaper .fr-bands > .fr-band:first-child :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.03em;
-	}
-
 	/* End-of-article mark and a running foot folio give each page a printed
 	   beginning-middle-end, the depth a real leaf carries. */
 	.endmark {
@@ -612,19 +604,6 @@
 	.flip.magazine .fr-body {
 		font-size: calc(var(--reader-size, 19px) * 0.94);
 	}
-	.flip.magazine .fr-body :global(p:first-of-type)::first-letter {
-		float: left;
-		font-weight: 800;
-		font-size: 3.4em;
-		line-height: 0.7;
-		padding: 0.04em 0.1em 0 0;
-		color: var(--accent);
-	}
-	.flip.magazine .fr-body :global(p:first-of-type)::first-line {
-		font-variant-caps: small-caps;
-		letter-spacing: 0.02em;
-	}
-
 	.open-full {
 		display: inline-flex;
 		align-items: center;
