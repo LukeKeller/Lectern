@@ -243,6 +243,87 @@ export const THEME_BG: Record<Exclude<ThemeMode, 'auto'>, string> = {
 	contrast: '#000000'
 };
 
+/** Each theme's body-text colour, mirroring `--text` in app.css. Used as the
+ *  mix target when clamping adaptive accents for contrast. Keep in sync. */
+export const THEME_TEXT: Record<Exclude<ThemeMode, 'auto'>, string> = {
+	light: '#2a2620',
+	sepia: '#43361f',
+	newsprint: '#2b1f10',
+	dark: '#e8e3d7',
+	black: '#dcdcdc',
+	contrast: '#ffffff'
+};
+
+/** Parse `#rgb` / `#rrggbb` (leading `#` optional) into 0-255 channels. */
+export function parseHex(hex: string): [number, number, number] | null {
+	const t = hex.trim().replace(/^#/, '');
+	if (/^[0-9a-f]{3}$/i.test(t)) {
+		return [parseInt(t[0] + t[0], 16), parseInt(t[1] + t[1], 16), parseInt(t[2] + t[2], 16)];
+	}
+	if (/^[0-9a-f]{6}$/i.test(t)) {
+		const n = parseInt(t, 16);
+		return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+	}
+	return null;
+}
+
+function toHex(rgb: [number, number, number]): string {
+	return (
+		'#' +
+		rgb
+			.map((c) =>
+				Math.max(0, Math.min(255, Math.round(c)))
+					.toString(16)
+					.padStart(2, '0')
+			)
+			.join('')
+	);
+}
+
+/** WCAG 2.x relative luminance of an sRGB colour (channels 0-255). */
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+	const lin = (c: number) => {
+		const s = c / 255;
+		return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+	};
+	return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio (1-21) between two sRGB colours (channels 0-255). */
+export function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
+	const la = relativeLuminance(a);
+	const lb = relativeLuminance(b);
+	const hi = Math.max(la, lb);
+	const lo = Math.min(la, lb);
+	return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Linear per-channel mix: `a` moved fraction `t` (0-1) toward `b`. */
+function mixRgb(
+	a: [number, number, number],
+	b: [number, number, number],
+	t: number
+): [number, number, number] {
+	return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/**
+ * Clamp an adaptive accent for legibility: while its contrast against `bgHex`
+ * is below 4.5:1, mix it 15% toward `textHex` (at most 5 iterations, which is
+ * enough to lift any colour on every bundled theme). Non-hex input (or a
+ * malformed map entry) passes through unchanged — fail open to the raw colour.
+ */
+export function clampAccentContrast(accentHex: string, bgHex: string, textHex: string): string {
+	const bg = parseHex(bgHex);
+	const text = parseHex(textHex);
+	let cur = parseHex(accentHex);
+	if (!bg || !text || !cur) return accentHex;
+	for (let i = 0; i < 5 && contrastRatio(cur, bg) < 4.5; i++) {
+		cur = mixRgb(cur, text, 0.15);
+	}
+	return toHex(cur);
+}
+
 /**
  * Resolve a theme to its `{ bg, dark }` chrome values. `auto` defers to the OS
  * scheme via the supplied `prefersDark` (callers pass `matchMedia` result so this

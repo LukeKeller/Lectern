@@ -17,10 +17,13 @@
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import {
+		clampAccentContrast,
 		readerCssVars,
 		readerThemeAttr,
 		FONT_LABELS,
+		THEME_BG,
 		THEME_SWATCHES,
+		THEME_TEXT,
 		type FontFamily,
 		type ReaderTheme,
 		type ThemeMode
@@ -76,13 +79,6 @@
 			cancelled = true;
 		};
 	});
-	// Override the pane's accent custom properties when an adaptive colour is live.
-	const accentStyle = $derived(
-		readerSettings.current.adaptiveAccent && accentColor
-			? `--accent:${accentColor};--accent-soft:color-mix(in srgb, ${accentColor} 16%, transparent)`
-			: ''
-	);
-
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
@@ -151,6 +147,25 @@
 	const readerThemeValue = $derived(
 		readerThemeAttr(readerSettings.current.theme, readerSettings.current.readerTheme)
 	);
+
+	// Resolve the pane's effective palette for contrast math: the data-theme
+	// value, or the OS scheme when app + reader are both on auto/match (the same
+	// resolution chromeForTheme uses; ssr=false so window is always available).
+	const effectiveReaderTheme = $derived.by((): Exclude<ThemeMode, 'auto'> => {
+		if (readerThemeValue) return readerThemeValue as Exclude<ThemeMode, 'auto'>;
+		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+	});
+	// Override the pane's accent custom properties when an adaptive colour is
+	// live, clamped to >= 4.5:1 contrast against the active theme background.
+	const accentStyle = $derived.by(() => {
+		if (!readerSettings.current.adaptiveAccent || !accentColor) return '';
+		const safe = clampAccentContrast(
+			accentColor,
+			THEME_BG[effectiveReaderTheme],
+			THEME_TEXT[effectiveReaderTheme]
+		);
+		return `--accent:${safe};--accent-soft:color-mix(in srgb, ${safe} 16%, transparent)`;
+	});
 
 	function candidates(): AnchorCandidate[] {
 		if (!articleEl) return [];
