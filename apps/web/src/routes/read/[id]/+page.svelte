@@ -891,7 +891,7 @@
 			</button>
 			{#if card}
 				<!-- card.url is an external absolute URL, not an internal route -->
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
 					role="menuitem"
 					class="menu-item"
@@ -903,6 +903,7 @@
 					<Icon name="external" size={16} />
 					<span>Open original</span>
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/if}
 		</div>
 	{/if}
