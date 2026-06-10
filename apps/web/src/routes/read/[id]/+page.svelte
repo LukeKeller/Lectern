@@ -1001,12 +1001,12 @@
 				<p class="err-detail">{error}</p>
 			</div>
 		{:else}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 			<article
 				class="lectern-prose"
 				class:prose-indented={readerSettings.current.paragraphStyle === 'indented'}
 				bind:this={articleEl}
 			>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html html}
 			</article>
 		{/if}
