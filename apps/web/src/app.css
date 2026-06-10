@@ -481,6 +481,14 @@ textarea {
 	color: var(--text);
 }
 
+/* Thin, theme-tinted scrollbars (Firefox; Chromium 121+). macOS overlay
+   scrollbars ignore these. Keeps heavy UA chrome off the prose column on
+   Windows/Linux. */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) transparent;
+}
+
 /* Shared centered reading column for non-reader pages. */
 .page {
 	max-width: 44rem;
