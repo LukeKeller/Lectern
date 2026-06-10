@@ -983,7 +983,7 @@
 			</div>
 		{:else}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<article bind:this={articleEl}>{@html html}</article>
+			<article class="lectern-prose" bind:this={articleEl}>{@html html}</article>
 		{/if}
 	</div>
 	<aside class="rail panel">
@@ -1329,6 +1329,7 @@
 		font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
 		line-height: 1.15;
 		letter-spacing: -0.015em;
+		text-wrap: balance;
 		margin: 0.5rem 0 0.5rem;
 	}
 	.byline {
@@ -1491,103 +1492,14 @@
 		color: var(--text-muted);
 	}
 
+	/* Surface plumbing only — all content styling lives in the shared
+	   .lectern-prose layer (lib/styles/prose.css). */
 	article {
 		font-family: var(--reader-font);
 		font-size: var(--reader-size);
-		line-height: var(--reader-leading);
+		line-height: calc(var(--reader-leading) + var(--prose-leading-boost, 0));
 		letter-spacing: var(--reader-tracking, 0);
 		word-spacing: var(--reader-word-spacing, 0);
-		color: var(--text);
-	}
-	article :global(p),
-	article :global(ul),
-	article :global(ol),
-	article :global(blockquote),
-	article :global(pre),
-	article :global(figure),
-	article :global(table) {
-		margin: 0 0 var(--reader-para-gap, 1.15em);
-	}
-	article :global(h2),
-	article :global(h3),
-	article :global(h4) {
-		font-family: var(--font-serif);
-		line-height: 1.25;
-		margin: 1.8em 0 0.6em;
-	}
-	article :global(h2) {
-		font-size: 1.45em;
-	}
-	article :global(h3) {
-		font-size: 1.2em;
-	}
-	article :global(a) {
-		color: var(--accent);
-		text-decoration: underline;
-		text-decoration-thickness: 1px;
-		text-underline-offset: 0.16em;
-	}
-	article :global(img),
-	article :global(video) {
-		max-width: 100%;
-		height: auto;
-		border-radius: var(--radius);
-	}
-	article :global(figure) {
-		margin-inline: 0;
-	}
-	article :global(figcaption) {
-		margin-top: 0.5em;
-		font-size: 0.82em;
-		color: var(--text-muted);
-		text-align: center;
-	}
-	article :global(blockquote) {
-		padding-left: 1.1em;
-		border-left: 3px solid var(--border-strong);
-		color: var(--text-muted);
-		font-style: italic;
-	}
-	article :global(ul),
-	article :global(ol) {
-		padding-left: 1.4em;
-	}
-	article :global(li) {
-		margin-bottom: 0.4em;
-	}
-	article :global(hr) {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 2.2em 0;
-	}
-	article :global(code) {
-		font-family: var(--font-mono);
-		font-size: 0.88em;
-		padding: 0.12em 0.36em;
-		border-radius: var(--radius-sm);
-		background: var(--surface-alt);
-	}
-	article :global(pre) {
-		padding: 1em 1.1em;
-		border-radius: var(--radius);
-		background: var(--surface-alt);
-		overflow-x: auto;
-	}
-	article :global(pre code) {
-		padding: 0;
-		background: transparent;
-		font-size: 0.85em;
-	}
-	article :global(table) {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.92em;
-	}
-	article :global(th),
-	article :global(td) {
-		padding: 0.5em 0.7em;
-		border: 1px solid var(--border);
-		text-align: left;
 	}
 
 	@media (max-width: 820px) {
