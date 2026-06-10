@@ -97,6 +97,8 @@
 	let focusIndex = $state(-1);
 	let barTop = $state(0);
 	let barH = $state(0);
+	let barHidden = $state(false);
+	let lastBarY = 0;
 	let blocks: HTMLElement[] = [];
 	let tocOpen = $state(loadBool('lectern.reader.toc', false));
 	let panelOpen = $state(loadBool('lectern.reader.panel', false));
@@ -184,6 +186,12 @@
 				raf = 0;
 				const m = scrollMetrics();
 				progress = computePercent(m.scrollTop, m.scrollHeight, m.clientHeight);
+				// Auto-hide the toolbar: hide scrolling down past 200px, reveal on
+				// scroll-up or near the top. 4px hysteresis avoids jitter.
+				if (m.scrollTop <= 200) barHidden = false;
+				else if (m.scrollTop > lastBarY + 4) barHidden = true;
+				else if (m.scrollTop < lastBarY - 4) barHidden = false;
+				lastBarY = m.scrollTop;
 				// Scroll-spy: the last heading scrolled above the top band is "active".
 				let cur = '';
 				for (const h of headings) {
@@ -651,6 +659,8 @@
 		ready = false;
 		html = '';
 		progress = 0;
+		barHidden = false;
+		lastBarY = 0;
 		focusIndex = -1;
 		blocks = [];
 		headings = [];
@@ -739,7 +749,7 @@
 
 <div class="progress" aria-hidden="true" style={`--p:${progress}`}></div>
 
-<nav class="bar">
+<nav class="bar" class:bar-hidden={barHidden && !showDisplay && !menuOpen}>
 	<button class="back" type="button" onclick={goBack} aria-label="Back">
 		<Icon name="back" size={18} />
 		<span>Back</span>
@@ -1281,6 +1291,15 @@
 		margin: -0.4rem 0 1.4rem;
 		padding: 0.5rem 0;
 		background: var(--bg);
+		transition: transform 180ms var(--ease);
+	}
+	.bar.bar-hidden {
+		transform: translateY(-100%);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.bar {
+			transition: none;
+		}
 	}
 	.back,
 	.display-btn {
@@ -1740,6 +1759,14 @@
 		}
 		.bar {
 			position: static;
+		}
+	}
+	@media (max-width: 640px) {
+		/* The app top bar is hidden on the reader route at this width (see
+		   +layout.svelte), so this bar is the only chrome: sticky + auto-hiding. */
+		.bar {
+			position: sticky;
+			padding-top: calc(0.5rem + env(safe-area-inset-top));
 		}
 	}
 	.sr-status {
