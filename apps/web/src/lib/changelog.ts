@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.23.0',
+		date: '2026-06-10',
+		title: 'A reading experience that feels like paper',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Article typography now shares one carefully tuned layer across the reader, the magazine, and the newspaper. Body copy reads in a proper book serif on every device, headings follow the face you chose, links stop speckling the page blue, and the dark themes quietly open the leading and soften images so a long read feels even from the first line to the last.'
+			},
+			{
+				kind: 'added',
+				text: 'Every article now ends with a proper full stop: an end mark, one-tap Archive, Later, and Shortlist, and a Next up card that carries you straight to the next item in the list you came from — so finishing one piece flows into the next without a trip back to the inbox.'
+			},
+			{
+				kind: 'improved',
+				text: 'The reader chrome gets out of the way. The top bar slides away as you read and returns the instant you scroll back, occasional actions tuck into a quiet menu, and on phones the app bar steps aside so the page is all there is. Display settings rise as a bottom sheet, and the theme picker now re-themes just the article you are reading instead of the whole app.'
+			},
+			{
+				kind: 'fixed',
+				text: 'A broad legibility pass: text selection and highlights are now clearly visible on every theme, muted text meets the AAA contrast bar, the Black theme reads a touch warmer and softer for night reading, newsletter bylines show a real name instead of a raw address, and an article that repeated its own title no longer shows it twice.'
+			}
+		]
+	},
+	{
 		version: '0.22.0',
 		date: '2026-06-09',
 		title: 'Mute noisy newsletters and sweep out stale feed items',
