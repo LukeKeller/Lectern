@@ -318,6 +318,26 @@
 		}
 	}
 
+	// Layered Escape: close the topmost reader overlay (Display popover, find bar,
+	// highlight popover) instead of leaving the reader. Capture phase so it runs
+	// before the layout's bubble-phase Escape-goes-back shortcut.
+	function onEscapeCapture(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		if (showDisplay) {
+			showDisplay = false;
+		} else if (findOpen) {
+			closeFind();
+		} else if (selRect) {
+			selRect = null;
+			pendingHighlight = null;
+			window.getSelection()?.removeAllRanges();
+		} else {
+			return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
+	}
+
 	// In-document find (Cmd/Ctrl+F). Matches are wrapped in <mark.find-hit> by
 	// walking the article's text nodes; clearFind() fully unwraps them so the
 	// article (and the existing mark.lectern-hl highlights) are never corrupted.
@@ -661,6 +681,7 @@
 		activeList.set(controller);
 		// Global listeners live for the component's whole life; they no-op while
 		// !ready, so they stay attached across reader→reader reloads.
+		window.addEventListener('keydown', onEscapeCapture, true);
 		window.addEventListener('keydown', onFindKey);
 		window.addEventListener('scroll', onScroll, { passive: true });
 		window.addEventListener('keydown', onKey);
@@ -671,6 +692,7 @@
 			capture();
 			if (timer) clearTimeout(timer);
 			if (raf) cancelAnimationFrame(raf);
+			window.removeEventListener('keydown', onEscapeCapture, true);
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('keydown', onKey);
 			window.removeEventListener('resize', updateBar);
