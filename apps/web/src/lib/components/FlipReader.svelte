@@ -229,11 +229,17 @@
 
 	let touchX = 0;
 	let touchY = 0;
+	// A swipe that starts inside a horizontally pannable embed is panning that
+	// embed, never a page turn.
+	let touchInPannable = false;
 	function onTouchStart(e: TouchEvent) {
 		touchX = e.changedTouches[0]?.clientX ?? 0;
 		touchY = e.changedTouches[0]?.clientY ?? 0;
+		const target = e.target instanceof Element ? e.target : null;
+		touchInPannable = !!target?.closest('pre, table, iframe, video');
 	}
 	function onTouchEnd(e: TouchEvent) {
+		if (touchInPannable) return;
 		const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX;
 		const dy = (e.changedTouches[0]?.clientY ?? 0) - touchY;
 		if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
