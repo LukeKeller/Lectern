@@ -465,10 +465,14 @@
 		border-radius: var(--radius);
 	}
 
-	/* Article body typography. The HTML is sanitized upstream. */
+	/* Article body typography. The HTML is sanitized upstream. Body copy reads in
+	   the reading serif (via --reader-font when a reader pane ever provides it),
+	   not the UI sans the page chrome uses; serif at this size wants slightly
+	   tighter leading than the sans did. */
 	.mr-body {
+		font-family: var(--reader-font, var(--font-serif));
 		font-size: var(--text-lg);
-		line-height: 1.7;
+		line-height: 1.6;
 		color: var(--text);
 	}
 	.mr-body :global(p) {
