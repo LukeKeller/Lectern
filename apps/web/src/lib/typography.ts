@@ -105,7 +105,7 @@ export const THEME_SWATCHES: Record<ThemeMode, { label: string; bg: string; fg: 
 	sepia: { label: 'Sepia', bg: '#f4ecd8', fg: '#43361f' },
 	newsprint: { label: 'Newsprint', bg: '#f1e4c8', fg: '#2b1f10' },
 	dark: { label: 'Dark', bg: '#1a1815', fg: '#e8e3d7' },
-	black: { label: 'Black', bg: '#000000', fg: '#d9d9d9' },
+	black: { label: 'Black', bg: '#000000', fg: '#cfcdc8' },
 	contrast: { label: 'Contrast', bg: '#000000', fg: '#ffffff' }
 };
 
@@ -250,7 +250,7 @@ export const THEME_TEXT: Record<Exclude<ThemeMode, 'auto'>, string> = {
 	sepia: '#43361f',
 	newsprint: '#2b1f10',
 	dark: '#e8e3d7',
-	black: '#dcdcdc',
+	black: '#cfcdc8',
 	contrast: '#ffffff'
 };
 
