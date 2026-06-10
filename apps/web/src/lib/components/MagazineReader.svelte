@@ -128,7 +128,6 @@
 					<div class="mr-article-meta">
 						<span class="mr-kicker">
 							{i + 1} / {magazine.cards.length}
-							{#if marked[card.id]}· {marked[card.id]}{/if}
 						</span>
 						<h2>
 							<a href={resolve('/read/[id]', { id: card.id })}>{card.title}</a>
@@ -397,13 +396,16 @@
 		gap: 1rem;
 		margin-bottom: var(--space-5);
 	}
+	/* Kicker matches FlipReader's spec: UI face, 0.14em tracking, uppercase,
+	   muted ink. Triage state lives on the action buttons, not in the kicker. */
 	.mr-kicker {
 		display: inline-block;
-		font-family: var(--font-mono, ui-monospace, monospace);
+		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		color: var(--accent);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.mr-article-head h2 {
 		font-family: var(--font-serif);
