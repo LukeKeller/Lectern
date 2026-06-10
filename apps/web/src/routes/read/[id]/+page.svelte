@@ -89,6 +89,7 @@
 	let articleEl = $state<HTMLElement | null>(null);
 	let progress = $state(0);
 	let showDisplay = $state(false);
+	let menuOpen = $state(false);
 	let ready = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let raf = 0;
@@ -327,6 +328,8 @@
 		if (e.key !== 'Escape') return;
 		if (showDisplay) {
 			showDisplay = false;
+		} else if (menuOpen) {
+			menuOpen = false;
 		} else if (findOpen) {
 			closeFind();
 		} else if (selRect) {
@@ -778,59 +781,100 @@
 		>
 			<Icon name="book" size={16} />
 		</button>
-		{#if card}
-			<button
-				type="button"
-				class="rail-btn rail-listen"
-				onclick={() => ttsPlayer.listen({ id: card!.id, title: card!.title })}
-				title="Listen"
-				aria-label="Listen to this article"
-			>
-				<Icon name="headphones" size={16} />
-			</button>
-			<button
-				type="button"
-				class="rail-btn rail-podcast"
-				class:on={podcastState === 'done'}
-				class:spin={podcastState === 'busy'}
-				disabled={podcastState === 'busy'}
-				onclick={addToPodcast}
-				title={podcastMsg ?? 'Add to podcast feed'}
-				aria-label="Add this article to your podcast feed"
-			>
-				<Icon name={podcastState === 'done' ? 'check' : 'rss'} size={16} />
-			</button>
-		{/if}
 		<button
 			type="button"
-			class="rail-btn rail-refetch"
-			class:spin={refetching}
-			onclick={refetchContent}
-			disabled={refetching}
-			title="Re-fetch full content from original ( r )"
-			aria-label="Re-fetch full content from original"
+			class="rail-btn rail-more"
+			class:on={menuOpen}
+			aria-expanded={menuOpen}
+			aria-haspopup="menu"
+			onclick={() => {
+				showDisplay = false;
+				menuOpen = !menuOpen;
+			}}
+			title="More actions"
+			aria-label="More actions"
 		>
-			<Icon name="refresh" size={16} />
+			<Icon name="more" size={16} />
 		</button>
-		{#if card}
-			<!-- card.url is an external absolute URL, not an internal route -->
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-			<a class="orig" href={card.url} target="_blank" rel="noopener noreferrer">
-				<span>Original</span>
-				<Icon name="external" size={15} />
-			</a>
-		{/if}
 		<button
 			type="button"
 			class="display-btn"
 			class:on={showDisplay}
 			aria-expanded={showDisplay}
-			onclick={() => (showDisplay = !showDisplay)}
+			onclick={() => {
+				menuOpen = false;
+				showDisplay = !showDisplay;
+			}}
 		>
 			<Icon name="sliders" size={16} />
 			<span>Display</span>
 		</button>
 	</div>
+
+	{#if menuOpen}
+		<button
+			type="button"
+			class="display-scrim"
+			aria-label="Close menu"
+			onclick={() => (menuOpen = false)}
+		></button>
+		<div class="more-menu" role="menu" aria-label="More actions">
+			{#if card}
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={() => {
+						ttsPlayer.listen({ id: card!.id, title: card!.title });
+						menuOpen = false;
+					}}
+				>
+					<Icon name="headphones" size={16} />
+					<span>Listen</span>
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					class:spin={podcastState === 'busy'}
+					disabled={podcastState === 'busy'}
+					onclick={addToPodcast}
+					title={podcastMsg ?? 'Add to podcast feed'}
+				>
+					<Icon name={podcastState === 'done' ? 'check' : 'rss'} size={16} />
+					<span>{podcastState === 'done' ? 'Added to podcast' : 'Add to podcast'}</span>
+				</button>
+			{/if}
+			<button
+				type="button"
+				role="menuitem"
+				class="menu-item"
+				disabled={refetching}
+				onclick={() => {
+					void refetchContent();
+					menuOpen = false;
+				}}
+			>
+				<Icon name="refresh" size={16} />
+				<span>Re-fetch content</span>
+			</button>
+			{#if card}
+				<!-- card.url is an external absolute URL, not an internal route -->
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a
+					role="menuitem"
+					class="menu-item"
+					href={card.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					onclick={() => (menuOpen = false)}
+				>
+					<Icon name="external" size={16} />
+					<span>Open original</span>
+				</a>
+			{/if}
+		</div>
+	{/if}
 
 	{#if showDisplay}
 		<button
@@ -1239,7 +1283,6 @@
 		background: var(--bg);
 	}
 	.back,
-	.orig,
 	.display-btn {
 		display: inline-flex;
 		align-items: center;
@@ -1258,7 +1301,6 @@
 			background var(--dur-fast) var(--ease);
 	}
 	.back:hover,
-	.orig:hover,
 	.display-btn:hover,
 	.display-btn.on {
 		color: var(--text);
@@ -1268,6 +1310,53 @@
 		display: flex;
 		align-items: center;
 		gap: 0.3rem;
+	}
+	/* Overflow "…" menu: same scrim + bar-anchored popover pattern as Display. */
+	.more-menu {
+		position: absolute;
+		top: calc(100% + 0.3rem);
+		right: 0;
+		z-index: 25;
+		min-width: 13.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding: 0.35rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow);
+	}
+	.menu-item {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		width: 100%;
+		min-height: 2.75rem;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+		transition:
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.menu-item:hover {
+		background: var(--surface-alt);
+	}
+	.menu-item:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.menu-item :global(svg) {
+		flex-shrink: 0;
+		color: var(--text-muted);
 	}
 
 	/* Focus mode: spotlight the focused block by fading the rest of the prose.
@@ -1690,7 +1779,7 @@
 	.rail-btn:disabled {
 		cursor: default;
 	}
-	.rail-btn.spin :global(svg) {
+	.menu-item.spin :global(svg) {
 		animation: rail-spin 0.8s linear infinite;
 	}
 	@keyframes rail-spin {
@@ -1699,7 +1788,7 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.rail-btn.spin :global(svg) {
+		.menu-item.spin :global(svg) {
 			animation: none;
 		}
 	}
@@ -1786,7 +1875,7 @@
 		text-decoration: underline;
 	}
 	@media (max-width: 979px) {
-		.rail-btn:not(.rail-listen):not(.rail-refetch) {
+		.rail-btn:not(.rail-more) {
 			display: none;
 		}
 	}
