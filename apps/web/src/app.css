@@ -68,6 +68,13 @@
 	font-display: swap;
 	src: url('/fonts/literata-400-italic.woff2') format('woff2');
 }
+@font-face {
+	font-family: 'Literata';
+	font-style: italic;
+	font-weight: 600;
+	font-display: swap;
+	src: url('/fonts/literata-600-italic.woff2') format('woff2');
+}
 /* Metric-matched Georgia stand-in shown while Literata downloads — size-adjust
    keeps line wraps stable so the swap doesn't reflow the column. */
 @font-face {
