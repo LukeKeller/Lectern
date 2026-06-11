@@ -157,7 +157,7 @@ disclosed, never a wall of dense panels and tiny controls). If a screen could be
 for a generic admin template, the design has failed.
 
 Readability is the headline feature, not a setting buried three menus deep. The reader
-controls typeface, measure, size, and theme; seven themes (Paper, Sepia, Newsprint, Dark,
+controls typeface, measure, size, and theme; seven themes (Paper, Sepia, Newsprint, E-ink, Dark,
 Black-OLED, High-Contrast) and four bundled reading faces tuned for legibility and dyslexia
 (Atkinson Hyperlegible, Lexend, Literata, OpenDyslexic) are first-class. Target is **WCAG AAA
 where feasible**.

@@ -26,6 +26,29 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.24.0',
+		date: '2026-06-11',
+		title: 'A periodicals desk for your newsletters, and an E-ink theme',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Newsletters now have a home of their own. The collection opens on a rack of publications: each sender is a typeset nameplate with its unread count and latest arrival, and tapping one narrows the list to that publication, with a line that tells you how often it arrives. Mark a publication read in one tap, or ignore the sender entirely, right where you read it.'
+			},
+			{
+				kind: 'added',
+				text: 'Reading a newsletter feels like correspondence: the issue opens under the publication nameplate with the day it arrived, and the end of an issue flows straight into the next unread one from the same sender, then on to your other newsletters.'
+			},
+			{
+				kind: 'added',
+				text: 'An E-ink theme for reflective tablets (Boox, Kobo, reMarkable): pure ink on pure white, crisp hairlines instead of shadows and washes, highlights that render like a real marker, and zero animation so the panel never ghosts. Pick it in Settings or theme just the article view from the reader.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Newsletter rows stop pretending to be web pages: the sender initial replaces a blank favicon, the byline drops the internal address, and the dead "Open original" link is gone from issues that only ever existed as email.'
+			}
+		]
+	},
+	{
 		version: '0.23.0',
 		date: '2026-06-10',
 		title: 'A reading experience that feels like paper',
