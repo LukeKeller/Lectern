@@ -368,6 +368,43 @@
 	--focus-dim: 30%;
 }
 
+/* E-ink: reflective panels (Boox, Kobo, reMarkable). The display itself is the
+   paper, so this is the one theme that uses pure ink on pure white — the panel
+   supplies the warmth the LCD themes tint in. Midtones dither and shadows smear
+   on e-ink, so structure is carried by hairlines and weight, never washes or
+   elevation; shadows are zeroed (kept as valid transparent shadows so combined
+   box-shadow lists stay parseable), grain is off, and motion is frozen below. */
+[data-theme='eink'] {
+	color-scheme: light;
+	--bg: #ffffff;
+	--surface: #ffffff;
+	--surface-alt: #ebebeb;
+	--text: #000000;
+	--text-muted: #2e2e2e;
+	--border: #b8b8b8;
+	--border-strong: #000000;
+	/* The one voice on e-ink is ink: emphasis by weight and inversion, not hue. */
+	--accent: #000000;
+	--accent-deep: #000000;
+	--accent-contrast: #ffffff;
+	--accent-soft: #e4e4e4;
+	--ok: #000000;
+	--error: #000000;
+	--shadow-sm: 0 0 0 rgba(0, 0, 0, 0);
+	--shadow: 0 0 0 rgba(0, 0, 0, 0);
+	--bg-sunken: #f2f2f2;
+	--shadow-md: 0 0 0 rgba(0, 0, 0, 0);
+	--edge-hi: inset 0 0 0 rgba(0, 0, 0, 0);
+	--shadow-paper: 0 0 0 rgba(0, 0, 0, 0);
+	--grain-strength: 0;
+	--prose-leading-boost: 0;
+	/* Pre-flatten images so the panel's own dithering gets clean input. */
+	--prose-img-filter: grayscale(1) contrast(1.06);
+	--hl-mix: 100%;
+	--hl-blend: multiply;
+	--focus-dim: 38%;
+}
+
 /* `auto`: no data-theme attribute → follow the OS. Mirrors the dark palette. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme]) {
@@ -518,4 +555,17 @@ textarea {
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
 	}
+}
+
+/* E-ink panels ghost on every animated frame: freeze motion exactly as
+   prefers-reduced-motion does. Scoped by attribute, so it also applies when
+   only the reader pane (.doc) is set to E-ink. */
+[data-theme='eink'],
+[data-theme='eink'] *,
+[data-theme='eink'] *::before,
+[data-theme='eink'] *::after {
+	animation-duration: 0.01ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.01ms !important;
+	scroll-behavior: auto !important;
 }

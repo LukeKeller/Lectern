@@ -11,7 +11,15 @@
  * legibility). The reader can override the app theme independently (see
  * `readerTheme`).
  */
-export type ThemeMode = 'auto' | 'light' | 'sepia' | 'newsprint' | 'dark' | 'black' | 'contrast';
+export type ThemeMode =
+	| 'auto'
+	| 'light'
+	| 'sepia'
+	| 'newsprint'
+	| 'eink'
+	| 'dark'
+	| 'black'
+	| 'contrast';
 
 /** Reader-pane theme: `match` inherits the app theme; anything else overrides it. */
 export type ReaderTheme = 'match' | Exclude<ThemeMode, 'auto'>;
@@ -104,6 +112,7 @@ export const THEME_SWATCHES: Record<ThemeMode, { label: string; bg: string; fg: 
 	light: { label: 'Paper', bg: '#f6f4ee', fg: '#2a2620' },
 	sepia: { label: 'Sepia', bg: '#f4ecd8', fg: '#43361f' },
 	newsprint: { label: 'Newsprint', bg: '#f1e4c8', fg: '#2b1f10' },
+	eink: { label: 'E-ink', bg: '#ffffff', fg: '#000000' },
 	dark: { label: 'Dark', bg: '#1a1815', fg: '#e8e3d7' },
 	black: { label: 'Black', bg: '#000000', fg: '#cfcdc8' },
 	contrast: { label: 'Contrast', bg: '#000000', fg: '#ffffff' }
@@ -123,6 +132,7 @@ const THEMES: Record<ThemeMode, true> = {
 	light: true,
 	sepia: true,
 	newsprint: true,
+	eink: true,
 	dark: true,
 	black: true,
 	contrast: true
@@ -132,6 +142,7 @@ const READER_THEMES: Record<ReaderTheme, true> = {
 	light: true,
 	sepia: true,
 	newsprint: true,
+	eink: true,
 	dark: true,
 	black: true,
 	contrast: true
@@ -238,6 +249,7 @@ export const THEME_BG: Record<Exclude<ThemeMode, 'auto'>, string> = {
 	light: '#f6f4ee',
 	sepia: '#f4ecd8',
 	newsprint: '#f1e4c8',
+	eink: '#ffffff',
 	dark: '#1a1815',
 	black: '#000000',
 	contrast: '#000000'
@@ -249,6 +261,7 @@ export const THEME_TEXT: Record<Exclude<ThemeMode, 'auto'>, string> = {
 	light: '#2a2620',
 	sepia: '#43361f',
 	newsprint: '#2b1f10',
+	eink: '#000000',
 	dark: '#e8e3d7',
 	black: '#cfcdc8',
 	contrast: '#ffffff'
