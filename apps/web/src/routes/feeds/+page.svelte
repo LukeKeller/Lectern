@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Feed, FeedFolder } from '@lectern/shared';
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { getClient } from '$lib/config';
 	import { readOpmlFile } from '$lib/opml';
 	import { groupFeeds } from '$lib/feeds';
@@ -18,13 +19,14 @@
 	let importMessage = $state<string | undefined>(undefined);
 
 	// Per-feed notification prefs, keyed by feed id. Missing => disabled.
-	let notifyPrefs = $state<Map<string, boolean>>(new Map());
+	const notifyPrefs = new SvelteMap<string, boolean>();
 	const grouped = $derived(groupFeeds(feeds, folders));
 
 	async function loadNotifyPrefs() {
 		try {
 			const res = await getClient().getFeedNotifications();
-			notifyPrefs = new Map(res.feeds.map((f) => [f.feedId, f.enabled]));
+			notifyPrefs.clear();
+			for (const f of res.feeds) notifyPrefs.set(f.feedId, f.enabled);
 		} catch {
 			/* offline or push not configured: leave bells in their default (off) state */
 		}
@@ -33,20 +35,14 @@
 	async function toggleNotify(feed: Feed) {
 		const current = notifyPrefs.get(feed.id) ?? false;
 		const next = !current;
-		// Optimistic update (reassign so Svelte tracks the Map change).
-		const optimistic = new Map(notifyPrefs);
-		optimistic.set(feed.id, next);
-		notifyPrefs = optimistic;
+		// Optimistic update; SvelteMap is reactive in place.
+		notifyPrefs.set(feed.id, next);
 		try {
 			const pref = await getClient().setFeedNotification(feed.id, next);
-			const confirmed = new Map(notifyPrefs);
-			confirmed.set(feed.id, pref.enabled);
-			notifyPrefs = confirmed;
+			notifyPrefs.set(feed.id, pref.enabled);
 		} catch (e) {
 			// Roll back on failure.
-			const rolledBack = new Map(notifyPrefs);
-			rolledBack.set(feed.id, current);
-			notifyPrefs = rolledBack;
+			notifyPrefs.set(feed.id, current);
 			error = e instanceof Error ? e.message : 'Could not update notifications.';
 		}
 	}
