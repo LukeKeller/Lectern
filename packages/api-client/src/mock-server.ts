@@ -38,9 +38,10 @@ const NOW = "2026-06-03T12:00:00Z";
 // Feed timestamps are relative to the real clock so the daily Newspaper opens to
 // a populated edition (its default is yesterday's unread feed items) during
 // frontend dev. Noon avoids day-boundary timezone drift.
-function daysAgo(n: number): string {
+// Newsletter arrivals pass a morning `hour` so two same-day issues keep distinct times.
+function daysAgo(n: number, hour = 12): string {
   const d = new Date();
-  d.setHours(12, 0, 0, 0);
+  d.setHours(hour, 0, 0, 0);
   d.setDate(d.getDate() - n);
   return d.toISOString();
 }
@@ -213,13 +214,239 @@ function sampleCards(): Card[] {
       tags: ["react", "performance"],
     },
   ] as const;
-  return base.map((b, i) =>
+  const articles = base.map((b, i) =>
     sampleCard({
       ...b,
       id: `card_${i + 1}`,
       sourceId: `${b.source}_${i + 1}`,
       url: `https://${b.siteName.includes(".") ? b.siteName : "example.com"}/post-${i + 1}`,
       tags: [...b.tags],
+    }),
+  );
+  return [...articles, ...emailCards()].filter((c) => !mockDeletedEmailIds.has(c.id));
+}
+
+// Newsletter issues as the Readeck email pipeline produces them: `author` (and a
+// tag) carry the sender label, siteName is null, coverImage is null (one exception
+// exercises the thumbnail path), and the synthetic newsletter.lectern.local URL
+// never resolves — an email has no canonical web copy. Arrival dates are relative
+// to the real clock so the publication rack and its date dividers stay exercised:
+// two today, two yesterday, the rest tapering back over the past three weeks.
+function emailCards(): Card[] {
+  const issues = [
+    {
+      id: "email_1",
+      sender: "Money Stuff",
+      title: "The Bond Villains Have Lawyers Now",
+      excerpt:
+        "If you sell a derivative whose entire purpose is to evade a rule, you should probably not name it after the rule.",
+      slug: "money-stuff-the-bond-villains-have-lawyers-now",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 3400,
+      readingTimeMinutes: 16,
+      savedAt: daysAgo(0, 8),
+      publishedAt: daysAgo(0, 8),
+      coverImage: null,
+    },
+    {
+      id: "email_2",
+      sender: "Money Stuff",
+      title: "Private Credit Is Eating the World Politely",
+      excerpt:
+        "The nice thing about private credit is that nobody has to mark anything down until everyone has agreed on a story.",
+      slug: "money-stuff-private-credit-is-eating-the-world-politely",
+      location: "inbox",
+      readState: "reading",
+      readingProgress: 0.35,
+      wordCount: 3100,
+      readingTimeMinutes: 14,
+      savedAt: daysAgo(3),
+      publishedAt: daysAgo(3),
+      coverImage: null,
+    },
+    {
+      id: "email_3",
+      sender: "Money Stuff",
+      title: "Insider Trading on the Group Chat",
+      excerpt:
+        "A good rule of thumb is that if your trading strategy requires a group chat named “definitely not insider trading,” it is insider trading.",
+      slug: "money-stuff-insider-trading-on-the-group-chat",
+      location: "archive",
+      readState: "finished",
+      readingProgress: 1,
+      wordCount: 2900,
+      readingTimeMinutes: 13,
+      savedAt: daysAgo(16),
+      publishedAt: daysAgo(16),
+      coverImage: null,
+    },
+    {
+      id: "email_4",
+      sender: "Morning Brew",
+      title: "Streaming's Bundle Era Comes Full Circle",
+      excerpt:
+        "The cable bundle died so that the streaming bundle could be born, and somehow it costs more now.",
+      slug: "morning-brew-streamings-bundle-era",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 980,
+      readingTimeMinutes: 4,
+      savedAt: daysAgo(0, 6),
+      publishedAt: daysAgo(0, 6),
+      coverImage: null,
+    },
+    {
+      id: "email_5",
+      sender: "Morning Brew",
+      title: "The Fed Blinks, Markets Shrug",
+      excerpt: "Rate cuts used to move markets; now they barely move the group chat.",
+      slug: "morning-brew-the-fed-blinks",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 920,
+      readingTimeMinutes: 4,
+      savedAt: daysAgo(1, 6),
+      publishedAt: daysAgo(1, 6),
+      coverImage: null,
+    },
+    {
+      id: "email_6",
+      sender: "Morning Brew",
+      title: "Retail's Returns Problem Gets Expensive",
+      excerpt: "Free returns were never free, and retailers have finally done the math out loud.",
+      slug: "morning-brew-retails-returns-problem",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 1050,
+      readingTimeMinutes: 5,
+      savedAt: daysAgo(4),
+      publishedAt: daysAgo(4),
+      coverImage: null,
+    },
+    {
+      id: "email_7",
+      sender: "Morning Brew",
+      title: "Chipmakers Can't Hire Fast Enough",
+      excerpt: "There are more fabs under construction than people who know how to run them.",
+      slug: "morning-brew-chipmakers-cant-hire",
+      location: "archive",
+      readState: "finished",
+      readingProgress: 1,
+      wordCount: 870,
+      readingTimeMinutes: 4,
+      savedAt: daysAgo(11),
+      publishedAt: daysAgo(11),
+      coverImage: null,
+    },
+    {
+      id: "email_8",
+      sender: "Stratechery",
+      title: "Aggregation Theory and the Agent Era",
+      excerpt:
+        "Agents change who owns demand, which means they change everything about who captures value on the internet.",
+      slug: "stratechery-aggregation-theory-and-the-agent-era",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 2600,
+      readingTimeMinutes: 12,
+      savedAt: daysAgo(1, 9),
+      publishedAt: daysAgo(1, 9),
+      // The one email with a cover, so the list thumbnail path gets exercised.
+      coverImage: "https://picsum.photos/seed/stratechery-agents/640/360",
+    },
+    {
+      id: "email_9",
+      sender: "Stratechery",
+      title: "Nvidia Earnings and the Compute Overhang",
+      excerpt:
+        "The market is no longer asking whether demand for compute is real, but who ends up holding the depreciation.",
+      slug: "stratechery-nvidia-earnings-and-the-compute-overhang",
+      location: "archive",
+      readState: "finished",
+      readingProgress: 1,
+      wordCount: 2800,
+      readingTimeMinutes: 13,
+      savedAt: daysAgo(8),
+      // No publish date from the backend: exercises the savedAt fallback.
+      publishedAt: null,
+      coverImage: null,
+    },
+    {
+      id: "email_10",
+      sender: "The Pragmatic Engineer",
+      title: "Inside the Big Tech Hiring Rebound",
+      excerpt:
+        "After two years of frozen headcount, the hiring pipelines at the biggest tech companies are quietly moving again.",
+      slug: "pragmatic-engineer-big-tech-hiring-rebound",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 3500,
+      readingTimeMinutes: 16,
+      savedAt: daysAgo(5),
+      publishedAt: daysAgo(5),
+      coverImage: null,
+    },
+    {
+      id: "email_11",
+      sender: "The Pragmatic Engineer",
+      title: "What Staff Engineers Actually Do",
+      excerpt:
+        "Ask five companies what a staff engineer does and you will get seven answers, two of them from the same company.",
+      slug: "pragmatic-engineer-what-staff-engineers-actually-do",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 3200,
+      readingTimeMinutes: 15,
+      savedAt: daysAgo(19),
+      publishedAt: daysAgo(19),
+      coverImage: null,
+    },
+    {
+      id: "email_12",
+      sender: "Garbage Day",
+      title: "The Algorithm Has a Podcast Now",
+      excerpt:
+        "Every platform eventually becomes a talk show, and this week three of them did it at once.",
+      slug: "garbage-day-the-algorithm-has-a-podcast-now",
+      location: "inbox",
+      readState: "unopened",
+      readingProgress: 0,
+      wordCount: 1400,
+      readingTimeMinutes: 7,
+      savedAt: daysAgo(2),
+      publishedAt: daysAgo(2),
+      coverImage: null,
+    },
+  ] as const;
+  return issues.map((issue) =>
+    sampleCard({
+      id: issue.id,
+      sourceId: `rd_${issue.id}`,
+      source: "readeck",
+      category: "email",
+      location: issue.location,
+      readState: issue.readState,
+      readingProgress: issue.readingProgress,
+      title: issue.title,
+      excerpt: issue.excerpt,
+      author: issue.sender,
+      siteName: null,
+      url: `https://newsletter.lectern.local/${issue.slug}`,
+      coverImage: issue.coverImage,
+      wordCount: issue.wordCount,
+      readingTimeMinutes: issue.readingTimeMinutes,
+      tags: [issue.sender],
+      savedAt: issue.savedAt,
+      updatedAt: issue.savedAt,
+      publishedAt: issue.publishedAt,
     }),
   );
 }
@@ -263,13 +490,23 @@ const mockTts = {
   modelId: "eleven_flash_v2_5",
 };
 let mockPlayer = PlayerState.parse({});
-// In-memory newsletter ignore list for dev: a couple of sample senders the user
-// can ignore (which removes them from `known`) and un-ignore.
+// In-memory newsletter ignore state for dev. Ignoring a sender deletes its email
+// cards (as production does): their ids are tombstoned here, dropped from every
+// listing, and reported by /sync pull in `deletedIds`. Un-ignoring never
+// resurrects them. `known` is derived from the live email fixtures so the
+// per-sender counts can never drift from the cards actually served.
 let mockEmailIgnore: string[] = [];
-let mockEmailKnown: EmailSender[] = [
-  { name: "Morning Brew", count: 4 },
-  { name: "Stratechery", count: 2 },
-];
+const mockDeletedEmailIds = new Set<string>();
+
+function emailKnown(): EmailSender[] {
+  const counts = new Map<string, number>();
+  for (const card of emailCards()) {
+    if (mockDeletedEmailIds.has(card.id)) continue;
+    const name = card.author ?? "Newsletter";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([name, count]) => ({ name, count }));
+}
 // In-memory podcast state for dev: a feed token + the set of published doc ids.
 let mockPodcastToken = "mocktoken";
 const mockPodcast = new Set<string>();
@@ -304,6 +541,22 @@ const ARTICLE = [
   "<p>The closing paragraph wraps things up and gives the reader a final block to land on.</p>",
 ].join("");
 
+// Newsletter-shaped body so the reader's email affordances (sender header, dead
+// "open original" link, footer) render against honest material.
+function newsletterHtml(title: string, sender: string): string {
+  return [
+    `<p>Good morning. This is ${sender}, and today's issue is about why “${title}” is the story everyone in the industry is quietly rereading. The details matter more than the headline, so let's take it from the top.</p>`,
+    "<h2>The lead</h2>",
+    `<p>The thing about this story is that everyone saw it coming and nobody priced it in. <a href="https://newsletter.lectern.local/archive">Last month's issue</a> walked through the early signals; this week the other shoe dropped, and the people involved are now saying the quiet part in regulatory filings.</p>`,
+    "<blockquote>The lesson, as always, is that incentives explain ninety percent of behavior, and the other ten percent is paperwork.</blockquote>",
+    "<h2>What else is happening</h2>",
+    `<p>Elsewhere: a merger nobody asked for, an earnings call that was mostly vibes, and a <a href="https://newsletter.lectern.local/links">round-up of links</a> worth your weekend. None of it is as interesting as the lead, which is why it is down here.</p>`,
+    `<img src="https://picsum.photos/seed/${encodeURIComponent(sender)}/640/320" alt="Chart of the week" />`,
+    `<p>That's all for this issue. See you in the next one. — ${sender}</p>`,
+    "<p>You are receiving this because you subscribed.</p>",
+  ].join("");
+}
+
 /**
  * Fixture handlers keyed by the registry's `operationId`. Each returns a plain
  * object the router validates against the endpoint's response schema (so a fixture
@@ -333,7 +586,9 @@ const handlers: Record<string, MockHandler> = {
       }),
     };
   },
-  getDocument: ({ params }) => ({ json: sampleCard({ id: params.id }) }),
+  getDocument: ({ params }) => ({
+    json: sampleCards().find((c) => c.id === params.id) ?? sampleCard({ id: params.id }),
+  }),
   updateDocument: ({ params, body }) => ({
     json: sampleCard({ id: params.id, ...(body as UpdateDocumentRequest) }),
   }),
@@ -342,25 +597,36 @@ const handlers: Record<string, MockHandler> = {
   bulkMaintenance: ({ body }) => ({
     json: { action: (body as BulkMaintenanceRequest).action, affected: 0 },
   }),
-  getEmailIgnore: () => ({ json: { senders: [...mockEmailIgnore], known: mockEmailKnown } }),
+  getEmailIgnore: () => ({ json: { senders: [...mockEmailIgnore], known: emailKnown() } }),
   addEmailIgnore: ({ body }) => {
     const sender = (body as EmailIgnoreSenderRequest).sender;
     if (!mockEmailIgnore.some((s) => s.toLowerCase() === sender.toLowerCase()))
       mockEmailIgnore.push(sender);
-    const removed = mockEmailKnown
-      .filter((k) => k.name.toLowerCase() === sender.toLowerCase())
-      .reduce((n, k) => n + k.count, 0);
-    mockEmailKnown = mockEmailKnown.filter((k) => k.name.toLowerCase() !== sender.toLowerCase());
-    return { json: { senders: [...mockEmailIgnore], known: mockEmailKnown, removed } };
+    // Production deletes the sender's already-ingested emails: tombstone their
+    // ids so listings drop them and the next /sync pull returns them in
+    // `deletedIds`. removeEmailIgnore never brings them back.
+    const removed = emailCards().filter(
+      (c) =>
+        (c.author ?? "").toLowerCase() === sender.toLowerCase() && !mockDeletedEmailIds.has(c.id),
+    );
+    for (const c of removed) mockDeletedEmailIds.add(c.id);
+    return {
+      json: { senders: [...mockEmailIgnore], known: emailKnown(), removed: removed.length },
+    };
   },
   removeEmailIgnore: ({ body }) => {
     const sender = (body as EmailIgnoreSenderRequest).sender;
     mockEmailIgnore = mockEmailIgnore.filter((s) => s.toLowerCase() !== sender.toLowerCase());
-    return { json: { senders: [...mockEmailIgnore], known: mockEmailKnown } };
+    return { json: { senders: [...mockEmailIgnore], known: emailKnown() } };
   },
-  getDocumentContent: ({ params }) => ({
-    json: { id: params.id, html: `<main>${ARTICLE}</main>` },
-  }),
+  getDocumentContent: ({ params }) => {
+    const card = sampleCards().find((c) => c.id === params.id);
+    const html =
+      card?.category === "email"
+        ? newsletterHtml(card.title, card.author ?? "Newsletter")
+        : ARTICLE;
+    return { json: { id: params.id, html: `<main>${html}</main>` } };
+  },
   getDocumentAccent: () => ({ json: { color: null } }),
   importReadwise: ({ body }) => {
     const total = (body as ImportReadwiseRequest).csv
@@ -393,7 +659,9 @@ const handlers: Record<string, MockHandler> = {
   }),
   deleteView: () => ({}),
   // ---- sync ----
-  syncPull: () => ({ json: { cards: sampleCards(), deletedIds: [], cursor: "1" } }),
+  syncPull: () => ({
+    json: { cards: sampleCards(), deletedIds: [...mockDeletedEmailIds], cursor: "1" },
+  }),
   syncPush: ({ body }) => ({
     json: { applied: (body as SyncPushRequest).mutations.length, conflicts: [] },
   }),
@@ -403,7 +671,7 @@ const handlers: Record<string, MockHandler> = {
       json: {
         miniflux: cards.filter((c) => c.source === "miniflux").length,
         readeck: cards.filter((c) => c.source === "readeck").length,
-        tombstoned: 0,
+        tombstoned: mockDeletedEmailIds.size,
       },
     };
   },

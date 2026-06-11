@@ -148,9 +148,10 @@
 	/** Byline: author · publication · reading time (de-duplicated). */
 	function meta(card: Card): string {
 		const pub = card.siteName ?? hostname(card.url);
+		const showPub = card.category !== 'email';
 		const parts: string[] = [];
 		if (card.author) parts.push(card.author);
-		if (pub && pub !== card.author) parts.push(pub);
+		if (showPub && pub && pub !== card.author) parts.push(pub);
 		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
 		return parts.join('  ·  ');
 	}
@@ -386,7 +387,11 @@
 								</a>
 								{#if card.excerpt}<p class="snippet">{card.excerpt}</p>{/if}
 								<p class="meta">
-									<SourceAvatar url={card.url} siteName={card.siteName} size={16} />
+									<SourceAvatar
+										url={card.url}
+										siteName={card.category === 'email' ? card.author : card.siteName}
+										size={16}
+									/>
 									<span class="byline">{meta(card)}</span>
 									{#if card.highlightCount > 0}
 										<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
@@ -520,21 +525,23 @@
 													{savingId === card.id ? 'Saving…' : 'Save to library'}
 												</button>
 											{/if}
-											<!-- eslint-disable svelte/no-navigation-without-resolve -->
-											<a
-												class="menu-link"
-												role="menuitem"
-												href={card.url}
-												target="_blank"
-												rel="noreferrer noopener"
-												onclick={(e) => {
-													e.stopPropagation();
-													menuOpenId = null;
-												}}
-											>
-												<Icon name="external" size={15} /> Open original
-											</a>
-											<!-- eslint-enable svelte/no-navigation-without-resolve -->
+											{#if card.category !== 'email'}
+												<!-- eslint-disable svelte/no-navigation-without-resolve -->
+												<a
+													class="menu-link"
+													role="menuitem"
+													href={card.url}
+													target="_blank"
+													rel="noreferrer noopener"
+													onclick={(e) => {
+														e.stopPropagation();
+														menuOpenId = null;
+													}}
+												>
+													<Icon name="external" size={15} /> Open original
+												</a>
+												<!-- eslint-enable svelte/no-navigation-without-resolve -->
+											{/if}
 											<div class="menu-sep" role="separator"></div>
 											<button
 												type="button"

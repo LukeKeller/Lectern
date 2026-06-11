@@ -35,6 +35,7 @@
 		type AnchorCandidate
 	} from '$lib/progress';
 	import { displayAuthor } from '$lib/author';
+	import { nextIssue, senderName, issueDate } from '$lib/newsletters';
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { scrollIntoViewMotion, scrollBehavior } from '$lib/motion';
@@ -602,10 +603,19 @@
 	/** After triaging, jump to the next queued document (if enabled) else go back. */
 	function advanceOrBack(fromId: string) {
 		if (readerSettings.current.autoAdvance) {
-			const next = readingQueue.nextAfter(fromId);
-			if (next && next !== fromId) {
-				void goto(resolve('/read/[id]', { id: next }));
-				return;
+			if (card?.category === 'email') {
+				// Email cards advance issue-to-issue (same-sender first), using the
+				// already-resolved nextCard from the nextIssue effect below.
+				if (nextCard && nextCard.id !== fromId) {
+					void goto(resolve('/read/[id]', { id: nextCard.id }));
+					return;
+				}
+			} else {
+				const next = readingQueue.nextAfter(fromId);
+				if (next && next !== fromId) {
+					void goto(resolve('/read/[id]', { id: next }));
+					return;
+				}
 			}
 		}
 		goBack();
@@ -616,13 +626,39 @@
 	// Dexie mirror. Undefined when last-in-queue or opened via a direct link.
 	const nextId = $derived(card ? readingQueue.nextAfter(card.id) : undefined);
 	let nextCard = $state<Card | undefined>(undefined);
+	let nextKicker = $state('Next up');
+	// True when the kicker already names the publication, so the meta line
+	// doesn't repeat it ("Next issue · Money Stuff" + "Money Stuff · 14 min").
+	let nextSameSender = $state(false);
 	$effect(() => {
+		const current = card;
+		let cancelled = false;
+		if (current?.category === 'email') {
+			// Issue-to-issue flow: newest unread same-sender issue first, then the
+			// newest unread other newsletter. No fallback to the reading queue —
+			// when the email backlog is finished, the dead-end is the triage row.
+			void db.cards.toArray().then((all) => {
+				if (cancelled) return;
+				const pick = nextIssue(all, current);
+				nextCard = pick?.card;
+				nextSameSender = pick?.sameSender ?? false;
+				nextKicker = pick
+					? pick.sameSender
+						? `Next issue · ${senderName(current)}`
+						: 'Next newsletter'
+					: '';
+			});
+			return () => {
+				cancelled = true;
+			};
+		}
+		nextKicker = 'Next up';
+		nextSameSender = false;
 		const nid = nextId;
 		if (!nid) {
 			nextCard = undefined;
 			return;
 		}
-		let cancelled = false;
 		void db.cards.get(nid).then((c) => {
 			if (!cancelled) nextCard = c;
 		});
@@ -630,6 +666,14 @@
 			cancelled = true;
 		};
 	});
+
+	/** 'Arrived Wednesday, June 10' — year only when the issue isn't from this year. */
+	function arrivalLabel(c: Card): string {
+		const d = new Date(issueDate(c));
+		const opts: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+		if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+		return d.toLocaleDateString(undefined, opts);
+	}
 
 	/**
 	 * Load (or reload) the document for the current route id. The reader is a
@@ -876,20 +920,22 @@
 					<span>{podcastState === 'done' ? 'Added to podcast' : 'Add to podcast'}</span>
 				</button>
 			{/if}
-			<button
-				type="button"
-				role="menuitem"
-				class="menu-item"
-				disabled={refetching}
-				onclick={() => {
-					void refetchContent();
-					menuOpen = false;
-				}}
-			>
-				<Icon name="refresh" size={16} />
-				<span>Re-fetch content</span>
-			</button>
-			{#if card}
+			{#if !card || card.category !== 'email'}
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					disabled={refetching}
+					onclick={() => {
+						void refetchContent();
+						menuOpen = false;
+					}}
+				>
+					<Icon name="refresh" size={16} />
+					<span>Re-fetch content</span>
+				</button>
+			{/if}
+			{#if card && card.category !== 'email'}
 				<!-- card.url is an external absolute URL, not an internal route -->
 				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
@@ -1057,21 +1103,30 @@
 			<div class="focus-bar" style={`--top:${barTop}px;--h:${barH}px`} aria-hidden="true"></div>
 		{/if}
 		{#if card}
-			<div class="eyebrow">{card.siteName ?? new URL(card.url).hostname}</div>
-			<h1>{card.title}</h1>
-			{#if card.author || card.publishedAt || card.readingTimeMinutes}
+			{#if card.category === 'email'}
+				<div class="nameplate">{displayAuthor(card.author ?? '') || 'Newsletter'}</div>
+				<h1>{card.title}</h1>
 				<p class="byline">
-					{#if card.author}By {displayAuthor(card.author)}{/if}
-					{#if card.publishedAt}
-						{#if card.author}<span class="dot">·</span>{/if}{new Date(
-							card.publishedAt
-						).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-					{/if}
-					{#if card.readingTimeMinutes}
-						{#if card.author || card.publishedAt}<span class="dot">·</span>
-						{/if}{card.readingTimeMinutes} min read
-					{/if}
+					Arrived {arrivalLabel(card)}{#if card.readingTimeMinutes}<span class="dot">·</span
+						>{card.readingTimeMinutes} min read{/if}
 				</p>
+			{:else}
+				<div class="eyebrow">{card.siteName ?? new URL(card.url).hostname}</div>
+				<h1>{card.title}</h1>
+				{#if card.author || card.publishedAt || card.readingTimeMinutes}
+					<p class="byline">
+						{#if card.author}By {displayAuthor(card.author)}{/if}
+						{#if card.publishedAt}
+							{#if card.author}<span class="dot">·</span>{/if}{new Date(
+								card.publishedAt
+							).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+						{/if}
+						{#if card.readingTimeMinutes}
+							{#if card.author || card.publishedAt}<span class="dot">·</span>
+							{/if}{card.readingTimeMinutes} min read
+						{/if}
+					</p>
+				{/if}
 			{/if}
 			<div class="tageditor"><TagEditor id={card.id} tags={card.tags} /></div>
 		{/if}
@@ -1099,7 +1154,7 @@
 					>
 						Retry
 					</button>
-					{#if card}
+					{#if card && card.category !== 'email'}
 						<!-- card.url is an external absolute URL, not an internal route -->
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 						<a class="err-btn" href={card.url} target="_blank" rel="noopener noreferrer"
@@ -1150,12 +1205,16 @@
 				{/if}
 				{#if nextCard}
 					<a class="next-up" href={resolve('/read/[id]', { id: nextCard.id })}>
-						<span class="next-kicker">Next up</span>
+						<span class="next-kicker">{nextKicker}</span>
 						<span class="next-title">{nextCard.title}</span>
 						<span class="next-meta">
-							{nextCard.siteName ?? new URL(nextCard.url).hostname}
-							{#if nextCard.readingTimeMinutes}<span class="dot">·</span
-								>{nextCard.readingTimeMinutes} min read{/if}
+							{#if !nextSameSender}
+								{nextCard.category === 'email'
+									? displayAuthor(nextCard.author ?? '') || 'Newsletter'
+									: (nextCard.siteName ?? new URL(nextCard.url).hostname)}
+								{#if nextCard.readingTimeMinutes}<span class="dot">·</span>{/if}
+							{/if}
+							{#if nextCard.readingTimeMinutes}{nextCard.readingTimeMinutes} min read{/if}
 						</span>
 					</a>
 				{/if}
@@ -1609,6 +1668,20 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-muted);
+	}
+	/* Miniature nameplate: the app masthead's serif/condensed/double-rule lockup
+	   at title scale — inline-block so the rule hugs the publication name. */
+	.nameplate {
+		display: inline-block;
+		margin: 1.2rem 0 0;
+		font-family: var(--font-serif);
+		font-weight: 700;
+		font-stretch: 87.5%;
+		font-size: var(--text-md);
+		letter-spacing: -0.01em;
+		color: var(--text);
+		padding-bottom: 0.3rem;
+		border-bottom: 3px double var(--border-strong);
 	}
 	h1 {
 		font-family: var(--font-serif);

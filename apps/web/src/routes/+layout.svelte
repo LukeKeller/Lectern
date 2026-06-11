@@ -27,7 +27,7 @@
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
-	import type { ThemeMode } from '$lib/typography';
+	import { THEME_SWATCHES, type ThemeMode } from '$lib/typography';
 	import type { Card } from '@lectern/shared';
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
@@ -181,6 +181,7 @@
 		light: 'sun',
 		sepia: 'sun',
 		newsprint: 'sun',
+		eink: 'sun',
 		dark: 'moon',
 		black: 'moon',
 		contrast: 'moon',
@@ -299,6 +300,8 @@
 		// are untouched; runs once since the layout mounts a single time.
 		const target = appSettings.current.defaultView;
 		if (target && target !== '/' && page.url.pathname === '/') {
+			// defaultView is validated against the LANDING_VIEWS allowlist on read.
+			// eslint-disable-next-line svelte/no-navigation-without-resolve
 			void goto(target, { replaceState: true });
 		}
 		// Dev-only: populate the local store with mock cards when it's empty so the
@@ -613,11 +616,11 @@
 				type="button"
 				class="ghost"
 				onclick={cycleTheme}
-				title={`Theme: ${readerSettings.current.theme}`}
-				aria-label={`Theme: ${readerSettings.current.theme}. Switch theme.`}
+				title={`Theme: ${THEME_SWATCHES[readerSettings.current.theme].label}`}
+				aria-label={`Theme: ${THEME_SWATCHES[readerSettings.current.theme].label}. Switch theme.`}
 			>
 				<Icon name={THEME_ICON[readerSettings.current.theme]} size={18} />
-				<span class="theme-label">{readerSettings.current.theme}</span>
+				<span class="theme-label">{THEME_SWATCHES[readerSettings.current.theme].label}</span>
 			</button>
 			<button
 				type="button"
@@ -954,7 +957,7 @@
 		color: var(--text);
 	}
 	.theme-label {
-		text-transform: capitalize;
+		white-space: nowrap;
 	}
 	.kbd {
 		margin-left: auto;

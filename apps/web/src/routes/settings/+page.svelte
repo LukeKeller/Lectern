@@ -81,6 +81,7 @@
 		{ value: 'light', label: 'Paper' },
 		{ value: 'sepia', label: 'Sepia' },
 		{ value: 'newsprint', label: 'Newsprint' },
+		{ value: 'eink', label: 'E-ink' },
 		{ value: 'dark', label: 'Dark' },
 		{ value: 'black', label: 'Black' },
 		{ value: 'contrast', label: 'Contrast' }

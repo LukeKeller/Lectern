@@ -21,7 +21,11 @@
 
 	const hostname = $derived(host(url));
 	const letter = $derived((siteName?.trim()?.[0] ?? hostname[0] ?? '?').toUpperCase());
-	const iconSrc = $derived(hostname ? `https://icons.duckduckgo.com/ip3/${hostname}.ico` : '');
+	const iconSrc = $derived(
+		hostname && !hostname.endsWith('.lectern.local')
+			? `https://icons.duckduckgo.com/ip3/${hostname}.ico`
+			: ''
+	);
 
 	let failed = $state(false);
 </script>

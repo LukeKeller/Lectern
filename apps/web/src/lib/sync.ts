@@ -48,13 +48,24 @@ export function applyMutation(card: Card | undefined, mutation: Mutation): Card 
 	switch (mutation.type) {
 		case 'setLocation':
 			return { ...card, location: mutation.location, updatedAt };
-		case 'setReadingProgress':
+		case 'setReadingProgress': {
+			// Mirror the BFF's derived read state (archived → finished, full bar →
+			// finished, started → reading) so the optimistic card already matches
+			// what the next pull returns instead of waiting a round-trip.
+			const readState: Card['readState'] =
+				card.location === 'archive' || mutation.readingProgress >= 0.99
+					? 'finished'
+					: mutation.readingProgress > 0
+						? 'reading'
+						: 'unopened';
 			return {
 				...card,
 				readingProgress: mutation.readingProgress,
 				readAnchor: mutation.readAnchor,
+				readState,
 				updatedAt
 			};
+		}
 		case 'setTags':
 			return { ...card, tags: mutation.tags, updatedAt };
 		case 'setNote':
