@@ -1514,10 +1514,13 @@
 		max-height: calc(100dvh - 7rem);
 		overflow-y: auto;
 	}
-	/* Phones: the bar-anchored popover would land below the viewport, so render
-	   it as a fixed bottom sheet under a visible scrim. `.bar .panel` scopes the
-	   override to the Display popover (not the aside.rail.panel). */
-	@media (max-width: 640px) {
+	/* Phones and tablets: the bar-anchored popover would land below the viewport
+	   (at <=820px `.bar` drops to `position: static`, so the absolute panel loses
+	   its anchor), so render it as a fixed bottom sheet under a visible scrim.
+	   Breakpoint matches the `.bar { position: static }` rule below so there's no
+	   gap. `.bar .panel` scopes the override to the Display popover (not the
+	   aside.rail.panel). */
+	@media (max-width: 820px) {
 		.display-scrim {
 			z-index: 45;
 			background: rgba(20, 16, 10, 0.32);
