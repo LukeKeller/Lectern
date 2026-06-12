@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.24.1',
+		date: '2026-06-12',
+		title: 'Reader display settings open in reach on tablets',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'On phones and tablets, opening the reader’s Display settings no longer drops the panel below the page where you had to scroll to find it. It now slides up as a bottom sheet, in reach the moment you tap.'
+			}
+		]
+	},
+	{
 		version: '0.24.0',
 		date: '2026-06-11',
 		title: 'A periodicals desk for your newsletters, and an E-ink theme',
