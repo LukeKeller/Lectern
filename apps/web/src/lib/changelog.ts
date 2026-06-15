@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.24.2',
+		date: '2026-06-15',
+		title: 'Overflow menus stay in reach on mobile',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'On phones, opening a “…” menu — on a card, a list header, the newsletters page, or in the reader — no longer drops it below the screen where you had to scroll to find it. Each now slides up as a bottom sheet, in reach the moment you tap.'
+			}
+		]
+	},
+	{
 		version: '0.24.1',
 		date: '2026-06-12',
 		title: 'Reader display settings open in reach on tablets',

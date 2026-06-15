@@ -1525,7 +1525,8 @@
 			z-index: 45;
 			background: rgba(20, 16, 10, 0.32);
 		}
-		.bar .panel {
+		.bar .panel,
+		.more-menu {
 			position: fixed;
 			left: 0;
 			right: 0;
