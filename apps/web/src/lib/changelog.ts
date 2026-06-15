@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.24.3',
+		date: '2026-06-15',
+		title: 'Back returns to your list, not the last article',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Reading down a list — tapping “Next up” or auto-advancing after you triage — no longer stacks every article in your history. Back now takes you straight to the list you came from instead of walking back through each piece you already read.'
+			}
+		]
+	},
+	{
 		version: '0.24.2',
 		date: '2026-06-15',
 		title: 'Overflow menus stay in reach on mobile',

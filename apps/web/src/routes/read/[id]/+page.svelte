@@ -607,13 +607,15 @@
 				// Email cards advance issue-to-issue (same-sender first), using the
 				// already-resolved nextCard from the nextIssue effect below.
 				if (nextCard && nextCard.id !== fromId) {
-					void goto(resolve('/read/[id]', { id: nextCard.id }));
+					// replaceState so reader→reader hops don't stack: Back returns to the
+					// list the reader came from, not the chain of articles already read.
+					void goto(resolve('/read/[id]', { id: nextCard.id }), { replaceState: true });
 					return;
 				}
 			} else {
 				const next = readingQueue.nextAfter(fromId);
 				if (next && next !== fromId) {
-					void goto(resolve('/read/[id]', { id: next }));
+					void goto(resolve('/read/[id]', { id: next }), { replaceState: true });
 					return;
 				}
 			}
@@ -1204,7 +1206,13 @@
 					</div>
 				{/if}
 				{#if nextCard}
-					<a class="next-up" href={resolve('/read/[id]', { id: nextCard.id })}>
+					<!-- replaceState: advancing to the next article swaps this reader entry
+					     rather than stacking, so Back returns to the originating list. -->
+					<a
+						class="next-up"
+						href={resolve('/read/[id]', { id: nextCard.id })}
+						data-sveltekit-replacestate
+					>
 						<span class="next-kicker">{nextKicker}</span>
 						<span class="next-title">{nextCard.title}</span>
 						<span class="next-meta">
