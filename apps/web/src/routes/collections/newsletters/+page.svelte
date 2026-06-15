@@ -290,6 +290,12 @@
 
 <svelte:window onclick={() => (menuOpen = false)} />
 
+<!-- Mobile-only scrim behind the actions menu, which becomes a bottom sheet there
+     (see the max-width media query). Tapping it closes the menu. -->
+{#if menuOpen}
+	<div class="menu-scrim" role="presentation" onclick={() => (menuOpen = false)}></div>
+{/if}
+
 <section class="list page">
 	<div class="sr-only" role="status" aria-live="polite">{liveMessage}</div>
 	<header class="head">
@@ -556,6 +562,10 @@
 		opacity: 0.5;
 		cursor: default;
 	}
+	/* Scrim only paints on mobile, where the menu is a bottom sheet (below). */
+	.menu-scrim {
+		display: none;
+	}
 
 	/* The rack: nameplates standing on a shelf hairline, not a card grid. Each
 	   plate echoes the masthead lockup at miniature scale (serif, heavy,
@@ -699,6 +709,35 @@
 		.pub-actions {
 			margin-left: 0;
 			width: 100%;
+		}
+		/* The absolute dropdown can fall below the fold; promote it to a
+		   viewport-anchored bottom sheet so every item is reachable. */
+		.menu-scrim {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 40;
+			background: rgba(20, 16, 10, 0.32);
+		}
+		.menu {
+			position: fixed;
+			top: auto;
+			right: 0;
+			left: 0;
+			bottom: 0;
+			z-index: 41;
+			min-width: 0;
+			max-height: 70vh;
+			overflow-y: auto;
+			padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
+			border-width: 1px 0 0;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			gap: 2px;
+		}
+		.menu button,
+		.menu a {
+			padding: 0.7rem 0.65rem;
+			font-size: var(--text-md);
 		}
 	}
 </style>

@@ -310,6 +310,12 @@
 
 <svelte:window onclick={() => (menuOpenId = null)} />
 
+<!-- Mobile-only scrim behind the overflow menu, which becomes a bottom sheet there
+     (see the max-width media query). Tapping it closes the menu like any outside click. -->
+{#if menuOpenId !== null}
+	<div class="menu-scrim" role="presentation" onclick={() => (menuOpenId = null)}></div>
+{/if}
+
 {#if loading || !cards}
 	<ul class="cards" aria-hidden="true">
 		{#each [0, 1, 2, 3] as i (i)}
@@ -963,6 +969,10 @@
 		flex-direction: column;
 		gap: 1px;
 	}
+	/* Scrim only paints on mobile, where the menu is a bottom sheet (below). */
+	.menu-scrim {
+		display: none;
+	}
 	.menu button,
 	.menu-link {
 		display: flex;
@@ -997,6 +1007,45 @@
 	}
 	.menu button.danger:hover {
 		background: color-mix(in srgb, var(--error) 12%, transparent);
+	}
+
+	/* Mobile: the absolute dropdown can fall below the fold when its card sits low
+	   in the viewport, forcing the user to scroll to reach it. Promote it to a
+	   bottom sheet anchored to the viewport so every item is reachable regardless
+	   of where the card is. Matches the reader's Display-panel pattern. */
+	@media (max-width: 640px) {
+		.menu-scrim {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 40;
+			background: rgba(20, 16, 10, 0.32);
+		}
+		/* The menu is fixed but lives inside this card's stacking context, so the
+		   card must outrank the scrim or the sheet paints behind it. */
+		.card.menu-open {
+			z-index: 50;
+		}
+		.menu {
+			position: fixed;
+			top: auto;
+			right: 0;
+			left: 0;
+			bottom: 0;
+			z-index: 41;
+			min-width: 0;
+			max-height: 70vh;
+			overflow-y: auto;
+			padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
+			border-width: 1px 0 0;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			gap: 2px;
+		}
+		.menu button,
+		.menu-link {
+			padding: 0.7rem 0.65rem;
+			font-size: var(--text-md);
+		}
 	}
 
 	/* In-progress meter only. Finished cards carry no bar — doneness reads from the
