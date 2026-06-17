@@ -30,6 +30,14 @@ export type Location = z.infer<typeof Location>;
 export const ReadState = z.enum(["unopened", "reading", "finished"]);
 export type ReadState = z.infer<typeof ReadState>;
 
+/**
+ * Reading progress (0..1) at or above which an article counts as read. Scrolling
+ * past this point flips a card to "finished"; below it the article stays unread
+ * unless marked manually. Shared so the reader, the list/smart-view filters, and
+ * the BFF's Readeck derivation all agree on one threshold.
+ */
+export const FINISHED_THRESHOLD = 0.95;
+
 export const HighlightColor = z.enum(["yellow", "red", "blue", "green"]);
 export type HighlightColor = z.infer<typeof HighlightColor>;
 

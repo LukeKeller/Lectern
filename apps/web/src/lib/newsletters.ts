@@ -1,4 +1,4 @@
-import type { Card } from '@lectern/shared';
+import { FINISHED_THRESHOLD, type Card } from '@lectern/shared';
 
 /**
  * Pure newsletter-shaping logic for the Newsletters surface and the reader's
@@ -19,12 +19,12 @@ export function senderName(card: Card): string {
 }
 
 /**
- * Finished = the derived read state OR a full progress bar. Progress is the
- * authoritative signal in the optimistic window before a sync round-trip;
- * readState covers archived saves whose progress never moved.
+ * Finished = the derived read state OR progress past the finished threshold.
+ * Progress is the authoritative signal in the optimistic window before a sync
+ * round-trip; readState covers archived saves whose progress never moved.
  */
 export function isFinished(card: Card): boolean {
-	return card.readState === 'finished' || card.readingProgress >= 0.99;
+	return card.readState === 'finished' || card.readingProgress >= FINISHED_THRESHOLD;
 }
 
 export interface Publication {

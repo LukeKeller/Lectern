@@ -744,12 +744,8 @@
 
 		const initial = await db.cards.get(docId);
 		if (docId !== id) return;
-		// Mark RSS items seen on open (Readwise behaviour): flip MiniFlux read
-		// state so the item leaves the unread feed / newspaper edition.
-		if (initial && initial.source === 'miniflux' && initial.readState !== 'finished') {
-			const seen = getSync();
-			void seen.enqueue({ type: 'markRead', id: initial.id, read: true }).then(() => seen.flush());
-		}
+		// Opening an article no longer marks it read: an item stays unread until you
+		// scroll past the finished threshold (see `capture`) or mark it read by hand.
 		try {
 			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
 			if (docId !== id) return;

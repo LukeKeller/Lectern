@@ -1,10 +1,11 @@
-import type {
-  Highlight,
-  Location,
-  Mutation,
-  NewHighlight,
-  ReadLaterBackend,
-  RssBackend,
+import {
+  FINISHED_THRESHOLD,
+  type Highlight,
+  type Location,
+  type Mutation,
+  type NewHighlight,
+  type ReadLaterBackend,
+  type RssBackend,
 } from "@lectern/shared";
 import { locationToReadeckArchived, type DocumentStore, type HighlightStore } from "./unify";
 import { parseId, type ParsedId } from "./ids";
@@ -145,6 +146,14 @@ export class MutationApplier {
   ): Promise<void> {
     await this.toBackend(parsed, { aspect: "progress", value: progress, anchor });
     await this.deps.overlay.upsertOverlay(id, { readProgress: progress, readAnchor: anchor });
+    // Scrolling past the finished threshold marks the article read. Readeck
+    // derives this from the stored progress (see `deriveReadeckReadState`), but
+    // MiniFlux owns read-state independently of progress, so flip its read flag
+    // here — otherwise the next poll would re-derive the entry as unread.
+    if (parsed.source === "miniflux" && progress >= FINISHED_THRESHOLD) {
+      await this.toBackend(parsed, { aspect: "read", value: true });
+      await this.deps.overlay.markIndexedRead(id, true);
+    }
   }
 
   /** Note is glue-owned for every source. */

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Card } from '@lectern/shared';
+	import { FINISHED_THRESHOLD, type Card } from '@lectern/shared';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
 	import { liveCards } from '$lib/live.svelte';
@@ -31,7 +31,10 @@
 	// recently touched first. Capped so the page stays a quiet column.
 	const continueReading = $derived(
 		cards
-			.filter((c) => c.location !== 'feed' && c.readingProgress > 0 && c.readingProgress < 0.99)
+			.filter(
+				(c) =>
+					c.location !== 'feed' && c.readingProgress > 0 && c.readingProgress < FINISHED_THRESHOLD
+			)
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, 4)
 	);

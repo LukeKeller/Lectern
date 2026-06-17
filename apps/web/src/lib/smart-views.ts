@@ -1,4 +1,4 @@
-import type { Card } from '@lectern/shared';
+import { FINISHED_THRESHOLD, type Card } from '@lectern/shared';
 import type { IconName } from '$lib/components/Icon.svelte';
 
 /**
@@ -24,7 +24,8 @@ export const SMART_VIEWS: SmartView[] = [
 		key: 'continue',
 		label: 'Continue reading',
 		icon: 'book',
-		predicate: (c) => c.location !== 'feed' && c.readingProgress > 0 && c.readingProgress < 0.99
+		predicate: (c) =>
+			c.location !== 'feed' && c.readingProgress > 0 && c.readingProgress < FINISHED_THRESHOLD
 	},
 	{
 		key: 'quick',

@@ -27,8 +27,11 @@ describe('computePercent', () => {
 
 describe('isFinished', () => {
 	it('flips at the finished threshold', () => {
+		expect(FINISHED_THRESHOLD).toBe(0.95);
 		expect(isFinished(FINISHED_THRESHOLD)).toBe(true);
+		expect(isFinished(0.96)).toBe(true);
 		expect(isFinished(1)).toBe(true);
+		expect(isFinished(0.94)).toBe(false);
 		expect(isFinished(0.5)).toBe(false);
 	});
 });

@@ -1,9 +1,10 @@
-import type {
-	Card,
-	Mutation,
-	SyncPullResponse,
-	SyncPushRequest,
-	SyncPushResponse
+import {
+	FINISHED_THRESHOLD,
+	type Card,
+	type Mutation,
+	type SyncPullResponse,
+	type SyncPushRequest,
+	type SyncPushResponse
 } from '@lectern/shared';
 import { db, type LecternDB } from './db';
 import { getClient } from './config';
@@ -49,11 +50,11 @@ export function applyMutation(card: Card | undefined, mutation: Mutation): Card 
 		case 'setLocation':
 			return { ...card, location: mutation.location, updatedAt };
 		case 'setReadingProgress': {
-			// Mirror the BFF's derived read state (archived → finished, full bar →
-			// finished, started → reading) so the optimistic card already matches
-			// what the next pull returns instead of waiting a round-trip.
+			// Mirror the BFF's derived read state (archived → finished, scrolled past
+			// the finished threshold → finished, started → reading) so the optimistic
+			// card already matches what the next pull returns without a round-trip.
 			const readState: Card['readState'] =
-				card.location === 'archive' || mutation.readingProgress >= 0.99
+				card.location === 'archive' || mutation.readingProgress >= FINISHED_THRESHOLD
 					? 'finished'
 					: mutation.readingProgress > 0
 						? 'reading'

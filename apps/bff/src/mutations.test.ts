@@ -73,6 +73,24 @@ describe("MutationApplier dual-write routing", () => {
     });
   });
 
+  it("setProgress past the finished threshold marks a MiniFlux entry read", async () => {
+    const { applier, rss, overlay } = harness();
+    await applier.setProgress({ source: "miniflux", sourceId: "7" }, "miniflux:7", 0.96, "#n3");
+    expect(overlay.upsertOverlay).toHaveBeenCalledWith("miniflux:7", {
+      readProgress: 0.96,
+      readAnchor: "#n3",
+    });
+    expect(rss.setRead).toHaveBeenCalledWith("7", true);
+    expect(overlay.markIndexedRead).toHaveBeenCalledWith("miniflux:7", true);
+  });
+
+  it("setProgress below the finished threshold leaves a MiniFlux entry unread", async () => {
+    const { applier, rss, overlay } = harness();
+    await applier.setProgress({ source: "miniflux", sourceId: "7" }, "miniflux:7", 0.5, "#n3");
+    expect(rss.setRead).not.toHaveBeenCalled();
+    expect(overlay.markIndexedRead).not.toHaveBeenCalled();
+  });
+
   it("markRead writes MiniFlux read-state and mirrors it to the index", async () => {
     const { applier, rss, overlay } = harness();
     await applier.markRead({ source: "miniflux", sourceId: "7" }, "miniflux:7", true);
