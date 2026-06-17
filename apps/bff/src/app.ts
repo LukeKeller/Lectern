@@ -7,6 +7,7 @@ import type { TtsRouter } from "./backends/tts-router";
 import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
 import { registerPodcastRoutes } from "./podcast";
+import { registerMediaRoutes } from "./media";
 import { buildRealDeps } from "./deps";
 import { BackendHttpError } from "./errors";
 import fastifyStatic from "@fastify/static";
@@ -92,6 +93,9 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
   // clients can't send headers). Registered before the SPA fallback so the
   // notFound handler never swallows these routes.
   registerPodcastRoutes(app, resolved);
+  // SSO-gated article image proxy (no bearer — an <img> can't send headers).
+  // Also before the SPA fallback so its notFound handler can't swallow it.
+  registerMediaRoutes(app, resolved);
   registerWebApp(app, resolved);
   return app;
 }

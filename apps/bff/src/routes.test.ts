@@ -4,6 +4,7 @@ import {
   Feed,
   PlayerState,
   type BackendPage,
+  type BackendResource,
   type BackendListParams,
   type CreateViewRequest,
   type FeedFolder,
@@ -136,6 +137,22 @@ class FakeReadLaterBackend implements ReadLaterBackend {
   }
   async getContent(sourceId: string): Promise<string> {
     return this.content.get(sourceId) ?? "<article>readeck</article>";
+  }
+  resources = new Map<string, { contentType: string; bytes: Buffer }>();
+  resourceCalls: { sourceId: string; ref: string }[] = [];
+  async getResource(sourceId: string, ref: string): Promise<BackendResource> {
+    this.resourceCalls.push({ sourceId, ref });
+    const hit = this.resources.get(ref) ?? {
+      contentType: "image/png",
+      bytes: Buffer.from("PNGDATA"),
+    };
+    return {
+      contentType: hit.contentType,
+      contentLength: hit.bytes.length,
+      body: (async function* () {
+        yield new Uint8Array(hit.bytes);
+      })(),
+    };
   }
   async save(input: { url: string; html?: string; labels?: string[] }): Promise<string> {
     const sourceId = `b${++this.seq}`;
@@ -1889,6 +1906,50 @@ describe("podcast", () => {
 
     const missing = await a.inject({ method: "GET", url: `/podcast/${token}/ep/miniflux:999.mp3` });
     expect(missing.statusCode).toBe(404);
+    await a.close();
+  });
+});
+
+describe("article images", () => {
+  it("rewrites article images to the same-origin proxy in the content response", async () => {
+    harness.deps.readLater.content.set("b1", '<p>hi</p><img src="img/a.jpg">');
+    const a = app();
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/documents/readeck:b1/content",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    const html = res.json().html as string;
+    expect(html).toContain("/media/documents/readeck%3Ab1/image?u=img%2Fa.jpg");
+    expect(html).not.toContain('src="img/a.jpg"');
+    await a.close();
+  });
+
+  it("streams a readeck article image through the proxy without a bearer token", async () => {
+    harness.deps.readLater.resources.set("img/a.jpg", {
+      contentType: "image/jpeg",
+      bytes: Buffer.from("JPEGBYTES"),
+    });
+    const a = app();
+    // No Authorization header: the proxy lives outside the /api/v1 bearer scope.
+    const res = await a.inject({
+      method: "GET",
+      url: "/media/documents/readeck:b1/image?u=img%2Fa.jpg",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/jpeg");
+    expect(res.rawPayload.toString()).toBe("JPEGBYTES");
+    expect(harness.deps.readLater.resourceCalls).toEqual([{ sourceId: "b1", ref: "img/a.jpg" }]);
+    await a.close();
+  });
+
+  it("rejects malformed image proxy requests", async () => {
+    const a = app();
+    const noRef = await a.inject({ method: "GET", url: "/media/documents/readeck:b1/image" });
+    expect(noRef.statusCode).toBe(400);
+    const badId = await a.inject({ method: "GET", url: "/media/documents/nope/image?u=x" });
+    expect(badId.statusCode).toBe(404);
     await a.close();
   });
 });

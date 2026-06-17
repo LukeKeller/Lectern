@@ -49,11 +49,29 @@ export interface RssBackend {
 
 export type NewHighlight = Omit<Highlight, "id" | "documentId" | "createdAt">;
 
+/**
+ * A fetched article resource (image) streamed back from a backend. The read-later
+ * backend keeps article images alongside the HTML; the BFF image proxy relays
+ * these bytes to the client, which can't reach the backend directly in production.
+ */
+export interface BackendResource {
+  contentType: string;
+  /** From the upstream `Content-Length` header when present, else null. */
+  contentLength: number | null;
+  body: AsyncIterable<Uint8Array>;
+}
+
 /** Read-later backend (Readeck). Owns saved-article content/progress/highlights. */
 export interface ReadLaterBackend {
   list(params: BackendListParams): Promise<BackendPage<Card>>;
   get(sourceId: string): Promise<Card>;
   getContent(sourceId: string): Promise<string>;
+  /**
+   * Stream a stored article resource (image) by its in-archive `ref` (the relative
+   * path the captured HTML points at). Optional: backends that don't archive
+   * images alongside the article omit it, and the proxy degrades to a 404.
+   */
+  getResource?(sourceId: string, ref: string): Promise<BackendResource>;
   /** Save a URL (optionally with prefetched HTML). Returns the new source id. */
   save(input: { url: string; html?: string; labels?: string[] }): Promise<string>;
   /**

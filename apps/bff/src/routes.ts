@@ -59,7 +59,8 @@ import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
 import type { DocumentRef } from "./unify";
 import { accentFromUrl } from "./palette";
-import { podcastFeedUrl } from "./podcast";
+import { podcastFeedUrl, publicBaseUrl } from "./podcast";
+import { rewriteArticleImages } from "./images";
 import { parseId } from "./ids";
 import { hasReadableText, htmlToText, stripUrls } from "./html-text";
 import { parseReadwiseCsv, readwiseLocationToUnified } from "./csv";
@@ -317,7 +318,15 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       requireParsed(id);
       // `?refresh=1` re-extracts from the original source, overwriting the cache.
       const refresh = req.query.refresh === "1" || req.query.refresh === "true";
-      return DocumentContentResponse.parse({ id, html: await loadContentHtml(deps, id, refresh) });
+      // Route the article's images through the same-origin proxy so they render
+      // in the client (the backends aren't browser-reachable in production). The
+      // stored copy stays faithful — only the served body is rewritten.
+      const html = rewriteArticleImages(
+        await loadContentHtml(deps, id, refresh),
+        id,
+        publicBaseUrl(req),
+      );
+      return DocumentContentResponse.parse({ id, html });
     },
   );
 
