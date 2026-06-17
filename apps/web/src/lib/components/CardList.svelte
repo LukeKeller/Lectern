@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Card, Location } from '@lectern/shared';
+	import { FINISHED_THRESHOLD, type Card, type Location } from '@lectern/shared';
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
@@ -225,7 +225,7 @@
 		return out;
 	});
 
-	const finished = (card: Card) => card.readingProgress >= 0.99;
+	const finished = (card: Card) => card.readingProgress >= FINISHED_THRESHOLD;
 
 	// Three-dot overflow menu: only one open at a time (window-click closes it).
 	let menuOpenId = $state<string | null>(null);

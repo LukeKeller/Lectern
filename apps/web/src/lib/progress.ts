@@ -5,8 +5,10 @@
  * the selector of the nearest stable element at the top of the viewport.
  */
 
-/** Treat progress at or above this as "finished". */
-export const FINISHED_THRESHOLD = 0.99;
+/** Treat progress at or above this as "finished". Shared so the reader, the
+ * list filters, and the BFF's Readeck derivation all agree on one threshold. */
+export { FINISHED_THRESHOLD } from '@lectern/shared';
+import { FINISHED_THRESHOLD } from '@lectern/shared';
 
 export interface AnchorCandidate {
 	/** A selector that re-finds the element on the next visit. */

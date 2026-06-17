@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.25.0',
+		date: '2026-06-17',
+		title: 'Articles stay unread until you’ve actually read them',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Opening an article no longer marks it read. An item now stays unread until you’ve read most of the way through — past 95% of the page — or you mark it read yourself. Glance at something and back out and it’s still waiting for you; reach the end and it quietly clears, exactly as before.'
+			}
+		]
+	},
+	{
 		version: '0.24.3',
 		date: '2026-06-15',
 		title: 'Back returns to your list, not the last article',

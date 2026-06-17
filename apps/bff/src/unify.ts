@@ -1,3 +1,4 @@
+import { FINISHED_THRESHOLD } from "@lectern/shared";
 import type {
   Card,
   CreateViewRequest,
@@ -51,11 +52,13 @@ export function progressFromReadeck(value: number): number {
 }
 
 /**
- * Readeck has no read-status enum; derive it from archive + progress:
- * archived or fully scrolled => finished, any progress => reading, else unopened.
+ * Readeck has no read-status enum; derive it from archive + progress: archived or
+ * scrolled past the finished threshold => finished, any progress => reading, else
+ * unopened. `FINISHED_THRESHOLD` is 0..1; Readeck stores progress as an integer
+ * 0..100, so scale it for the comparison.
  */
 export function deriveReadeckReadState(isArchived: boolean, readProgress0to100: number): ReadState {
-  if (isArchived || readProgress0to100 >= 100) return "finished";
+  if (isArchived || readProgress0to100 >= FINISHED_THRESHOLD * 100) return "finished";
   if (readProgress0to100 > 0) return "reading";
   return "unopened";
 }

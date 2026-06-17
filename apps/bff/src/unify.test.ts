@@ -74,6 +74,8 @@ describe("location <-> backend state", () => {
   it("derives Readeck read state from archive + progress", () => {
     expect(deriveReadeckReadState(true, 0)).toBe("finished");
     expect(deriveReadeckReadState(false, 100)).toBe("finished");
+    expect(deriveReadeckReadState(false, 95)).toBe("finished");
+    expect(deriveReadeckReadState(false, 94)).toBe("reading");
     expect(deriveReadeckReadState(false, 30)).toBe("reading");
     expect(deriveReadeckReadState(false, 0)).toBe("unopened");
   });
