@@ -59,4 +59,28 @@ describe("richerHtml", () => {
   it("keeps the feed body on a tie", () => {
     expect(richerHtml("<p>same</p>", "<div>same</div>")).toBe("<p>same</p>");
   });
+
+  it("keeps an image-only feed body over a chrome-heavy scrape (e.g. xkcd)", () => {
+    const comic = '<img src="https://imgs.xkcd.com/comics/messi.png" alt="Messi" title="alt" />';
+    // The scraped xkcd page: lots of text, but almost all of it is nav links.
+    const chrome = `
+      <ul>
+        <li><a href="/archive">Archive</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/prev">&lt; Prev</a></li>
+        <li><a href="/random">Random</a></li>
+        <li><a href="/next">Next &gt;</a></li>
+      </ul>
+      <p>A webcomic of romance, sarcasm, math, and language.</p>
+      ${comic}
+      <p>Permanent link to this comic: <a href="https://xkcd.com/3260/">https://xkcd.com/3260/</a></p>
+      <p>Comics I enjoy: <a href="#">SMBC</a>, <a href="#">Dinosaur Comics</a></p>`;
+    expect(richerHtml(comic, chrome)).toBe(comic);
+  });
+
+  it("still prefers a scrape that is a real article wrapped around an image", () => {
+    const lead = '<img src="hero.jpg" alt="" />';
+    const article = `${lead}${"<p>Substantial article prose that goes on at length. </p>".repeat(20)}`;
+    expect(richerHtml(lead, article)).toBe(article);
+  });
 });

@@ -8,7 +8,7 @@
 	import { db } from '$lib/db';
 	import { getSync } from '$lib/sync';
 	import { liveCards } from '$lib/live.svelte';
-	import { buildPublications, isFinished, issueDate, senderName } from '$lib/newsletters';
+	import { buildPublications, isFinished, issueDate, publicationKey } from '$lib/newsletters';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import { readingQueue } from '$lib/reading-queue.svelte';
 	import CardList from '$lib/components/CardList.svelte';
@@ -36,17 +36,19 @@
 		else stickyRead.delete(id);
 	}
 
-	// The publication lens. Session-scoped on purpose: a rack selection is a way
-	// of looking, not a saved preference, so it resets on every visit.
-	let activeSender = $state<string | null>(null);
+	// The publication lens. Holds a publication KEY (the sender domain, or the
+	// display name when none) — not a bare sender, since one publication can span
+	// many bylines. Session-scoped on purpose: a rack selection is a way of
+	// looking, not a saved preference, so it resets on every visit.
+	let activeKey = $state<string | null>(null);
 	const activePub = $derived(
-		activeSender === null ? null : (publications.find((p) => p.name === activeSender) ?? null)
+		activeKey === null ? null : (publications.find((p) => p.key === activeKey) ?? null)
 	);
-	// If the active sender disappears (ignored, deleted elsewhere), fall back to
-	// the full rack instead of filtering against a ghost.
+	// If the active publication disappears (ignored, deleted elsewhere), fall back
+	// to the full rack instead of filtering against a ghost.
 	$effect(() => {
-		if (activeSender !== null && !publications.some((p) => p.name === activeSender)) {
-			activeSender = null;
+		if (activeKey !== null && !publications.some((p) => p.key === activeKey)) {
+			activeKey = null;
 		}
 	});
 
@@ -71,9 +73,9 @@
 		if (typeof localStorage !== 'undefined') localStorage.setItem(READ_FILTER_STORAGE, readFilter);
 	});
 
-	// Pipeline: sender lens → read state → newest issue first (stable on id).
+	// Pipeline: publication lens → read state → newest issue first (stable on id).
 	const senderFiltered = $derived(
-		activeSender === null ? emails : emails.filter((c) => senderName(c) === activeSender)
+		activeKey === null ? emails : emails.filter((c) => publicationKey(c) === activeKey)
 	);
 	// In the unread view, keep items the user just marked read (stickyRead) in
 	// place — they render faded and only drop out on the next refresh.
@@ -217,7 +219,7 @@
 		try {
 			const res = await getClient().addEmailIgnore(name);
 			if (res.removed > 0) await getSync().pull();
-			activeSender = null;
+			activeKey = null;
 		} catch (err) {
 			pubError = err instanceof Error ? err.message : 'Could not ignore the sender.';
 		} finally {
@@ -272,8 +274,8 @@
 		emails.length === 0
 			? 'No newsletters yet.'
 			: readFilter === 'unread'
-				? activeSender
-					? `All caught up with ${activeSender}.`
+				? activePub
+					? `All caught up with ${activePub.name}.`
 					: 'All caught up.'
 				: 'Nothing here.'
 	);
@@ -281,7 +283,7 @@
 		emails.length === 0
 			? 'Issues sent to your dedicated newsletter address land here as readable articles, pulled straight from the mailbox.'
 			: readFilter === 'unread'
-				? activeSender
+				? activePub
 					? 'Switch the filter to All to revisit past issues.'
 					: 'Every issue is read. New mail lands here automatically.'
 				: undefined
@@ -358,20 +360,20 @@
 			<button
 				type="button"
 				class="plate"
-				class:active={activeSender === null}
-				aria-pressed={activeSender === null}
-				onclick={() => (activeSender = null)}
+				class:active={activeKey === null}
+				aria-pressed={activeKey === null}
+				onclick={() => (activeKey = null)}
 			>
 				<span class="plate-name">All issues</span>
 				<span class="plate-meta">{totalUnread > 0 ? `${totalUnread} unread` : 'Up to date'}</span>
 			</button>
-			{#each publications as pub (pub.name)}
+			{#each publications as pub (pub.key)}
 				<button
 					type="button"
 					class="plate"
-					class:active={activeSender === pub.name}
-					aria-pressed={activeSender === pub.name}
-					onclick={() => (activeSender = activeSender === pub.name ? null : pub.name)}
+					class:active={activeKey === pub.key}
+					aria-pressed={activeKey === pub.key}
+					onclick={() => (activeKey = activeKey === pub.key ? null : pub.key)}
 				>
 					<span class="plate-name">{pub.name}</span>
 					<span class="plate-meta"

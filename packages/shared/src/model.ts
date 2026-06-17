@@ -77,6 +77,9 @@ export const Card = z.object({
   excerpt: z.string().nullable().default(null),
   author: z.string().nullable().default(null),
   siteName: z.string().nullable().default(null),
+  // Email sender's domain (e.g. 404media.co); the stable key the Newsletters
+  // surface groups by. Null for non-email cards.
+  senderDomain: z.string().nullable().default(null),
   url: z.url(),
   coverImage: z.url().nullable().default(null),
   wordCount: z.number().int().nonnegative().nullable().default(null),

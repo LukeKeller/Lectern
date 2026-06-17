@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EMAIL_DOMAIN_LABEL_PREFIX,
   EMAIL_LABEL,
   buildReadeckHtml,
   formatEmailCursor,
@@ -10,6 +11,7 @@ import {
   parseEmailCursor,
   parseExcludedSenders,
   sanitizeEmailHtml,
+  senderDomain,
   type ParsedNewsletter,
 } from "./backends/email-inbox";
 import { readeckBookmarkToCard, type ReadeckBookmark } from "./backends/readeck";
@@ -104,13 +106,32 @@ describe("newsletterUrl", () => {
   });
 });
 
+describe("senderDomain", () => {
+  it("returns the lowercased domain after the last @", () => {
+    expect(senderDomain("Hello@404Media.co")).toBe("404media.co");
+    expect(senderDomain("a@b@dailybyte.com")).toBe("dailybyte.com");
+  });
+
+  it("returns null when there is no domain part", () => {
+    expect(senderDomain("")).toBeNull();
+    expect(senderDomain("nobody")).toBeNull();
+    expect(senderDomain("trailing@")).toBeNull();
+  });
+});
+
 describe("messageToSaveInput", () => {
-  it("tags with the sentinel label plus the sender", () => {
+  it("tags with the sentinel label plus the sender and domain", () => {
     const input = messageToSaveInput(baseMsg);
     expect(input.labels).toContain(EMAIL_LABEL);
     expect(input.labels).toContain("The Daily Byte");
+    expect(input.labels).toContain(EMAIL_DOMAIN_LABEL_PREFIX + "dailybyte.com");
     expect(input.url).toBe(newsletterUrl(baseMsg.messageId));
     expect(input.html).toMatch(/<title>Weekly Roundup<\/title>/);
+  });
+
+  it("omits the domain label when the address has no domain", () => {
+    const input = messageToSaveInput({ ...baseMsg, fromAddress: "nobody" });
+    expect(input.labels.some((l) => l.startsWith(EMAIL_DOMAIN_LABEL_PREFIX))).toBe(false);
   });
 });
 
@@ -170,9 +191,20 @@ describe("readeckBookmarkToCard email mapping", () => {
     expect(card.tags).not.toContain(EMAIL_LABEL);
   });
 
-  it("leaves ordinary bookmarks as articles", () => {
+  it("recovers the sender domain from its label and hides it from tags", () => {
+    const card = readeckBookmarkToCard({
+      ...bookmark,
+      labels: [EMAIL_LABEL, "Joseph Cox", EMAIL_DOMAIN_LABEL_PREFIX + "404media.co"],
+    });
+    expect(card.senderDomain).toBe("404media.co");
+    expect(card.tags).toEqual(["Joseph Cox"]);
+    expect(card.tags.some((t) => t.startsWith(EMAIL_DOMAIN_LABEL_PREFIX))).toBe(false);
+  });
+
+  it("leaves ordinary bookmarks as articles with no sender domain", () => {
     const card = readeckBookmarkToCard({ ...bookmark, labels: ["tech"] });
     expect(card.category).toBe("article");
     expect(card.tags).toEqual(["tech"]);
+    expect(card.senderDomain).toBeNull();
   });
 });

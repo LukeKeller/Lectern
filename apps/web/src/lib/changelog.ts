@@ -26,6 +26,33 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.26.0',
+		date: '2026-06-17',
+		title: 'Richer posts, tidier newsletters, and settings within reach',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Bluesky posts now bring their pictures and quoted posts with them. Where the feed used to leave a bare “[contains quote post or other embedded content]” placeholder, you’ll see the actual images and the post being quoted, rendered inline.'
+			},
+			{
+				kind: 'improved',
+				text: 'Newsletters now group by publication, not by individual byline. A title like 404 Media — which mails under a dozen different writer names — collapses into a single shelf instead of scattering across the rack.'
+			},
+			{
+				kind: 'improved',
+				text: 'The reader toolbar — Display settings, contents, and the rest — now stays put as you scroll on larger screens, so it’s always a glance away. On phones it still slides out of the way while you read and returns the moment you scroll up.'
+			},
+			{
+				kind: 'added',
+				text: 'Press “o” while reading to open the original article in a new tab.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Comic and image feeds like xkcd no longer drag in the site’s navigation, “Prev/Next” links, and footer. The reader now keeps the clean comic instead of the whole scraped page.'
+			}
+		]
+	},
+	{
 		version: '0.25.0',
 		date: '2026-06-17',
 		title: 'Articles stay unread until you’ve actually read them',

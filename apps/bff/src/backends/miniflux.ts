@@ -10,6 +10,7 @@ import type {
 import { BackendHttpError } from "../errors";
 import { extractCoverImage } from "../cover";
 import { htmlToText, richerHtml, snippet } from "../html-text";
+import { enrichBlueskyContent } from "../bluesky";
 
 /**
  * MiniFlux RSS adapter. Talks to `/v1/*`, normalizing entries into `Card`s.
@@ -93,6 +94,8 @@ export function minifluxEntryToCard(entry: MinifluxEntry): Card {
     excerpt: snippet(htmlToText(entry.content)),
     author: entry.author || null,
     siteName: entry.feed?.title ?? null,
+    // Feed cards have no email sender; the domain grouping key is email-only.
+    senderDomain: null,
     // Some MiniFlux entries (e.g. webmention/comment items) carry an empty
     // `url`; fall back to the feed's canonical link so the card keeps a valid,
     // openable URL and survives `Card` validation on the sync read path.
@@ -266,22 +269,29 @@ export class MinifluxBackend implements RssBackend {
    * readable text: scraping wins for excerpt-only feeds that link to a full
    * article; the feed body wins for JS-only sources like Bluesky, whose post text
    * lives in the RSS item but whose pages scrape to empty markup.
+   *
+   * For Bluesky posts, the feed body is just the post text (images and quoted
+   * posts are dropped to a placeholder), so we additionally re-fetch the post
+   * from the public AT-Protocol AppView and rebuild richer HTML. The entry's
+   * `url` (the post permalink) drives that; `enrichBlueskyContent` returns the
+   * computed fallback unchanged for every non-Bluesky URL.
    */
   async getEntryContent(sourceId: string): Promise<string> {
-    const stored = await this.entryBody(sourceId);
+    const entry = await this.entry(sourceId);
     let scraped = "";
     try {
       scraped = await this.scrapedBody(sourceId);
     } catch {
       // Scraper failed (paywall / JS-only page); fall back to the feed body.
     }
-    return richerHtml(stored, scraped);
+    const fallback = richerHtml(entry.content ?? "", scraped);
+    return enrichBlueskyContent(entry.url ?? "", fallback);
   }
 
-  private async entryBody(sourceId: string): Promise<string> {
+  /** Fetch a single entry's JSON (we need both its `content` and `url`). */
+  private async entry(sourceId: string): Promise<{ content?: string; url?: string }> {
     const res = await this.request(`/v1/entries/${sourceId}`);
-    const body = (await res.json()) as { content?: string };
-    return body.content ?? "";
+    return (await res.json()) as { content?: string; url?: string };
   }
 
   private async scrapedBody(sourceId: string): Promise<string> {

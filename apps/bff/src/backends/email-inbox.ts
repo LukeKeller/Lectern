@@ -16,6 +16,14 @@ import { simpleParser, type ParsedMail } from "mailparser";
 /** Reserved Readeck label that marks a bookmark as an ingested newsletter. */
 export const EMAIL_LABEL = "lectern:email";
 
+/**
+ * Prefix for the Readeck label carrying the sender's email domain. The suffix is
+ * the bare domain (e.g. `lectern:from:404media.co`). This is the stable key the
+ * Newsletters surface groups by, so issues from one publication's many display
+ * names (404 Media's writers all mail under @404media.co) collapse into one rack.
+ */
+export const EMAIL_DOMAIN_LABEL_PREFIX = "lectern:from:";
+
 /** Synthetic, stable base for newsletter "URLs" (emails have no canonical URL). */
 const NEWSLETTER_URL_BASE = "https://newsletter.lectern.local/";
 
@@ -146,6 +154,18 @@ function senderLabel(name: string): string {
   return clean || "Newsletter";
 }
 
+/**
+ * The sender's domain: the lowercased, trimmed part after the last `@`. Null
+ * when the address is missing or has no domain part. This is what newsletter
+ * grouping keys on, so writers sharing a domain land in one publication.
+ */
+export function senderDomain(address: string): string | null {
+  const at = address.lastIndexOf("@");
+  if (at < 0) return null;
+  const domain = address.slice(at + 1).trim().toLowerCase();
+  return domain || null;
+}
+
 /** Stable synthetic URL from the Message-ID so Readeck dedupes re-ingested mail. */
 export function newsletterUrl(messageId: string): string {
   const id = messageId.replace(/^<|>$/g, "").trim();
@@ -158,10 +178,15 @@ export function messageToSaveInput(msg: ParsedNewsletter): {
   html: string;
   labels: string[];
 } {
+  const labels = [EMAIL_LABEL, senderLabel(msg.fromName)];
+  // Carry the sender's domain as a label so the grouping key survives Readeck
+  // re-indexing and is recoverable on the card without a new backend field.
+  const domain = senderDomain(msg.fromAddress);
+  if (domain) labels.push(EMAIL_DOMAIN_LABEL_PREFIX + domain);
   return {
     url: newsletterUrl(msg.messageId),
     html: buildReadeckHtml(msg),
-    labels: [EMAIL_LABEL, senderLabel(msg.fromName)],
+    labels,
   };
 }
 

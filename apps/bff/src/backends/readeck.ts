@@ -17,7 +17,7 @@ import {
 } from "../unify";
 import { safeHttpUrl } from "../cover";
 import { snippet } from "../html-text";
-import { EMAIL_LABEL } from "./email-inbox";
+import { EMAIL_DOMAIN_LABEL_PREFIX, EMAIL_LABEL } from "./email-inbox";
 
 /**
  * Readeck read-later adapter. Bearer-token API; normalizes bookmarks into
@@ -92,7 +92,15 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
   // stays). Derived from the label so it survives Readeck re-indexing on poll.
   const labels = bookmark.labels ?? [];
   const isEmail = labels.includes(EMAIL_LABEL);
-  const tags = isEmail ? labels.filter((l) => l !== EMAIL_LABEL) : labels;
+  // The sender domain rides along as a `lectern:from:<domain>` label (set at
+  // ingestion); recover it as the grouping key and hide it from user tags too.
+  const domainLabel = labels.find((l) => l.startsWith(EMAIL_DOMAIN_LABEL_PREFIX));
+  const senderDomain = domainLabel
+    ? domainLabel.slice(EMAIL_DOMAIN_LABEL_PREFIX.length) || null
+    : null;
+  const tags = isEmail
+    ? labels.filter((l) => l !== EMAIL_LABEL && !l.startsWith(EMAIL_DOMAIN_LABEL_PREFIX))
+    : labels;
   return {
     id: `readeck:${bookmark.id}`,
     source: "readeck",
@@ -104,6 +112,7 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     excerpt: bookmark.description ? snippet(bookmark.description) : null,
     author: bookmark.authors?.[0] ?? null,
     siteName: bookmark.site_name ?? null,
+    senderDomain,
     url: bookmark.url,
     coverImage: safeHttpUrl(bookmark.resources?.image?.src ?? bookmark.resources?.thumbnail?.src),
     wordCount: bookmark.word_count ?? null,
