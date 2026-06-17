@@ -25,6 +25,7 @@ function rssCard(over: Partial<Card> = {}): Card {
     excerpt: null,
     author: null,
     siteName: null,
+    senderDomain: null,
     url: "https://example.com/a",
     coverImage: null,
     wordCount: null,

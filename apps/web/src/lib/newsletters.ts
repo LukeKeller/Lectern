@@ -19,6 +19,16 @@ export function senderName(card: Card): string {
 }
 
 /**
+ * The stable grouping key for a publication: the sender's email domain when set
+ * (so 404 Media's many bylines — Joseph Cox, Janus Rose, Samantha Cole, all
+ * @404media.co — collapse into one shelf), falling back to the display name for
+ * non-email or legacy cards that carry no domain.
+ */
+export function publicationKey(card: Card): string {
+	return card.senderDomain?.trim().toLowerCase() || senderName(card);
+}
+
+/**
  * Finished = the derived read state OR progress past the finished threshold.
  * Progress is the authoritative signal in the optimistic window before a sync
  * round-trip; readState covers archived saves whose progress never moved.
@@ -28,6 +38,9 @@ export function isFinished(card: Card): boolean {
 }
 
 export interface Publication {
+	/** Stable grouping key (the sender domain, or the name when none). The page
+	 * filters a publication's issues by `publicationKey(card) === key`. */
+	key: string;
 	name: string;
 	total: number;
 	unread: number;
@@ -43,26 +56,48 @@ export interface Publication {
  * rack is stable.
  */
 export function buildPublications(cards: Card[]): Publication[] {
-	const groups = new Map<string, { name: string; unread: number; dates: number[] }>();
+	const groups = new Map<
+		string,
+		{ key: string; unread: number; dates: number[]; names: Map<string, number> }
+	>();
 	for (const card of cards) {
-		const name = senderName(card);
-		let group = groups.get(name);
+		const key = publicationKey(card);
+		let group = groups.get(key);
 		if (!group) {
-			group = { name, unread: 0, dates: [] };
-			groups.set(name, group);
+			group = { key, unread: 0, dates: [], names: new Map() };
+			groups.set(key, group);
 		}
 		if (!isFinished(card)) group.unread += 1;
 		group.dates.push(issueDate(card));
+		// Tally display names so the merged group can show a human label (the most
+		// common byline) rather than a bare domain.
+		const name = senderName(card);
+		group.names.set(name, (group.names.get(name) ?? 0) + 1);
 	}
 	return [...groups.values()]
 		.map((group) => ({
-			name: group.name,
+			key: group.key,
+			name: representativeName(group.names),
 			total: group.dates.length,
 			unread: group.unread,
 			latestAt: Math.max(...group.dates),
 			cadence: cadenceLabel(group.dates)
 		}))
 		.sort((a, b) => b.latestAt - a.latestAt || a.name.localeCompare(b.name));
+}
+
+/** The display name for a merged group: the most frequent byline, ties broken
+ * alphabetically so the label is deterministic. */
+function representativeName(names: Map<string, number>): string {
+	let best = 'Newsletter';
+	let bestCount = -1;
+	for (const [name, count] of names) {
+		if (count > bestCount || (count === bestCount && name.localeCompare(best) < 0)) {
+			best = name;
+			bestCount = count;
+		}
+	}
+	return best;
 }
 
 const DAY_MS = 86_400_000;
@@ -98,7 +133,7 @@ export function cadenceLabel(dates: number[]): string | null {
 export function nextIssue(all: Card[], current: Card): { card: Card; sameSender: boolean } | null {
 	const unread = all.filter((c) => c.category === 'email' && c.id !== current.id && !isFinished(c));
 	const byNewest = (a: Card, b: Card) => issueDate(b) - issueDate(a);
-	const same = unread.filter((c) => senderName(c) === senderName(current)).sort(byNewest);
+	const same = unread.filter((c) => publicationKey(c) === publicationKey(current)).sort(byNewest);
 	if (same[0]) return { card: same[0], sameSender: true };
 	const other = unread.sort(byNewest);
 	if (other[0]) return { card: other[0], sameSender: false };

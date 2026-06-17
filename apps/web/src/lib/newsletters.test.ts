@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Card } from '@lectern/shared';
-import { buildPublications, cadenceLabel, issueDate, nextIssue, senderName } from './newsletters';
+import {
+	buildPublications,
+	cadenceLabel,
+	issueDate,
+	nextIssue,
+	publicationKey,
+	senderName
+} from './newsletters';
 
 let seq = 0;
 function issue(overrides: Partial<Card> = {}): Card {
@@ -64,6 +71,47 @@ describe('buildPublications', () => {
 		]);
 		expect(pubs.map((p) => p.name)).toEqual(['Morning Brew', 'Stratechery']);
 	});
+
+	it('merges differing bylines that share a sender domain into one publication', () => {
+		// 404 Media mails under many names; the domain is the real publication.
+		const pubs = buildPublications([
+			issue({
+				author: 'Joseph Cox',
+				senderDomain: '404media.co',
+				publishedAt: '2026-06-01T07:00:00Z'
+			}),
+			issue({
+				author: 'Janus Rose',
+				senderDomain: '404media.co',
+				publishedAt: '2026-06-05T07:00:00Z'
+			}),
+			issue({
+				author: 'Joseph Cox',
+				senderDomain: '404media.co',
+				publishedAt: '2026-06-09T07:00:00Z'
+			})
+		]);
+		expect(pubs).toHaveLength(1);
+		expect(pubs[0]?.key).toBe('404media.co');
+		expect(pubs[0]?.total).toBe(3);
+		// Display name = the most frequent byline (Joseph Cox appears twice).
+		expect(pubs[0]?.name).toBe('Joseph Cox');
+	});
+
+	it('keys on the display name when no sender domain is present (back-compat)', () => {
+		const pubs = buildPublications([issue({ author: 'Money Stuff', senderDomain: null })]);
+		expect(pubs[0]?.key).toBe('Money Stuff');
+		expect(pubs[0]?.name).toBe('Money Stuff');
+	});
+});
+
+describe('publicationKey', () => {
+	it('prefers the sender domain, falling back to the display name', () => {
+		expect(publicationKey(issue({ senderDomain: '404media.co' }))).toBe('404media.co');
+		expect(publicationKey(issue({ senderDomain: null, author: 'Garbage Day' }))).toBe(
+			'Garbage Day'
+		);
+	});
 });
 
 describe('cadenceLabel', () => {
@@ -94,6 +142,13 @@ describe('nextIssue', () => {
 		const other = issue({ author: 'Garbage Day', publishedAt: '2026-06-09T07:00:00Z' });
 		const pick = nextIssue([current, older, newer, other], current);
 		expect(pick).toEqual({ card: newer, sameSender: true });
+	});
+
+	it('treats a different byline on the same domain as the same publication', () => {
+		const current = issue({ author: 'Joseph Cox', senderDomain: '404media.co' });
+		const sibling = issue({ author: 'Janus Rose', senderDomain: '404media.co' });
+		const pick = nextIssue([current, sibling], current);
+		expect(pick).toEqual({ card: sibling, sameSender: true });
 	});
 
 	it('falls back to another publication and skips finished issues', () => {

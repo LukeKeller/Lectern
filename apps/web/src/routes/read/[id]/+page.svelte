@@ -348,6 +348,12 @@
 			// Re-extract the article from the original source (incomplete/broken capture).
 			void refetchContent();
 			e.preventDefault();
+		} else if (e.key === 'o' || e.key === 'O') {
+			// Open the original source in a new tab (not available for email cards).
+			if (card && card.category !== 'email' && card.url) {
+				window.open(card.url, '_blank', 'noopener,noreferrer');
+				e.preventDefault();
+			}
 		}
 	}
 
@@ -942,6 +948,7 @@
 					href={card.url}
 					target="_blank"
 					rel="noopener noreferrer"
+					title="Open original ( o )"
 					onclick={() => (menuOpen = false)}
 				>
 					<Icon name="external" size={16} />
@@ -1391,8 +1398,15 @@
 		background: var(--bg);
 		transition: transform 180ms var(--ease);
 	}
-	.bar.bar-hidden {
-		transform: translateY(-100%);
+	/* Auto-hide the bar only on phones, where it's the sole chrome and reading
+	   immersion matters most. On wider screens the bar stays pinned so the
+	   right-side settings (Display, rail toggles) remain reachable while scrolling
+	   down. Tablets (641-820px) use `position: static`, so the bar scrolls away
+	   with the content regardless of this rule. */
+	@media (max-width: 640px) {
+		.bar.bar-hidden {
+			transform: translateY(-100%);
+		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.bar {

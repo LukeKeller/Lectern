@@ -89,12 +89,33 @@ export function hasReadableText(html: string): boolean {
   return htmlToText(html).length > 0;
 }
 
+/** Readable text with anchor (link) content removed — site chrome is mostly links. */
+function nonLinkText(html: string): string {
+  return htmlToText(html.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, " "));
+}
+
+/**
+ * True when a body is essentially a single image (a comic strip, a photo post)
+ * carrying little prose — the kind of feed body whose value is the image, not
+ * its (near-empty) text.
+ */
+function isImageDominant(html: string): boolean {
+  return /<img\b/i.test(html) && htmlToText(html).length < 280;
+}
+
 /**
  * Choose whichever HTML body has more readable text. Lets the content resolver
  * prefer a scraped full article over an excerpt-only feed body, while keeping
  * the feed body for JS-only sources (e.g. Bluesky) whose pages scrape to empty
  * markup. Ties keep `feedBody`.
+ *
+ * Exception: an image-dominant feed body (e.g. xkcd's comic `<img>`) carries
+ * almost no text, so the "more text wins" rule would always pick a chrome-heavy
+ * scrape — the site's nav, "Prev/Random/Next", related links and footer — over
+ * the actual content. When the scrape is mostly that navigation chrome (its
+ * non-link text is short), keep the clean feed image instead.
  */
 export function richerHtml(feedBody: string, scraped: string): string {
+  if (isImageDominant(feedBody) && nonLinkText(scraped).length < 600) return feedBody;
   return htmlToText(scraped).length > htmlToText(feedBody).length ? scraped : feedBody;
 }
