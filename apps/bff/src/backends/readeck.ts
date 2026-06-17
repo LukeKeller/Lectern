@@ -1,6 +1,7 @@
 import type {
   BackendListParams,
   BackendPage,
+  BackendResource,
   Card,
   Highlight,
   HighlightColor,
@@ -213,6 +214,26 @@ export class ReadeckBackend implements ReadLaterBackend {
   async getContent(sourceId: string): Promise<string> {
     const res = await this.request(`/api/bookmarks/${sourceId}/article`);
     return res.text();
+  }
+
+  /**
+   * Stream an article resource (image). The captured article HTML points at
+   * resources by relative in-archive name (`img/<hash>`), served by the authed
+   * `/x/*` route, or occasionally by a root-relative path (`/bm/...`) on the
+   * Readeck host. Either form is fetched with the bearer token attached (harmless
+   * on the public `/bm` route); the byte stream is relayed to the BFF image proxy.
+   */
+  async getResource(sourceId: string, ref: string): Promise<BackendResource> {
+    const path = ref.startsWith("/")
+      ? ref
+      : `/api/bookmarks/${sourceId}/x/${ref.replace(/^\.?\//, "")}`;
+    const res = await this.request(path);
+    const len = res.headers.get("content-length");
+    return {
+      contentType: res.headers.get("content-type") ?? "application/octet-stream",
+      contentLength: len ? Number(len) || null : null,
+      body: res.body as AsyncIterable<Uint8Array>,
+    };
   }
 
   async save(input: { url: string; html?: string; labels?: string[] }): Promise<string> {
