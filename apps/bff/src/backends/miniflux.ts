@@ -9,7 +9,7 @@ import type {
 } from "@lectern/shared";
 import { BackendHttpError } from "../errors";
 import { extractCoverImage } from "../cover";
-import { htmlToText, richerHtml, snippet } from "../html-text";
+import { htmlToText, richerHtml, snippet, stripFeedChrome } from "../html-text";
 import { enrichBlueskyContent } from "../bluesky";
 
 /**
@@ -284,6 +284,9 @@ export class MinifluxBackend implements RssBackend {
     } catch {
       // Scraper failed (paywall / JS-only page); fall back to the feed body.
     }
+    // Strip known site chrome (e.g. The Onion's "Newswire" link list) before the
+    // text comparison, so it neither wins the comparison nor buries the article.
+    scraped = stripFeedChrome(scraped, entry.url ?? "");
     const fallback = richerHtml(entry.content ?? "", scraped);
     return enrichBlueskyContent(entry.url ?? "", fallback);
   }

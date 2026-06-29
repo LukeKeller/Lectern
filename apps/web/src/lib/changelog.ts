@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.27.1',
+		date: '2026-06-29',
+		title: 'The Onion reads cleanly again',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The Onion articles no longer open with a long “Newswire” list of unrelated headlines that pushed the real story far down the page. The newswire chrome is now stripped so the article leads.'
+			}
+		]
+	},
+	{
 		version: '0.27.0',
 		date: '2026-06-29',
 		title: 'A bottom bar for your thumb, and a way to save links from anywhere',
