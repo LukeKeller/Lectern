@@ -47,7 +47,7 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
   // Central error handler: shared-schema validation -> 400; backend 429 ->
   // propagate Retry-After; backend 404 -> 404; other backend faults -> 502;
   // everything else -> 500 with no stack leak.
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     if (err instanceof ZodError) {
       return reply.code(400).send({ error: "validation", issues: err.issues });
     }
@@ -66,7 +66,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     if (sc !== undefined && sc >= 400 && sc < 500) {
       return reply.code(sc).send({ error: err instanceof Error ? err.message : "request_error" });
     }
-    app.log.error(err);
+    // Fastify's logger is disabled, so app.log.error is a no-op; surface
+    // unexpected faults to stderr (the systemd journal) — a bare 500 with no
+    // trace is undebuggable in production otherwise.
+    console.error(`[lectern] 500 on ${req.method} ${req.url}:`, err);
     return reply.code(500).send({ error: "internal_error" });
   });
 

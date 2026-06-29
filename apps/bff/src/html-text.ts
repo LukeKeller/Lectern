@@ -119,3 +119,31 @@ export function richerHtml(feedBody: string, scraped: string): string {
   if (isImageDominant(feedBody) && nonLinkText(scraped).length < 600) return feedBody;
   return htmlToText(scraped).length > htmlToText(feedBody).length ? scraped : feedBody;
 }
+
+/**
+ * Strip site-navigation chrome that a scraper prepends to the real article.
+ *
+ * The Onion's scraped article pages lead with a "Newswire" block — a heading
+ * followed by a ~20-item list of links to other stories — before the story
+ * itself. Left in, it counts as the bulk of the page's text (so `richerHtml`
+ * prefers the scrape) and buries the actual article far down the reader. Remove
+ * the "Newswire" heading and the link list that immediately follows it, plus any
+ * leading empty paragraphs or divider the removal exposes. Gated to theonion.com
+ * so the generic "heading + list" shape can't strip a legitimate list elsewhere.
+ */
+export function stripFeedChrome(html: string, url: string): string {
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return html;
+  }
+  if (!/(^|\.)theonion\.com$/i.test(host)) return html;
+  let s = html.replace(
+    /<h[1-6][^>]*>\s*Newswire\s*<\/h[1-6]>\s*<ul\b[\s\S]*?<\/ul>\s*(?:<hr\s*\/?>\s*)?/i,
+    "",
+  );
+  // Drop leading empty paragraphs / stray dividers left at the top.
+  s = s.replace(/^(?:\s*(?:<p>\s*<\/p>|<hr\s*\/?>))+/i, "");
+  return s;
+}
