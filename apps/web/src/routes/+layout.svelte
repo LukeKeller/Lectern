@@ -20,6 +20,7 @@
 	import { feedGroupKey } from '$lib/feeds';
 	import { SvelteSet } from 'svelte/reactivity';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import AddLinkDialog from '$lib/components/AddLinkDialog.svelte';
 	import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
 	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
@@ -37,6 +38,7 @@
 	let paletteOpen = $state(false);
 	let drawerOpen = $state(false);
 	let helpOpen = $state(false);
+	let addOpen = $state(false);
 	let pending: string | null = null;
 
 	// The reader supplies its own toolbar (with Back); on phones, the app top bar
@@ -327,27 +329,10 @@
 </script>
 
 <div class="topbar" class:reader-route={isReader}>
-	<button
-		type="button"
-		class="icon-btn"
-		aria-label="Open navigation"
-		aria-expanded={drawerOpen}
-		onclick={() => (drawerOpen = true)}
-	>
-		<Icon name="menu" />
-	</button>
 	<a class="brand" href={resolve('/')}>
 		<span class="mark" aria-hidden="true"></span>
 		Lectern
 	</a>
-	<button
-		type="button"
-		class="icon-btn"
-		aria-label="Open command palette"
-		onclick={() => (paletteOpen = true)}
-	>
-		<Icon name="search" />
-	</button>
 </div>
 
 {#if drawerOpen}
@@ -529,6 +514,12 @@
 
 		<p class="section">Tools</p>
 		<ul>
+			<li>
+				<button type="button" class="nav-btn" onclick={() => (addOpen = true)}>
+					<Icon name="plus" />
+					<span>Add link</span>
+				</button>
+			</li>
 			{#each tools as item (item.id)}
 				<li>
 					<a
@@ -639,7 +630,66 @@
 	{@render children()}
 </main>
 
+<!-- Mobile bottom navigation: thumb-reachable primary destinations plus a central
+     Add button for saving links. Hidden on desktop and on the reader route (which
+     supplies its own toolbar). -->
+<nav class="bottomnav" class:reader-route={isReader} aria-label="Primary">
+	<a
+		href={resolve('/inbox')}
+		class="bn-item"
+		class:active={isActive('/inbox')}
+		aria-current={isActive('/inbox') ? 'page' : undefined}
+	>
+		<span class="bn-ico">
+			<Icon name="inbox" size={22} />
+			{#if counts.inbox > 0}<span class="bn-count" aria-hidden="true"></span>{/if}
+		</span>
+		<span class="bn-label">Inbox</span>
+	</a>
+	<a
+		href={resolve('/feed')}
+		class="bn-item"
+		class:active={isActive('/feed')}
+		aria-current={isActive('/feed') ? 'page' : undefined}
+	>
+		<span class="bn-ico">
+			<Icon name="rss" size={22} />
+			{#if counts.feed > 0}<span class="bn-count" aria-hidden="true"></span>{/if}
+		</span>
+		<span class="bn-label">Feed</span>
+	</a>
+	<button
+		type="button"
+		class="bn-item bn-add"
+		onclick={() => (addOpen = true)}
+		aria-label="Save a link"
+	>
+		<span class="bn-fab"><Icon name="plus" size={24} /></span>
+	</button>
+	<a
+		href={resolve('/search')}
+		class="bn-item"
+		class:active={isActive('/search')}
+		aria-current={isActive('/search') ? 'page' : undefined}
+	>
+		<span class="bn-ico"><Icon name="search" size={22} /></span>
+		<span class="bn-label">Search</span>
+	</a>
+	<button
+		type="button"
+		class="bn-item"
+		class:active={drawerOpen}
+		aria-label="Open navigation menu"
+		aria-expanded={drawerOpen}
+		onclick={() => (drawerOpen = true)}
+	>
+		<span class="bn-ico"><Icon name="menu" size={22} /></span>
+		<span class="bn-label">Menu</span>
+	</button>
+</nav>
+
 <CommandPalette bind:open={paletteOpen} />
+<AddLinkDialog bind:open={addOpen} />
 
 {#if helpOpen}
 	<ShortcutsHelp onclose={() => (helpOpen = false)} />
@@ -686,24 +736,6 @@
 	.topbar .brand {
 		margin: 0 auto;
 		font-size: 1rem;
-	}
-
-	.icon-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 2.75rem;
-		min-height: 2.75rem;
-		border: 0;
-		border-radius: var(--radius);
-		background: transparent;
-		color: var(--text-muted);
-		cursor: pointer;
-		transition: background var(--dur-fast) var(--ease);
-	}
-	.icon-btn:hover {
-		background: var(--surface-alt);
-		color: var(--text);
 	}
 
 	.scrim {
@@ -758,6 +790,7 @@
 	}
 
 	nav a,
+	.nav-btn,
 	.foot-link {
 		display: flex;
 		align-items: center;
@@ -786,9 +819,18 @@
 		line-height: 1;
 	}
 	nav a:hover,
+	.nav-btn:hover,
 	.foot-link:hover {
 		background: var(--surface-alt);
 		color: var(--text);
+	}
+	.nav-btn {
+		width: 100%;
+		border: 0;
+		background: transparent;
+		font-family: inherit;
+		text-align: left;
+		cursor: pointer;
 	}
 	nav a.active,
 	.foot-link.active {
@@ -968,6 +1010,81 @@
 		letter-spacing: 0.02em;
 	}
 
+	/* Mobile bottom navigation (hidden on desktop; revealed at the 820px break). */
+	.bottomnav {
+		position: fixed;
+		inset: auto 0 0 0;
+		z-index: 30;
+		display: none;
+		align-items: stretch;
+		height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+		padding-bottom: env(safe-area-inset-bottom);
+		background: var(--bg);
+		border-top: 1px solid var(--border);
+	}
+	.bn-item {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.12rem;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--text-muted);
+		font-family: inherit;
+		cursor: pointer;
+		transition: color var(--dur-fast) var(--ease);
+		-webkit-tap-highlight-color: transparent;
+	}
+	.bn-item:hover {
+		color: var(--text);
+	}
+	.bn-item.active {
+		color: var(--accent);
+	}
+	.bn-ico {
+		position: relative;
+		display: inline-flex;
+	}
+	.bn-label {
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		line-height: 1;
+	}
+	/* A small unread dot on the icon, mirroring the sidebar count badges. */
+	.bn-count {
+		position: absolute;
+		top: -2px;
+		right: -3px;
+		width: 7px;
+		height: 7px;
+		border-radius: var(--radius-full);
+		background: var(--accent);
+		box-shadow: 0 0 0 2px var(--bg);
+	}
+	/* Center Add button: an accent disc that lifts above the bar. */
+	.bn-add {
+		flex: 0 0 auto;
+		padding: 0 0.6rem;
+	}
+	.bn-fab {
+		display: grid;
+		place-items: center;
+		width: 2.85rem;
+		height: 2.85rem;
+		border-radius: var(--radius-full);
+		background: var(--accent);
+		color: var(--accent-contrast);
+		box-shadow: var(--shadow-md);
+		transition: transform var(--dur-fast) var(--ease);
+	}
+	.bn-add:active .bn-fab {
+		transform: scale(0.92);
+	}
+
 	main {
 		margin-left: var(--sidebar-w);
 		padding: clamp(1.5rem, 3vw, 3rem) clamp(1.1rem, 4vw, 3rem)
@@ -976,6 +1093,9 @@
 
 	@media (max-width: 820px) {
 		.topbar {
+			display: flex;
+		}
+		.bottomnav {
 			display: flex;
 		}
 		.scrim {
@@ -992,16 +1112,23 @@
 		main {
 			margin-left: 0;
 			padding-top: calc(var(--topbar-h) + env(safe-area-inset-top) + 1rem);
+			/* Reserve space for the fixed bottom nav so content clears it. */
+			padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 1rem);
 		}
 	}
 	/* Reader route on phones: the reader's own toolbar (with Back) is the only
-	   chrome — drop the app bar and the padding that reserved space for it. */
+	   chrome — drop the app bar and the bottom nav, plus the padding that reserved
+	   space for them. */
 	@media (max-width: 640px) {
 		.topbar.reader-route {
 			display: none;
 		}
+		.bottomnav.reader-route {
+			display: none;
+		}
 		main.reader-route {
 			padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+			padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
 		}
 	}
 </style>

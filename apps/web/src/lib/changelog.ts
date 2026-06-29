@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.27.0',
+		date: '2026-06-29',
+		title: 'A bottom bar for your thumb, and a way to save links from anywhere',
+		changes: [
+			{
+				kind: 'added',
+				text: 'A bottom navigation bar on phones puts Inbox, Feed, Search, and the menu within thumb’s reach, with unread dots on Inbox and Feed. The old hamburger and search up top make way for it.'
+			},
+			{
+				kind: 'added',
+				text: 'Save any link without leaving the app: tap the “+” in the bottom bar (or “Add link” in the sidebar on desktop), and the URL you just copied is pre-filled, ready to save to your Inbox. This finally gives iPhone a way to save articles, where the system share sheet was never an option.'
+			}
+		]
+	},
+	{
 		version: '0.26.0',
 		date: '2026-06-17',
 		title: 'Richer posts, tidier newsletters, and settings within reach',
