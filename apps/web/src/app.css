@@ -136,6 +136,7 @@
 	/* Layout */
 	--sidebar-w: 15rem;
 	--topbar-h: 3.25rem;
+	--bottomnav-h: 3.5rem;
 
 	/* Color — light (warm paper) */
 	--bg: #f6f4ee;
