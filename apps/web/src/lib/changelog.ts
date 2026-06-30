@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.28.0',
+		date: '2026-06-30',
+		title: 'Clear what you’ve read with a tap or the spacebar',
+		changes: [
+			{
+				kind: 'added',
+				text: 'A Delete button now sits at the end of every article, next to the triage actions. Finish reading, tap Delete, and you’re dropped straight back into the list — with the article removed from the source too.'
+			},
+			{
+				kind: 'improved',
+				text: 'Space now marks the focused item read in a list (it still skims paragraph-by-paragraph while you’re reading), and “r” refreshes the list. The old Space / Shift+Space step-through-the-list shortcuts have been retired.'
+			}
+		]
+	},
+	{
 		version: '0.27.1',
 		date: '2026-06-29',
 		title: 'The Onion reads cleanly again',

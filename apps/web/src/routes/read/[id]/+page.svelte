@@ -248,6 +248,26 @@
 		else void goto(resolve('/'));
 	}
 
+	// Delete the open document at the source and locally, then drop back into the
+	// originating list (which reads live from db.cards, so the row vanishes at once).
+	let deleting = $state(false);
+	let deleteError = $state(false);
+	async function deleteCurrent() {
+		if (!card || deleting) return;
+		if (!confirm('Delete this permanently? This removes it from the source too.')) return;
+		deleting = true;
+		deleteError = false;
+		try {
+			await getClient().deleteDocument(card.id);
+			await db.cards.delete(card.id);
+			goBack();
+		} catch {
+			deleteError = true;
+		} finally {
+			deleting = false;
+		}
+	}
+
 	// Paragraph focus: an accent bar tracks the "current" block; Space / arrows move
 	// it and auto-scroll it to center, for keyboard-driven reading.
 	const BLOCK_SEL = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, figure';
@@ -323,9 +343,10 @@
 
 	function onKey(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
-		// Space / Shift+Space (paragraph advance) and j/k flow through the global key
-		// layer to this view's controller.move — handled there, not here, so they stay
-		// unified with the lists and never double-fire.
+		// Space (paragraph advance) and j/k flow through the global key layer to this
+		// view's controller.move — handled there, not here, so they stay unified with
+		// the lists and never double-fire. (On lists Space marks read; the reader has
+		// no markRead, so the layer falls its Space back to move/advance here.)
 		if (e.key === '[') {
 			tocOpen = !tocOpen;
 			e.preventDefault();
@@ -1206,7 +1227,19 @@
 						>
 							Shortlist
 						</button>
+						<button
+							type="button"
+							class="err-btn danger"
+							onclick={deleteCurrent}
+							disabled={deleting}
+							title="Delete permanently"
+						>
+							{deleting ? 'Deleting…' : 'Delete'}
+						</button>
 					</div>
+					{#if deleteError}
+						<p class="end-delete-error" role="alert">Couldn't delete — try again.</p>
+					{/if}
 				{/if}
 				{#if nextCard}
 					<!-- replaceState: advancing to the next article swaps this reader entry
@@ -1821,9 +1854,21 @@
 	.err-btn.primary:hover {
 		background: var(--accent-deep);
 	}
+	.err-btn.danger {
+		color: var(--error);
+	}
+	.err-btn.danger:hover {
+		border-color: var(--error);
+		background: var(--surface-alt);
+	}
 	.err-btn:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+	.end-delete-error {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--error);
 	}
 	.err-detail {
 		margin-top: 0.5rem;

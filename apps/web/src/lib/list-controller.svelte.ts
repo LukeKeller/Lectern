@@ -13,6 +13,8 @@ export interface ListController {
 	triage(location: Location): void;
 	/** Optional "mark the focused document read"; the reading view omits it. */
 	markRead?(): void;
+	/** Optional "refresh the list" (re-pull from the server); the reading view omits it. */
+	refresh?(): void;
 	/** Optional "go back" (the reading view returns to its list); lists omit it. */
 	back?(): void;
 }

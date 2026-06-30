@@ -15,7 +15,6 @@
 			items: [
 				['j  /  ↓', 'Next document'],
 				['k  /  ↑', 'Previous document'],
-				['Space', 'Next (Shift+Space: previous)'],
 				['Enter  /  o', 'Open document'],
 				['Esc', 'Back to list'],
 				['/', 'Search'],
@@ -30,7 +29,8 @@
 				['l', 'Move to Later'],
 				['s', 'Move to Shortlist'],
 				['e', 'Archive'],
-				['r', 'Mark read']
+				['Space', 'Mark read'],
+				['r', 'Refresh list']
 			]
 		},
 		{

@@ -43,17 +43,17 @@ describe('resolveKey', () => {
 		});
 	});
 
-	it('maps r to mark read', () => {
-		expect(resolveKey(null, { key: 'r' }).action).toEqual({ type: 'markRead' });
+	it('maps r to refresh the list', () => {
+		expect(resolveKey(null, { key: 'r' }).action).toEqual({ type: 'refresh' });
 	});
 
-	it('maps Space to a forward move and Shift+Space to a backward move', () => {
+	it('maps Space to mark read (regardless of Shift)', () => {
 		expect(resolveKey(null, { key: ' ' })).toEqual({
-			action: { type: 'move', delta: 1 },
+			action: { type: 'markRead' },
 			pending: null
 		});
 		expect(resolveKey(null, { key: ' ', shiftKey: true })).toEqual({
-			action: { type: 'move', delta: -1 },
+			action: { type: 'markRead' },
 			pending: null
 		});
 	});
