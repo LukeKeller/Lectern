@@ -274,6 +274,17 @@
 				if (ctrl?.markRead) {
 					event.preventDefault();
 					ctrl.markRead();
+				} else if (ctrl) {
+					// The reader has no mark-read; Space keeps advancing the paragraph
+					// focus (skim) there instead of going inert.
+					event.preventDefault();
+					ctrl.move(1);
+				}
+				break;
+			case 'refresh':
+				if (ctrl?.refresh) {
+					event.preventDefault();
+					ctrl.refresh();
 				}
 				break;
 			case 'back':

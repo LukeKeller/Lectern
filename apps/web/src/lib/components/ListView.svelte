@@ -482,6 +482,14 @@
 			const card = cards[selectedIndex];
 			// Selection index stays put so the next card slides into focus.
 			if (card) markReadById(card);
+		},
+		refresh() {
+			// Drop the just-read rows held in place and re-pull from the server, so
+			// the list rebuilds from current read state (same as a remount).
+			stickyRead.clear();
+			selectedIndex = 0;
+			liveMessage = 'Refreshing';
+			void getSync().pull();
 		}
 	};
 
