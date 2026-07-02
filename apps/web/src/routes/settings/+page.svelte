@@ -43,6 +43,37 @@
 	let syncResult = $state<string | undefined>(undefined);
 	let syncError = $state<string | undefined>(undefined);
 
+	// ---- Clean up (delete all read feed + newsletter items) ----
+	let cleaning = $state(false);
+	let cleanResult = $state<string | undefined>(undefined);
+	let cleanError = $state<string | undefined>(undefined);
+
+	// Delete every read item — finished feed articles and finished newsletter
+	// issues — at the source (so the poll can't re-add them), then pull the
+	// tombstones so this device drops them too. Irreversible, hence the confirm.
+	async function deleteAllRead() {
+		if (cleaning) return;
+		if (
+			!confirm(
+				'Delete all read items? Every finished feed article and newsletter issue is removed from its source. This cannot be undone.'
+			)
+		) {
+			return;
+		}
+		cleaning = true;
+		cleanResult = undefined;
+		cleanError = undefined;
+		try {
+			const { deleted } = await getClient().bulkDelete('read-all');
+			cleanResult = `Deleted ${deleted} item${deleted === 1 ? '' : 's'}`;
+			if (deleted > 0) await getSync().pull();
+		} catch (err) {
+			cleanError = err instanceof Error ? err.message : 'Delete failed.';
+		} finally {
+			cleaning = false;
+		}
+	}
+
 	// Force a server-side reconcile, then pull the resulting deltas so this device
 	// reflects the indexed/removed items.
 	async function forceSync() {
@@ -989,6 +1020,22 @@
 	</section>
 
 	<section>
+		<h2>Clean up</h2>
+		<p class="hint">
+			Delete everything you’ve finished reading — read feed articles and read newsletter issues — in
+			one sweep. Items are removed at the source so they won’t come back on the next poll. This
+			can’t be undone.
+		</p>
+		<div class="row">
+			<button type="button" class="btn danger" disabled={cleaning} onclick={deleteAllRead}>
+				{cleaning ? 'Deleting…' : 'Delete all read items'}
+			</button>
+			{#if cleanResult}<span class="ok">{cleanResult}</span>{/if}
+		</div>
+		{#if cleanError}<p class="err">{cleanError}</p>{/if}
+	</section>
+
+	<section>
 		<h2>Sync</h2>
 		<p class="hint">
 			Force a full sync with your sources now. Re-indexes new items from MiniFlux and Readeck and
@@ -1098,6 +1145,17 @@
 	.btn:hover {
 		border-color: var(--border-strong);
 		background: var(--surface-alt);
+	}
+	.btn.danger {
+		color: var(--error);
+	}
+	.btn.danger:hover:not(:disabled) {
+		border-color: var(--error);
+		background: color-mix(in srgb, var(--error) 8%, transparent);
+	}
+	.btn:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	.ghost {
 		background: transparent;

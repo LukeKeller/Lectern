@@ -233,15 +233,26 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     return reply.code(204).send();
   });
 
-  // Bulk delete: empty the archive, or delete all read feed items. Removes each
-  // item at the source (so the poll can't re-add it) then tombstones the index
-  // rows so the deletions ride the next /sync delta out to other devices.
+  // Bulk delete: empty the archive, delete all read feed items, or delete every
+  // read item (feed + newsletters). Removes each item at the source (so the poll
+  // can't re-add it) then tombstones the index rows so the deletions ride the next
+  // /sync delta out to other devices.
   app.post<{ Body: unknown }>("/documents/bulk-delete", async (req) => {
     const { scope } = BulkDeleteRequest.parse(req.body);
-    const targets =
-      scope === "archive"
-        ? await deps.overlay.listByLocation("archive")
-        : await deps.overlay.listReadBySource("miniflux");
+    let targets: DocumentRef[];
+    if (scope === "archive") {
+      targets = await deps.overlay.listByLocation("archive");
+    } else if (scope === "read-feed") {
+      targets = await deps.overlay.listReadBySource("miniflux");
+    } else {
+      // read-all: read feed items (MiniFlux) + read newsletters (Readeck email).
+      // The two sets never overlap (distinct sources), so a plain concat is safe.
+      const [feed, email] = await Promise.all([
+        deps.overlay.listReadBySource("miniflux"),
+        deps.overlay.listReadEmail(),
+      ]);
+      targets = [...feed, ...email];
+    }
     await deleteTargets(deps, targets);
     return BulkDeleteResponse.parse({ deleted: targets.length });
   });

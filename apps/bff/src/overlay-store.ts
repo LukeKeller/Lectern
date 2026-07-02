@@ -5,14 +5,16 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
   isNotNull,
   isNull,
   lt,
   lte,
+  or,
   sql as dsql,
 } from "drizzle-orm";
-import { Card, PlayerState } from "@lectern/shared";
+import { Card, FINISHED_THRESHOLD, PlayerState } from "@lectern/shared";
 import type {
   CreateViewRequest,
   Highlight,
@@ -244,6 +246,26 @@ export class DrizzleOverlayStore implements OverlayStore {
           eq(documents.source, source),
           isNull(documents.deletedAt),
           dsql`${documents.metadata}->'card'->>'readState' = 'finished'`,
+        ),
+      );
+    return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));
+  }
+
+  async listReadEmail(): Promise<DocumentRef[]> {
+    // Newsletters carry no read enum, so "read" is the same OR the client uses in
+    // `isFinished`: progress past the threshold (denormalized into the read_progress
+    // column on every setReadingProgress) OR a finished readState from a poll.
+    const rows = await this.db
+      .select({ id: documents.id, source: documents.source, sourceId: documents.sourceId })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.category, "email"),
+          isNull(documents.deletedAt),
+          or(
+            gte(documents.readProgress, FINISHED_THRESHOLD),
+            dsql`${documents.metadata}->'card'->>'readState' = 'finished'`,
+          ),
         ),
       );
     return rows.map((r) => ({ id: r.id, source: r.source as Source, sourceId: r.sourceId }));

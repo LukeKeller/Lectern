@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   Card,
   Feed,
+  FINISHED_THRESHOLD,
   PlayerState,
   type BackendPage,
   type BackendResource,
@@ -324,6 +325,16 @@ class FakeOverlayStore implements OverlayStore {
     for (const [id, card] of this.index) {
       if (this.deleted.has(id) || card.source !== source) continue;
       if (card.readState === "finished")
+        out.push({ id, source: card.source, sourceId: card.sourceId });
+    }
+    return out;
+  }
+
+  async listReadEmail(): Promise<DocumentRef[]> {
+    const out: DocumentRef[] = [];
+    for (const [id, card] of this.index) {
+      if (this.deleted.has(id) || card.category !== "email") continue;
+      if (card.readState === "finished" || card.readingProgress >= FINISHED_THRESHOLD)
         out.push({ id, source: card.source, sourceId: card.sourceId });
     }
     return out;
@@ -1016,6 +1027,52 @@ describe("documents", () => {
     expect(harness.deps.rss.removed).toEqual(["1"]);
     expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(true);
     expect(harness.deps.overlay.deleted.has("miniflux:2")).toBe(false);
+    await a.close();
+  });
+
+  it("read-all deletes read feed items AND read newsletters, leaving unread", async () => {
+    // Read + unread feed item.
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", readState: "finished" }),
+    );
+    harness.deps.rss.entries.set(
+      "2",
+      makeCard({ id: "miniflux:2", source: "miniflux", readState: "unopened" }),
+    );
+    // Read (progress complete) + unread newsletter.
+    harness.deps.readLater.bookmarks.set(
+      "e1",
+      makeCard({
+        id: "readeck:e1",
+        source: "readeck",
+        category: "email",
+        readingProgress: 1,
+      }),
+    );
+    harness.deps.readLater.bookmarks.set(
+      "e2",
+      makeCard({
+        id: "readeck:e2",
+        source: "readeck",
+        category: "email",
+        readingProgress: 0,
+      }),
+    );
+    await poll();
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "read-all" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().deleted).toBe(2);
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("readeck:e1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("miniflux:2")).toBe(false);
+    expect(harness.deps.overlay.deleted.has("readeck:e2")).toBe(false);
     await a.close();
   });
 

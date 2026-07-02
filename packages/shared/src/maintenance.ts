@@ -11,8 +11,10 @@ import { Category, Location, Source } from "./model";
  * What a bulk delete targets:
  *   - `archive`    — every document in `location="archive"` (any source).
  *   - `read-feed`  — read MiniFlux/RSS feed items only.
+ *   - `read-all`   — read feed items AND read newsletter (email) issues, in one
+ *                    sweep — the global "delete everything I've finished".
  */
-export const BulkDeleteScope = z.enum(["archive", "read-feed"]);
+export const BulkDeleteScope = z.enum(["archive", "read-feed", "read-all"]);
 export type BulkDeleteScope = z.infer<typeof BulkDeleteScope>;
 
 export const BulkDeleteRequest = z.object({ scope: BulkDeleteScope });

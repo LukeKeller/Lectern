@@ -237,6 +237,13 @@ export interface DocumentStore extends OverlayReader {
    */
   listReadBySource(source: Source): Promise<DocumentRef[]>;
   /**
+   * Live (non-tombstoned) read email-category documents — the newsletter half of
+   * the global "delete all read" sweep. Newsletters are Readeck docs with no read
+   * enum, so "read" is progress past the finished threshold OR a denormalized
+   * `readState === "finished"` (matches the client's `isFinished`).
+   */
+  listReadEmail(): Promise<DocumentRef[]>;
+  /**
    * Live (non-tombstoned) documents matching the facets whose `dateField`
    * precedes `before` — the targets of an age-based delete/mark-read sweep
    * ("older than a week" / "everything below this item").
