@@ -132,7 +132,7 @@ export function richerHtml(feedBody: string, scraped: string): string {
  * so the generic "heading + list" shape can't strip a legitimate list elsewhere.
  */
 export function stripFeedChrome(html: string, url: string): string {
-  let host = "";
+  let host: string;
   try {
     host = new URL(url).hostname;
   } catch {

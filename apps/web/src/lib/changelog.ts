@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.30.0',
+		date: '2026-07-02',
+		title: 'Clear everything you’ve finished in one tap',
+		changes: [
+			{
+				kind: 'added',
+				text: 'A new “Delete all read items” button in Settings → Clean up removes everything you’ve finished — read feed articles and read newsletter issues alike — in a single sweep, deleting them at the source so they don’t come back.'
+			}
+		]
+	},
+	{
 		version: '0.29.0',
 		date: '2026-07-02',
 		title: 'Newsletters move up top, with a shelf you can browse',
