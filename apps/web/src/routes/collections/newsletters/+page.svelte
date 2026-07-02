@@ -4,6 +4,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { db } from '$lib/db';
 	import { getSync } from '$lib/sync';
@@ -38,16 +39,30 @@
 
 	// The publication lens. Holds a publication KEY (the sender domain, or the
 	// display name when none) — not a bare sender, since one publication can span
-	// many bylines. Session-scoped on purpose: a rack selection is a way of
-	// looking, not a saved preference, so it resets on every visit.
-	let activeKey = $state<string | null>(null);
+	// many bylines. Seeded from the sidebar's `?pub=<key>` link, then rack clicks
+	// move it in place (a way of looking, not a saved preference).
+	let activeKey = $state<string | null>(untrack(() => page.url.searchParams.get('pub')));
 	const activePub = $derived(
 		activeKey === null ? null : (publications.find((p) => p.key === activeKey) ?? null)
 	);
-	// If the active publication disappears (ignored, deleted elsewhere), fall back
-	// to the full rack instead of filtering against a ghost.
+	// Follow the sidebar: when the `?pub` query changes (a newsletter drop-down
+	// link), move the lens to match. In-page rack clicks set activeKey directly and
+	// leave the URL untouched, so this only fires on real navigation.
 	$effect(() => {
-		if (activeKey !== null && !publications.some((p) => p.key === activeKey)) {
+		const pub = page.url.searchParams.get('pub');
+		untrack(() => {
+			activeKey = pub;
+		});
+	});
+	// If the active publication disappears (ignored, deleted elsewhere), fall back
+	// to the full rack instead of filtering against a ghost. Guarded on a loaded
+	// mirror so a URL-seeded key survives the brief window before cards arrive.
+	$effect(() => {
+		if (
+			activeKey !== null &&
+			all.value !== undefined &&
+			!publications.some((p) => p.key === activeKey)
+		) {
 			activeKey = null;
 		}
 	});
