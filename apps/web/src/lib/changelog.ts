@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.29.0',
+		date: '2026-07-02',
+		title: 'Newsletters move up top, with a shelf you can browse',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Newsletters now sit alongside Library and Feed near the top of the sidebar, instead of tucked away under Collections. Expand it to drop down the list of your publications — grouped by sender — and tap one to read just that publication’s issues.'
+			}
+		]
+	},
+	{
 		version: '0.28.0',
 		date: '2026-06-30',
 		title: 'Clear what you’ve read with a tap or the spacebar',

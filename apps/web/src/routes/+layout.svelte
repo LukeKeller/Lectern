@@ -18,6 +18,7 @@
 	import { buildMagazines } from '$lib/magazine';
 	import { feedsStore } from '$lib/feeds-store.svelte';
 	import { feedGroupKey } from '$lib/feeds';
+	import { buildPublications } from '$lib/newsletters';
 	import { SvelteSet } from 'svelte/reactivity';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import AddLinkDialog from '$lib/components/AddLinkDialog.svelte';
@@ -109,6 +110,15 @@
 		return n;
 	}
 
+	// Newsletter publications for the sidebar drop-down, grouped by sender domain
+	// (the same shelf model as the Newsletters page). Derived from the local mirror
+	// so the list and its per-publication unread badges work offline; the group's
+	// badge sums the unread across publications, mirroring the Feed badge.
+	const publications = $derived(
+		buildPublications(((allCards.value ?? []) as Card[]).filter((c) => c.category === 'email'))
+	);
+	const newsletterUnread = $derived(publications.reduce((n, p) => n + p.unread, 0));
+
 	// Sidebar feed-tree disclosure state, persisted so the tree reopens as the
 	// user left it. Top-level open flag + the set of expanded folder keys.
 	let feedsOpen = $state(loadFeedsOpen());
@@ -153,6 +163,21 @@
 	$effect(() => {
 		if (typeof localStorage !== 'undefined') {
 			localStorage.setItem('lectern.libraryNav.open', libraryOpen ? '1' : '0');
+		}
+	});
+
+	// Newsletter group disclosure — defaults closed (the rack can be long); the
+	// twisty toggles it and the choice persists, matching the Feed tree.
+	let newslettersOpen = $state(loadNewslettersOpen());
+	function loadNewslettersOpen(): boolean {
+		return (
+			typeof localStorage !== 'undefined' &&
+			localStorage.getItem('lectern.newslettersNav.open') === '1'
+		);
+	}
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('lectern.newslettersNav.open', newslettersOpen ? '1' : '0');
 		}
 	});
 
@@ -475,6 +500,50 @@
 				{/each}
 				{#if feedsStore.loaded && feedsStore.grouped.length === 0}
 					<li class="tree-empty">No feeds yet</li>
+				{/if}
+			{/if}
+
+			<li class="group">
+				<a
+					href={resolve('/collections/newsletters')}
+					class="group-link"
+					class:active={isActive('/collections/newsletters')}
+					aria-current={isActive('/collections/newsletters') ? 'page' : undefined}
+				>
+					<Icon name="mail" />
+					<span>Newsletters</span>
+					{#if newsletterUnread > 0}<span class="nav-count">{newsletterUnread}</span>{/if}
+				</a>
+				<button
+					type="button"
+					class="twisty"
+					aria-expanded={newslettersOpen}
+					aria-label={newslettersOpen ? 'Collapse Newsletters' : 'Expand Newsletters'}
+					onclick={() => (newslettersOpen = !newslettersOpen)}
+				>
+					<span class="chev" class:open={newslettersOpen}><Icon name="chevron" size={14} /></span>
+				</button>
+			</li>
+			{#if newslettersOpen}
+				{#each publications as pub (pub.key)}
+					{@const href = `${resolve('/collections/newsletters')}?pub=${encodeURIComponent(pub.key)}`}
+					<li>
+						<!-- resolve() owns the path; the query string carries the publication filter -->
+						<!-- eslint-disable svelte/no-navigation-without-resolve -->
+						<a
+							{href}
+							class="child"
+							class:active={page.url.pathname === resolve('/collections/newsletters') &&
+								page.url.searchParams.get('pub') === pub.key}
+						>
+							<span class="tree-label">{pub.name}</span>
+							{#if pub.unread > 0}<span class="nav-count">{pub.unread}</span>{/if}
+						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
+					</li>
+				{/each}
+				{#if publications.length === 0}
+					<li class="tree-empty">No newsletters yet</li>
 				{/if}
 			{/if}
 		</ul>
