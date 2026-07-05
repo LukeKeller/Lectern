@@ -18,14 +18,17 @@
 	import { readerSettings } from '$lib/reader-settings.svelte';
 	import {
 		clampAccentContrast,
+		googleFontHref,
 		readerCssVars,
 		readerThemeAttr,
+		sourceFontStack,
 		FONT_LABELS,
 		THEME_BG,
 		THEME_SWATCHES,
 		THEME_TEXT,
 		type FontFamily,
 		type ReaderTheme,
+		type SourceThemeMode,
 		type ThemeMode
 	} from '$lib/typography';
 	import {
@@ -80,6 +83,44 @@
 			cancelled = true;
 		};
 	});
+
+	// Source ("dress") theming: when enabled, fetch the document's publication
+	// theme (brand accent, favicon, display font — cached server-side by host) and
+	// let it re-dress the reader chrome. Best-effort; failures leave the theme.
+	let sourceThemeData = $state<{
+		accent: string | null;
+		faviconUrl: string | null;
+		displayFont: string | null;
+	} | null>(null);
+	let refreshingSourceTheme = $state(false);
+	$effect(() => {
+		const current = id;
+		sourceThemeData = null;
+		if (!current || readerSettings.current.sourceTheme === 'off') return;
+		let cancelled = false;
+		void getClient()
+			.getSourceTheme(current)
+			.then((r) => {
+				if (!cancelled) sourceThemeData = r;
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Re-fetch this source's theme from its site (bypasses the server cache).
+	async function refreshSourceTheme(): Promise<void> {
+		if (!id || refreshingSourceTheme) return;
+		refreshingSourceTheme = true;
+		try {
+			sourceThemeData = await getClient().getSourceTheme(id, { refresh: true });
+		} catch {
+			// leave the current theme in place
+		} finally {
+			refreshingSourceTheme = false;
+		}
+	}
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
@@ -144,6 +185,13 @@
 			.map((t) => ({ value: t as ReaderTheme, label: THEME_SWATCHES[t].label }))
 	];
 
+	// Source ("dress") theming levels, surfaced in the Display panel.
+	const SOURCE_THEME_OPTIONS: { value: SourceThemeMode; label: string }[] = [
+		{ value: 'off', label: 'Off' },
+		{ value: 'accent', label: 'Accent' },
+		{ value: 'full', label: 'Full' }
+	];
+
 	// Reader-pane theme: the explicit override, or the app theme when matching.
 	const readerThemeValue = $derived(
 		readerThemeAttr(readerSettings.current.theme, readerSettings.current.readerTheme)
@@ -156,16 +204,54 @@
 		if (readerThemeValue) return readerThemeValue as Exclude<ThemeMode, 'auto'>;
 		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 	});
-	// Override the pane's accent custom properties when an adaptive colour is
-	// live, clamped to >= 4.5:1 contrast against the active theme background.
+	// The accent driving the reader chrome: the source publication's brand colour
+	// wins (it's the stabler per-source signature), then the cover-derived accent,
+	// then null (leave the theme accent). Source theming and adaptive accent are
+	// independent toggles; this is their precedence when both are on.
+	const activeAccent = $derived.by((): string | null => {
+		if (readerSettings.current.sourceTheme !== 'off' && sourceThemeData?.accent) {
+			return sourceThemeData.accent;
+		}
+		if (readerSettings.current.adaptiveAccent && accentColor) return accentColor;
+		return null;
+	});
+	// The source display font applied to the title/masthead (headline slots only),
+	// in `full` mode. Never touches the reading column.
+	const sourceDisplayFont = $derived(
+		readerSettings.current.sourceTheme === 'full'
+			? sourceFontStack(sourceThemeData?.displayFont)
+			: null
+	);
+	// Override the pane's accent/masthead custom properties, clamping the accent
+	// to >= 4.5:1 contrast against the active theme background.
 	const accentStyle = $derived.by(() => {
-		if (!readerSettings.current.adaptiveAccent || !accentColor) return '';
-		const safe = clampAccentContrast(
-			accentColor,
-			THEME_BG[effectiveReaderTheme],
-			THEME_TEXT[effectiveReaderTheme]
-		);
-		return `--accent:${safe};--accent-soft:color-mix(in srgb, ${safe} 16%, transparent)`;
+		const parts: string[] = [];
+		if (activeAccent) {
+			const safe = clampAccentContrast(
+				activeAccent,
+				THEME_BG[effectiveReaderTheme],
+				THEME_TEXT[effectiveReaderTheme]
+			);
+			parts.push(`--accent:${safe}`);
+			parts.push(`--accent-soft:color-mix(in srgb, ${safe} 16%, transparent)`);
+		}
+		if (sourceDisplayFont) parts.push(`--source-display-font:${sourceDisplayFont}`);
+		return parts.join(';');
+	});
+
+	// In `full` mode, load the source's Google font so the masthead can actually
+	// wear it (family alone would just fall back to serif). One <link> per family,
+	// deduped; harmless if the family isn't really on Google Fonts.
+	$effect(() => {
+		if (readerSettings.current.sourceTheme !== 'full') return;
+		const href = googleFontHref(sourceThemeData?.displayFont);
+		if (!href) return;
+		if (document.head.querySelector(`link[data-source-font][href="${href}"]`)) return;
+		const link = document.createElement('link');
+		link.rel = 'stylesheet';
+		link.href = href;
+		link.setAttribute('data-source-font', '');
+		document.head.appendChild(link);
 	});
 
 	function candidates(): AnchorCandidate[] {
@@ -1068,6 +1154,36 @@
 					</button>
 				</div>
 			</div>
+			<div class="field">
+				<span class="field-label">Source dress</span>
+				<div class="seg">
+					{#each SOURCE_THEME_OPTIONS as o (o.value)}
+						<button
+							type="button"
+							class:active={readerSettings.current.sourceTheme === o.value}
+							aria-pressed={readerSettings.current.sourceTheme === o.value}
+							onclick={() => readerSettings.update({ sourceTheme: o.value })}
+						>
+							{o.label}
+						</button>
+					{/each}
+				</div>
+				<span class="field-hint">
+					Borrow each publication's colour{readerSettings.current.sourceTheme === 'full'
+						? ' and headline font'
+						: ''} — the reading column stays yours.
+				</span>
+				{#if readerSettings.current.sourceTheme !== 'off' && card && card.category !== 'email'}
+					<button
+						type="button"
+						class="source-refresh"
+						onclick={refreshSourceTheme}
+						disabled={refreshingSourceTheme}
+					>
+						{refreshingSourceTheme ? 'Refreshing…' : 'Refresh this source'}
+					</button>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </nav>
@@ -1137,7 +1253,20 @@
 						>{card.readingTimeMinutes} min read{/if}
 				</p>
 			{:else}
-				<div class="eyebrow">{card.siteName ?? new URL(card.url).hostname}</div>
+				<div class="eyebrow">
+					{#if readerSettings.current.sourceTheme !== 'off' && sourceThemeData?.faviconUrl}
+						<img
+							class="source-mark"
+							src={sourceThemeData.faviconUrl}
+							alt=""
+							aria-hidden="true"
+							loading="lazy"
+							referrerpolicy="no-referrer"
+							onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
+						/>
+					{/if}
+					{card.siteName ?? new URL(card.url).hostname}
+				</div>
 				<h1>{card.title}</h1>
 				{#if card.author || card.publishedAt || card.readingTimeMinutes}
 					<p class="byline">
@@ -1652,6 +1781,31 @@
 		width: 100%;
 		accent-color: var(--accent);
 	}
+	.field-hint {
+		font-size: var(--text-2xs);
+		line-height: 1.4;
+		color: var(--text-muted);
+	}
+	/* Quiet text button under the Source dress control: re-fetches this
+	   publication's theme from its site. Understated so it doesn't compete. */
+	.source-refresh {
+		align-self: flex-start;
+		padding: 0.2rem 0;
+		border: 0;
+		background: transparent;
+		color: var(--accent);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.03em;
+		cursor: pointer;
+	}
+	.source-refresh:hover:not(:disabled) {
+		text-decoration: underline;
+	}
+	.source-refresh:disabled {
+		color: var(--text-muted);
+		cursor: default;
+	}
 
 	.doc {
 		position: relative;
@@ -1716,6 +1870,9 @@
 	/* Title lockup: source eyebrow → balanced title → byline. The eyebrow
 	   carries the lockup's 1.2rem top space; the h1 sits 0.5rem under it. */
 	.eyebrow {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 		margin: 1.2rem 0 0;
 		font-family: var(--font-ui);
 		font-size: var(--text-2xs);
@@ -1723,6 +1880,15 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-muted);
+	}
+	/* Source favicon in the masthead: small, quiet, rounded to the app radius so
+	   it reads as a mark, not a raw favicon. Only shown under source theming. */
+	.source-mark {
+		width: 1.05rem;
+		height: 1.05rem;
+		border-radius: var(--radius-sm);
+		object-fit: contain;
+		flex: none;
 	}
 	/* Miniature nameplate: the app masthead's serif/condensed/double-rule lockup
 	   at title scale — inline-block so the rule hugs the publication name. */
@@ -1739,7 +1905,10 @@
 		border-bottom: 3px double var(--border-strong);
 	}
 	h1 {
-		font-family: var(--font-serif);
+		/* Wears the source publication's display font in `full` source-theme mode
+		   (--source-display-font, set on .doc); falls back to the editorial serif.
+		   Chrome title only — the reading column keeps the reader's own faces. */
+		font-family: var(--source-display-font, var(--font-serif));
 		font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
 		line-height: 1.15;
 		letter-spacing: -0.015em;

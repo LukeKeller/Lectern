@@ -44,6 +44,16 @@ export type FontFamily =
  *  `indented` (book convention, first-line indents and no gap). */
 export type ParagraphStyle = 'spaced' | 'indented';
 
+/**
+ * How much of a source publication's "dress" to wear in the reader:
+ * `off` — none; `accent` — the source's brand colour + a favicon masthead;
+ * `full` — also its display font on the title/masthead (headline slots only,
+ * never the reading column). Tokens are extracted server-side; see the BFF's
+ * source-theme module. Distinct from {@link ReaderSettings.adaptiveAccent},
+ * which tints from the article's cover image; the source accent takes priority.
+ */
+export type SourceThemeMode = 'off' | 'accent' | 'full';
+
 export interface ReaderSettings {
 	/** App-wide theme (drives `<html data-theme>`). */
 	theme: ThemeMode;
@@ -51,6 +61,8 @@ export interface ReaderSettings {
 	readerTheme: ReaderTheme;
 	/** Tint the reader accent from the article's cover image (Iteration B). */
 	adaptiveAccent: boolean;
+	/** How much of the source publication's theming to wear (accent/masthead/font). */
+	sourceTheme: SourceThemeMode;
 	fontFamily: FontFamily;
 	/** Body font size in px. */
 	fontSize: number;
@@ -74,6 +86,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	theme: 'auto',
 	readerTheme: 'match',
 	adaptiveAccent: false,
+	sourceTheme: 'off',
 	fontFamily: 'serif',
 	fontSize: 19,
 	lineHeight: 1.6,
@@ -170,6 +183,10 @@ export function normalizeSettings(raw: unknown): ReaderSettings {
 			o.readerTheme && READER_THEMES[o.readerTheme] ? o.readerTheme : DEFAULT_SETTINGS.readerTheme,
 		adaptiveAccent:
 			typeof o.adaptiveAccent === 'boolean' ? o.adaptiveAccent : DEFAULT_SETTINGS.adaptiveAccent,
+		sourceTheme:
+			o.sourceTheme === 'accent' || o.sourceTheme === 'full' || o.sourceTheme === 'off'
+				? o.sourceTheme
+				: DEFAULT_SETTINGS.sourceTheme,
 		fontFamily: o.fontFamily && FONTS[o.fontFamily] ? o.fontFamily : DEFAULT_SETTINGS.fontFamily,
 		fontSize: clampNumber(o.fontSize, DEFAULT_SETTINGS.fontSize, 12, 28),
 		lineHeight: clampNumber(o.lineHeight, DEFAULT_SETTINGS.lineHeight, 1.2, 2.2),
@@ -204,6 +221,28 @@ const ACCESSIBILITY_FONTS: ReadonlySet<FontFamily> = new Set([
 	'lexend',
 	'opendyslexic'
 ]);
+
+/**
+ * Turn a source's display-font family name into a CSS `font-family` value with a
+ * serif fallback, quoting the family and rejecting anything that isn't a plain
+ * font name (defence against a hostile family string reaching `style`). Returns
+ * null when the name is unusable.
+ */
+export function sourceFontStack(family: string | null | undefined): string | null {
+	if (!family) return null;
+	const name = family.trim();
+	if (!/^[\w -]{1,64}$/.test(name)) return null;
+	return `"${name}", var(--font-serif)`;
+}
+
+/** The Google Fonts stylesheet URL for a display family (weights tuned for a
+ *  masthead). Returns null for an unusable name; mirrors {@link sourceFontStack}. */
+export function googleFontHref(family: string | null | undefined): string | null {
+	if (!family) return null;
+	const name = family.trim();
+	if (!/^[\w -]{1,64}$/.test(name)) return null;
+	return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}:wght@600;700&display=swap`;
+}
 
 /** The CSS custom properties that drive the reader's typography. */
 export function readerCssVars(s: ReaderSettings): Record<string, string> {

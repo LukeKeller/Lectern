@@ -719,6 +719,37 @@
 					<em>Tint each article’s links and accents with a colour drawn from its cover image.</em>
 				</span>
 			</label>
+			<div class="field">
+				<span class="flabel">Source dress</span>
+				<div class="seg">
+					<button
+						type="button"
+						class:active={readerSettings.current.sourceTheme === 'off'}
+						onclick={() => readerSettings.update({ sourceTheme: 'off' })}
+					>
+						Off
+					</button>
+					<button
+						type="button"
+						class:active={readerSettings.current.sourceTheme === 'accent'}
+						onclick={() => readerSettings.update({ sourceTheme: 'accent' })}
+					>
+						Accent
+					</button>
+					<button
+						type="button"
+						class:active={readerSettings.current.sourceTheme === 'full'}
+						onclick={() => readerSettings.update({ sourceTheme: 'full' })}
+					>
+						Full
+					</button>
+				</div>
+				<span class="fhint"
+					>Borrow each publication’s own identity: its brand colour and a favicon masthead (Accent),
+					plus its headline font (Full). The reading column always stays yours; takes priority over
+					Adaptive accent.</span
+				>
+			</div>
 			<label class="toggle">
 				<input
 					type="checkbox"

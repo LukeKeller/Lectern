@@ -75,6 +75,19 @@ export type DocumentContentResponse = z.infer<typeof DocumentContentResponse>;
 export const DocumentAccentResponse = z.object({ color: z.string().nullable() });
 export type DocumentAccentResponse = z.infer<typeof DocumentAccentResponse>;
 
+/**
+ * A publication's "dress": a small set of theming tokens extracted from the
+ * source site's `<head>` (brand accent, favicon, an optional Google-hosted
+ * display font). Cached per host, not per document — every article from a
+ * source shares it. Each field is null when the source doesn't expose it.
+ */
+export const SourceThemeResponse = z.object({
+  accent: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
+  displayFont: z.string().nullable(),
+});
+export type SourceThemeResponse = z.infer<typeof SourceThemeResponse>;
+
 export const SearchQuery = z.object({
   q: z.string().min(1),
   limit: z.number().int().min(1).max(50).default(20),
@@ -387,6 +400,15 @@ export const endpoints: Endpoint[] = [
     summary: "Get the cover-derived reader accent colour",
     tags: ["documents"],
     response: DocumentAccentResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/documents/:id/source-theme",
+    operationId: "getSourceTheme",
+    summary: "Get the source publication's theming tokens (accent, favicon, font)",
+    tags: ["documents"],
+    response: SourceThemeResponse,
     status: 200,
   },
   {

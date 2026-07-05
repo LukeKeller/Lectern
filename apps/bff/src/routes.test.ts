@@ -23,6 +23,7 @@ import {
 import { buildApp, type AppDeps } from "./app";
 import type { TtsRouter } from "./backends/tts-router";
 import { BackendHttpError } from "./errors";
+import type { SourceThemeTokens } from "./source-theme";
 import { config } from "./config";
 import {
   mergeOverlay,
@@ -566,6 +567,14 @@ class FakeOverlayStore implements OverlayStore {
   }
   async putAccent(documentId: string, color: string | null) {
     this.accentCache.set(documentId, color ?? "");
+  }
+
+  sourceThemeCache = new Map<string, SourceThemeTokens>();
+  async getSourceTheme(host: string): Promise<SourceThemeTokens | undefined> {
+    return this.sourceThemeCache.get(host);
+  }
+  async putSourceTheme(host: string, theme: SourceThemeTokens) {
+    this.sourceThemeCache.set(host, theme);
   }
 
   player: PlayerState = PlayerState.parse({});

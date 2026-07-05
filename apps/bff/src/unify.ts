@@ -14,6 +14,7 @@ import type {
   TtsProvider,
   UpdateViewRequest,
 } from "@lectern/shared";
+import type { SourceThemeTokens } from "./source-theme";
 
 /**
  * Unification: list + merge `Card`s from both backends and overlay BFF-owned
@@ -351,6 +352,12 @@ export interface AssetStore {
   getAccent(documentId: string): Promise<string | null | undefined>;
   /** Persist a computed accent (null records "no usable colour"). */
   putAccent(documentId: string, color: string | null): Promise<void>;
+
+  // --- per-source ("dress") theming (host-keyed token cache) ---
+  /** Cached source theming tokens for a host, or undefined when not yet fetched. */
+  getSourceTheme(host: string): Promise<SourceThemeTokens | undefined>;
+  /** Persist a source's theming tokens (empty fields record "checked, none"). */
+  putSourceTheme(host: string, theme: SourceThemeTokens): Promise<void>;
 
   // --- cross-device Listen player state ---
   /** The player's queue/index/position/rate (defaults when never saved). */

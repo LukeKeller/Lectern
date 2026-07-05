@@ -37,6 +37,7 @@ import {
   podcastEpisodes,
   rssHighlights,
   savedViews,
+  sourceTheme,
   ttsAudio,
 } from "./db/schema";
 import type {
@@ -46,6 +47,7 @@ import type {
   PodcastEpisodeRow,
 } from "./db/schema";
 import { parseId } from "./ids";
+import type { SourceThemeTokens } from "./source-theme";
 import {
   mergeOverlay,
   type ChangedDocuments,
@@ -733,6 +735,50 @@ export class DrizzleOverlayStore implements OverlayStore {
       .insert(documentAccent)
       .values({ documentId, color: color ?? "" })
       .onConflictDoUpdate({ target: documentAccent.documentId, set: { color: color ?? "" } });
+  }
+
+  /**
+   * Cached per-source theming tokens for a host, or undefined if never fetched.
+   * Stored empty strings mean "checked, none" and read back as null, distinct
+   * from the undefined "never computed" so callers skip re-fetching the site.
+   */
+  async getSourceTheme(host: string): Promise<SourceThemeTokens | undefined> {
+    const [row] = await this.db
+      .select({
+        accent: sourceTheme.accent,
+        faviconUrl: sourceTheme.faviconUrl,
+        displayFont: sourceTheme.displayFont,
+      })
+      .from(sourceTheme)
+      .where(eq(sourceTheme.host, host));
+    if (!row) return undefined;
+    return {
+      accent: row.accent === "" ? null : row.accent,
+      faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
+      displayFont: row.displayFont === "" ? null : row.displayFont,
+    };
+  }
+
+  async putSourceTheme(host: string, theme: SourceThemeTokens): Promise<void> {
+    const values = {
+      host,
+      accent: theme.accent ?? "",
+      faviconUrl: theme.faviconUrl ?? "",
+      displayFont: theme.displayFont ?? "",
+      fetchedAt: new Date(),
+    };
+    await this.db
+      .insert(sourceTheme)
+      .values(values)
+      .onConflictDoUpdate({
+        target: sourceTheme.host,
+        set: {
+          accent: values.accent,
+          faviconUrl: values.faviconUrl,
+          displayFont: values.displayFont,
+          fetchedAt: values.fetchedAt,
+        },
+      });
   }
 
   async getPlayerState(): Promise<PlayerState> {

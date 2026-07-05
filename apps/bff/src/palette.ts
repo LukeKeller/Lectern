@@ -146,7 +146,7 @@ const MAX_BYTES = 8 * 1024 * 1024; // cap downloads so a huge cover can't stall 
 const FETCH_TIMEOUT_MS = 6000;
 
 /** Whether a URL is a public http(s) target (basic SSRF guard). */
-function isFetchableUrl(url: string): boolean {
+export function isFetchableUrl(url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
