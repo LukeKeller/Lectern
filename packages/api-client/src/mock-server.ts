@@ -628,6 +628,7 @@ const handlers: Record<string, MockHandler> = {
     return { json: { id: params.id, html: `<main>${html}</main>` } };
   },
   getDocumentAccent: () => ({ json: { color: null } }),
+  getSourceTheme: () => ({ json: { accent: null, faviconUrl: null, displayFont: null } }),
   importReadwise: ({ body }) => {
     const total = (body as ImportReadwiseRequest).csv
       .split("\n")

@@ -160,6 +160,21 @@ export const documentAccent = pgTable("document_accent", {
 });
 
 /**
+ * Per-source ("dress") theming tokens, extracted from a publication's site
+ * `<head>` and keyed by host — every article from a source shares one row.
+ * Computed lazily on first read and cached here; a manual refresh re-fetches.
+ * Empty-string columns record "checked, none" (distinct from a null-absent row
+ * meaning "never fetched") so the lazy compute doesn't re-run on every open.
+ */
+export const sourceTheme = pgTable("source_theme", {
+  host: text("host").primaryKey(),
+  accent: text("accent").notNull().default(""),
+  faviconUrl: text("favicon_url").notNull().default(""),
+  displayFont: text("display_font").notNull().default(""),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Browser Web Push subscriptions (single-user, but one row per browser/device).
  * Keyed by endpoint so re-subscribing the same browser upserts rather than
  * duplicates. The p256dh/auth keys are the subscription's encryption material.

@@ -28,6 +28,7 @@ import {
   SavedView,
   SaveDocumentRequest,
   SearchResponse,
+  SourceThemeResponse,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
@@ -194,6 +195,17 @@ export class LecternClient {
    */
   getDocumentAccent(id: string) {
     return this.request<{ color: string | null }>("GET", `/documents/${id}/accent`);
+  }
+  /**
+   * Per-source theming tokens (brand accent, favicon, display font) drawn from
+   * the document's publication and cached server-side by host. Pass `refresh` to
+   * re-fetch the source site and overwrite the cache.
+   */
+  getSourceTheme(id: string, opts?: { refresh?: boolean }) {
+    return this.request("GET", `/documents/${id}/source-theme`, {
+      query: opts?.refresh ? { refresh: 1 } : undefined,
+      schema: SourceThemeResponse,
+    });
   }
   /** Full-text search over owned article bodies (server-side; online only). */
   search(q: string, limit = 20) {

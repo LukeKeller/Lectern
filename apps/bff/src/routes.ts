@@ -59,6 +59,7 @@ import { createHash } from "node:crypto";
 import type { AppDeps } from "./app";
 import type { DocumentRef } from "./unify";
 import { accentFromUrl } from "./palette";
+import { hostFromUrl, sourceThemeFromUrl } from "./source-theme";
 import { podcastFeedUrl, publicBaseUrl } from "./podcast";
 import { rewriteArticleImages } from "./images";
 import { parseId } from "./ids";
@@ -353,6 +354,30 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     await deps.overlay.putAccent(id, color);
     return { color };
   });
+
+  // Per-source ("dress") theming tokens for a document's publication, keyed and
+  // cached by host so every article from a source shares one fetch. Computed
+  // lazily on first read; `?refresh=1` re-fetches the site and re-caches.
+  // Returns `{ accent, faviconUrl, displayFont }`, each null when unavailable.
+  app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
+    "/documents/:id/source-theme",
+    async (req) => {
+      const { id } = req.params;
+      requireParsed(id);
+      const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+      const card = await loadDocument(deps, id);
+      const host = hostFromUrl(card.url);
+      const empty = { accent: null, faviconUrl: null, displayFont: null };
+      if (!host) return empty;
+      if (!refresh) {
+        const cached = await deps.overlay.getSourceTheme(host);
+        if (cached !== undefined) return cached;
+      }
+      const theme = await sourceThemeFromUrl(card.url);
+      await deps.overlay.putSourceTheme(host, theme);
+      return theme;
+    },
+  );
 
   // ---- text-to-speech ("Listen") -----------------------------------------
   app.get("/settings/tts", async () => ttsSettings(deps));
