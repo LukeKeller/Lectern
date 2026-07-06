@@ -11,7 +11,7 @@ colors:
   paper-surface-alt: "#ece7dd"
   paper-sunken: "#efece4"
   ink: "#2a2620"
-  ink-muted: "#6b6457"
+  ink-muted: "#56503f"
   hairline: "#e4ded1"
   hairline-strong: "#d6cfbf"
   sage: "#3f7d56"
@@ -45,8 +45,8 @@ typography:
     fontWeight: 600
     lineHeight: 1.2
   reading:
-    fontFamily: "'Iowan Old Style', Charter, Georgia, 'Times New Roman', serif"
-    fontSize: "1.0625rem"
+    fontFamily: "'Iowan Old Style', Charter, 'Literata', Georgia, serif"
+    fontSize: "19px"
     fontWeight: 400
     lineHeight: 1.6
 rounded:
@@ -197,7 +197,9 @@ token names; the *roles* are identical, only the values shift.)
 - **Recessed Paper** (`#efece4`): sunken plane for rails and inputs.
 - **Ink** (`#2a2620`): primary text. Warm brown-black, never `#000`. Also the ground of the
   undo toast (inverted).
-- **Faded Ink** (`#6b6457`): secondary text, muted icons, counts, timestamps, placeholder.
+- **Faded Ink** (`#56503f`): secondary text, muted icons, counts, timestamps, and the
+  global placeholder color. Deliberately darker than a mid-gray so it clears **AA (≈5.4:1)**
+  on Warm Paper — a light "elegant" gray here would fail the placeholder-contrast bar.
 - **Hairline** (`#e4ded1`) / **Strong Hairline** (`#d6cfbf`): the only border weights.
   Hairline at rest, Strong on hover/emphasis. Always 1px.
 
@@ -218,8 +220,10 @@ ground instead.
 
 **UI Font:** system sans stack (`ui-sans-serif, system-ui, -apple-system, 'Segoe UI'…`) —
 the chrome speaks in the OS's own quiet voice so it disappears.
-**Reading Font:** `'Iowan Old Style', Charter, Georgia` serif by default, plus four bundled,
-reader-selectable faces (Atkinson Hyperlegible, Lexend, Literata, OpenDyslexic).
+**Reading Font:** `'Iowan Old Style', Charter, 'Literata', Georgia` serif by default, plus four
+bundled, reader-selectable faces (Atkinson Hyperlegible, Lexend, Literata, OpenDyslexic). Each
+bundled face ships a metric-matched fallback (`Literata-fallback` = size-adjusted Georgia) so the
+font swap never reflows the column.
 **Mono Font:** `'SF Mono', 'JetBrains Mono'` — code and tabular data only.
 
 **Character:** The chrome is set in a neutral system sans so it recedes; the *reading column*
@@ -231,12 +235,18 @@ A single 8-step scale: `0.6875 · 0.75 · 0.8125 · 0.9375 · 1.0625 · 1.25 · 
 - **Display** (650, `2rem`, lh 1.2, ls −0.01em): page titles, the largest headings. App UI uses
   fixed rem — no fluid `clamp()` in product chrome.
 - **Headline** (650, `1.5rem`, lh 1.2): section headers within a page.
-- **Title** (650, `1.25rem`, lh 1.2): card titles, panel headers, dialog titles.
+- **Title** (650, `1.25rem`, lh 1.2, sans): panel headers, dialog titles, section headers.
+- **Index Title** (600, `1.25rem`, lh 1.25, **serif** `--font-serif`, ls −0.005em): the headline
+  of a **list/card row**. Deliberately set in the reading serif — not the sans `Title` — to give
+  the index a "magazine masthead" voice and a clean step over its sans byline. Read rows dim it to
+  Faded Ink at weight 500. This is the one place UI chrome borrows the reading face on purpose.
 - **Body** (400, `0.9375rem`, lh 1.55): default UI text and list rows.
 - **Label** (600, `0.75rem`–`0.6875rem`, tabular-nums where numeric): counts, badges,
   timestamps, metadata. Short only — never set passages here.
-- **Reading** (400, `1.0625rem`, lh 1.6, serif): the reader column. Size, measure, leading,
-  face and theme are all reader-controlled; this is the default.
+- **Reading** (400, **`19px`** default, lh 1.6, serif, measure 680px ≈ 71ch): the reader column.
+  Size (12–28px), leading (1.2–2.2), measure (480–760px), face, tracking, word/paragraph spacing
+  and theme are all reader-controlled; these are the defaults. Width presets: Narrow 580 / Medium
+  680 / Wide 760.
 
 ### Named Rules
 **The Reader-Owns-Type Rule.** In the reading column, type size, measure, family, and theme
@@ -245,6 +255,15 @@ are the reader's to set, not the designer's. Ship sensible defaults; never lock 
 **The Measure Rule.** Body and reading columns cap at ~65–75ch (the shared `.page` column is
 `max-width: 44rem`). Wider is fatiguing and forbidden.
 
+**The Theme-Fidelity Rule.** The reading column is tuned per theme, not shipped once and reused.
+Dark grounds open the leading (`--prose-leading-boost: 0.06`) because light-on-dark reads optically
+tighter, and pull images back from the flashlight effect (`--prose-img-filter: brightness(0.86)
+contrast(1.02)`); E-ink pre-flattens images to grayscale for clean dithering. Highlight marks paint
+solid marker ink multiplied into light papers (`--hl-blend: multiply`) but switch to a translucent
+tint on dark themes (`--hl-mix: 26%`, `normal` blend) so they never crush the text to black. Text
+selection is a 25%-accent-into-`--bg` mix (not the near-invisible `--accent-soft`), keeping the
+selected passage AAA on every theme.
+
 ## 4. Elevation
 
 Paper-tactile, not glassy. Surfaces are **flat with hairline borders at rest**; soft, warm,
@@ -252,7 +271,10 @@ low-opacity shadows appear only on things that genuinely float or respond — me
 palette, toasts, the listen player, and card/hover states. Shadows are tinted to the ink hue
 (`rgba(31,28,22,…)`), never neutral black, so they read as light falling on warm stock. A
 top-edge inset sheen (`--edge-hi`) gives raised surfaces the highlight of a physical page edge.
-Glassmorphism, backdrop-blur panels, and decorative glows are forbidden.
+Warm grounds carry a faint **paper tooth** — a tileable grayscale fractal-noise sheet (`--grain`)
+blended at ~12% (`--grain-strength`) via soft-light, tuned to look like stock, never like a filter;
+it is zeroed on E-ink (which dithers) and left off the high-contrast theme. Glassmorphism,
+backdrop-blur panels, and decorative glows are forbidden.
 
 ### Shadow Vocabulary
 - **Hairline lift** (`box-shadow: 0 1px 2px rgba(31,28,22,0.05)` — `--shadow-sm`): card hover,
@@ -261,6 +283,10 @@ Glassmorphism, backdrop-blur panels, and decorative glows are forbidden.
   `--shadow-md`): dropdown menus, toasts. Clearly off the page but still grounded.
 - **Modal** (`0 14px 36px rgba(31,28,22,0.14), 0 2px 8px rgba(31,28,22,0.08)` — `--shadow`):
   command palette and true overlays only.
+- **Sheet on a desk** (`0 1px 2px rgba(31,28,22,0.05), 0 22px 48px -30px rgba(31,28,22,0.32)`
+  — `--shadow-paper`): the document surfaces only — the newspaper broadsheet and the magazine
+  contents leaf. A long, soft, downward pool that reads as a page resting on the desk, not a
+  floating glass card. Zeroed on E-ink.
 - **Page-edge sheen** (`inset 0 1px 0 rgba(255,255,255,0.55)` — `--edge-hi`): the top
   highlight on raised surfaces.
 
@@ -347,6 +373,9 @@ user's meaning.
 - **Do** let the reader own type size, measure, family, and theme in the reading column.
 - **Do** keep motion fast and quiet: `120ms`/`180ms` with `cubic-bezier(0.22,0.61,0.36,1)`;
   honor `prefers-reduced-motion`.
+- **Do** color placeholder and muted UI text with Faded Ink (`--text-muted`, `#56503f`) — the
+  global `::placeholder` rule sets it at full opacity so every chromeless field (search, filter,
+  token, reader find) clears AA. Never leave a placeholder at the UA-default light gray.
 - **Do** hold WCAG AAA where feasible; preserve the high-contrast theme and reading faces.
 
 ### Don't:
