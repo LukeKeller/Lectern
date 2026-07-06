@@ -86,10 +86,26 @@ export const SourceThemeResponse = z.object({
   accent: z.string().nullable(),
   /** Brand accent for dark chrome (the source's dark-mode theme-color), or null. */
   accentDark: z.string().nullable(),
-  faviconUrl: z.string().nullable(),
+  /** Reading-surface background for light themes (literal from the source's CSS,
+   *  or a brand-derived tint), `#rrggbb`, or null. */
+  background: z.string().nullable(),
+  /** Reading-surface background for dark themes, `#rrggbb`, or null. */
+  backgroundDark: z.string().nullable(),
+  /** Body text colour, `#rrggbb`, or null (the reader keeps its own when null). */
+  text: z.string().nullable(),
+  /** Link colour for the reading column, `#rrggbb`, or null (falls back to accent). */
+  link: z.string().nullable(),
+  /** Body font family name applied to the reading column in Full mode, or null. */
+  bodyFont: z.string().nullable(),
+  /** Heading/display font family (headline slots), or null. */
   displayFont: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
   /** The publication's own name (og:site_name / application-name / title), or null. */
   siteName: z.string().nullable(),
+  /** How the palette was obtained: `literal` (parsed from the source's own CSS) or
+   *  `derived` (synthesized from the brand accent + favicon when the CSS was
+   *  unreadable). Null when no re-skin palette was produced. */
+  derivation: z.enum(["literal", "derived"]).nullable(),
 });
 export type SourceThemeResponse = z.infer<typeof SourceThemeResponse>;
 

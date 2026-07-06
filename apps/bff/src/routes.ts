@@ -366,8 +366,8 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   // lazily on first read; a cache entry is served while fresh (within the TTL),
   // and `?refresh=1` (or a stale entry) re-fetches the site and re-caches. A
   // failed origin fetch is never cached, so it retries on the next open. Returns
-  // `{ accent, accentDark, faviconUrl, displayFont, siteName }`, each null when
-  // unavailable.
+  // the full re-skin token set (accent/background/text/link colours, body +
+  // display fonts, favicon, site name, derivation), each null when unavailable.
   app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
     "/documents/:id/source-theme",
     async (req) => {
@@ -379,9 +379,15 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       const empty = {
         accent: null,
         accentDark: null,
-        faviconUrl: null,
+        background: null,
+        backgroundDark: null,
+        text: null,
+        link: null,
+        bodyFont: null,
         displayFont: null,
+        faviconUrl: null,
         siteName: null,
+        derivation: null,
       };
       if (!host) return SourceThemeResponse.parse(empty);
       if (!refresh) {

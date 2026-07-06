@@ -628,15 +628,22 @@ const handlers: Record<string, MockHandler> = {
     return { json: { id: params.id, html: `<main>${html}</main>` } };
   },
   getDocumentAccent: () => ({ json: { color: null } }),
-  // A realistic non-null sample so `pnpm dev` actually shows the source-theming
-  // feature (accent + favicon + site name) instead of a bare null theme.
+  // A realistic full re-skin sample so `pnpm dev` actually shows the source-theming
+  // feature (accent + background + text/link colours + fonts + favicon + site name)
+  // instead of a bare null theme.
   getSourceTheme: () => ({
     json: {
       accent: "#c2410c",
       accentDark: "#fb923c",
+      background: "#f4ecd8",
+      backgroundDark: "#1b1a17",
+      text: "#2b2620",
+      link: "#c2410c",
+      bodyFont: "Georgia",
+      displayFont: "Playfair Display",
       faviconUrl: "https://lectern.example/favicon.png",
-      displayFont: null,
       siteName: "The Lectern Post",
+      derivation: "literal",
     },
   }),
   listSourceThemes: () => ({
@@ -646,18 +653,30 @@ const handlers: Record<string, MockHandler> = {
           host: "lectern.example",
           accent: "#c2410c",
           accentDark: "#fb923c",
+          background: "#f4ecd8",
+          backgroundDark: "#1b1a17",
+          text: "#2b2620",
+          link: "#c2410c",
+          bodyFont: "Georgia",
+          displayFont: "Playfair Display",
           faviconUrl: "https://lectern.example/favicon.png",
-          displayFont: null,
           siteName: "The Lectern Post",
+          derivation: "literal",
           fetchedAt: NOW,
         },
         {
           host: "overreacted.io",
           accent: "#2563eb",
           accentDark: "#60a5fa",
-          faviconUrl: "https://overreacted.io/favicon.png",
+          background: "#eff4fb",
+          backgroundDark: "#0f172a",
+          text: null,
+          link: "#2563eb",
+          bodyFont: null,
           displayFont: "Inter",
+          faviconUrl: "https://overreacted.io/favicon.png",
           siteName: "overreacted",
+          derivation: "derived",
           fetchedAt: NOW,
         },
       ],

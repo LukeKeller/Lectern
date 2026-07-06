@@ -22,6 +22,7 @@
 		isDarkTheme,
 		readerCssVars,
 		readerThemeAttr,
+		reskinVars,
 		sourceFontStack,
 		FONT_LABELS,
 		THEME_BG,
@@ -91,9 +92,15 @@
 	let sourceThemeData = $state<{
 		accent: string | null;
 		accentDark: string | null;
-		faviconUrl: string | null;
+		background: string | null;
+		backgroundDark: string | null;
+		text: string | null;
+		link: string | null;
+		bodyFont: string | null;
 		displayFont: string | null;
+		faviconUrl: string | null;
 		siteName: string | null;
+		derivation: 'literal' | 'derived' | null;
 	} | null>(null);
 	let refreshingSourceTheme = $state(false);
 	$effect(() => {
@@ -248,19 +255,49 @@
 		return parts.join(';');
 	});
 
-	// In `full` mode, load the source's Google font so the masthead can actually
-	// wear it (family alone would just fall back to serif). One <link> per family,
-	// deduped; harmless if the family isn't really on Google Fonts.
+	// FULL dress re-skin: the whole reading column wears the source's background,
+	// body text colour, fonts, and link colour — within readability guardrails
+	// (text clamped to AAA, accent to 4.5:1, size/measure kept). Only when the
+	// source actually exposed a background to paint. Null in off/accent modes.
+	const reskin = $derived.by((): Record<string, string> | null => {
+		if (readerSettings.current.sourceTheme !== 'full' || !sourceThemeData?.background) return null;
+		const vars = reskinVars(sourceThemeData, isDarkTheme(effectiveReaderTheme));
+		return vars['--source-bg'] ? vars : null;
+	});
+	// The re-skin custom properties as an inline style fragment, plus the in-article
+	// heading font (so prose h2/h3 follow the source display face, matching the h1).
+	const reskinStyle = $derived.by(() => {
+		if (!reskin) return '';
+		let s = Object.entries(reskin)
+			.map(([k, v]) => `${k}:${v}`)
+			.join(';');
+		if (reskin['--source-display-font']) {
+			s += `;--prose-heading-font:${reskin['--source-display-font']}`;
+		}
+		return s;
+	});
+	// The full inline style for `.doc`: user typography (styleVars) → chrome accent
+	// (accentStyle) → re-skin overrides last so they win where they overlap (--accent).
+	const docStyle = $derived(
+		`${styleVars};${accentStyle}${reskinStyle ? `;${reskinStyle}` : ''}`
+	);
+
+	// In `full` mode, load the source's Google fonts so the masthead (display) and
+	// re-skinned reading column (body) can actually wear them — a family name alone
+	// would just fall back to serif. One <link> per family, deduped; harmless if the
+	// family isn't really on Google Fonts (it silently falls back via sourceFontStack).
 	$effect(() => {
 		if (readerSettings.current.sourceTheme !== 'full') return;
-		const href = googleFontHref(sourceThemeData?.displayFont);
-		if (!href) return;
-		if (document.head.querySelector(`link[data-source-font][href="${href}"]`)) return;
-		const link = document.createElement('link');
-		link.rel = 'stylesheet';
-		link.href = href;
-		link.setAttribute('data-source-font', '');
-		document.head.appendChild(link);
+		for (const family of [sourceThemeData?.displayFont, sourceThemeData?.bodyFont]) {
+			const href = googleFontHref(family);
+			if (!href) continue;
+			if (document.head.querySelector(`link[data-source-font][href="${href}"]`)) continue;
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = href;
+			link.setAttribute('data-source-font', '');
+			document.head.appendChild(link);
+		}
 	});
 
 	function candidates(): AnchorCandidate[] {
@@ -1223,7 +1260,13 @@
 	</div>
 {/if}
 
-<div class="reader" class:toc-open={tocOpen} class:panel-open={panelOpen}>
+<div
+	class="reader"
+	class:toc-open={tocOpen}
+	class:panel-open={panelOpen}
+	class:reskin={!!reskin}
+	style={reskin ? `--source-bg:${reskin['--source-bg']}` : undefined}
+>
 	<aside class="rail toc">
 		<p class="rail-head">Contents</p>
 		{#if headings.length}
@@ -1246,8 +1289,9 @@
 		class="doc"
 		class:focus-on={focusMode && focusIndex >= 0}
 		class:themed={readerSettings.current.readerTheme !== 'match'}
+		class:reskin={!!reskin}
 		data-theme={readerThemeValue}
-		style={`${styleVars};${accentStyle}`}
+		style={docStyle}
 		bind:this={docEl}
 	>
 		{#if focusIndex >= 0}
@@ -1836,6 +1880,34 @@
 		padding: clamp(1.25rem, 3vw, 2.5rem);
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow-sm);
+	}
+	/* FULL source re-skin. The reading column wears the publication's own ground,
+	   ink, and accent (all clamped for legibility in reskinVars). The .reader
+	   wrapper carries the same --source-bg so the ground fills the whole reading
+	   area — the column reads as one continuous page, not a card floating on the
+	   app background. Re-scoping --bg/--text/--surface-alt here means the grain,
+	   the code/quote surfaces, and the highlight blends all resolve against the
+	   source ground too. Any .themed card treatment is neutralised (no shadow, flush
+	   ground) so it never regresses to a floating frame. */
+	.reader.reskin {
+		background: var(--source-bg);
+		/* Fill the viewport so a short article's ground doesn't end mid-screen and
+		   reveal the app background beneath — the reading area reads as a full page. */
+		min-height: calc(100dvh - 5rem);
+	}
+	.doc.reskin {
+		background: var(--source-bg);
+		color: var(--source-text);
+		--bg: var(--source-bg);
+		--text: var(--source-text);
+		--surface-alt: color-mix(in srgb, var(--source-text) 7%, var(--source-bg));
+		box-shadow: none;
+	}
+	/* Body of the article follows the source body face when it exposed one; size,
+	   measure, leading, and spacing stay the reader's (guardrail — no size is taken
+	   from the source). Off/accent modes are untouched. */
+	.doc.reskin article {
+		font-family: var(--source-body-font, var(--reader-font));
 	}
 	/* The same paper grain the print surfaces wear (see FlipReader.svelte) —
 	   the reading column has tooth, not glass. Soft-light over the page ground

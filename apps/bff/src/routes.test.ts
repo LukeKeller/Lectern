@@ -586,9 +586,15 @@ class FakeOverlayStore implements OverlayStore {
         host,
         accent: tokens.accent,
         accentDark: tokens.accentDark,
-        faviconUrl: tokens.faviconUrl,
+        background: tokens.background,
+        backgroundDark: tokens.backgroundDark,
+        text: tokens.text,
+        link: tokens.link,
+        bodyFont: tokens.bodyFont,
         displayFont: tokens.displayFont,
+        faviconUrl: tokens.faviconUrl,
         siteName: tokens.siteName,
+        derivation: tokens.derivation,
         fetchedAt: fetchedAt.toISOString(),
       }));
   }
@@ -1288,9 +1294,15 @@ describe("source themes", () => {
     await harness.deps.overlay.putSourceTheme("overreacted.io", {
       accent: "#2563eb",
       accentDark: "#60a5fa",
-      faviconUrl: "https://overreacted.io/favicon.png",
+      background: "#eff4fb",
+      backgroundDark: "#0f172a",
+      text: "#1a202c",
+      link: "#2563eb",
+      bodyFont: null,
       displayFont: "Inter",
+      faviconUrl: "https://overreacted.io/favicon.png",
       siteName: "overreacted",
+      derivation: "literal",
     });
     const a = app();
 
