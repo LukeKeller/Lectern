@@ -318,6 +318,10 @@
 					ctrl.back();
 				}
 				break;
+			case 'addLink':
+				event.preventDefault();
+				addOpen = true;
+				break;
 			case 'palette':
 				event.preventDefault();
 				paletteOpen = true;
@@ -768,7 +772,7 @@
 	</button>
 </nav>
 
-<CommandPalette bind:open={paletteOpen} />
+<CommandPalette bind:open={paletteOpen} onAddLink={() => (addOpen = true)} />
 <AddLinkDialog bind:open={addOpen} />
 
 {#if helpOpen}

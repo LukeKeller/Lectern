@@ -1,26 +1,23 @@
 /**
  * Build a `javascript:` bookmarklet that saves the current page to Lectern.
  *
- * The bookmarklet POSTs the active tab's `location.href` to `<apiUrl>/documents`
- * as a `SaveDocumentRequest` body, authenticated with the personal bearer
- * `token`. The token is embedded verbatim, so the resulting link is sensitive
- * and must not be shared.
+ * Clicking the bookmarklet opens Lectern's own share-target page in a new tab
+ * (`<appOrigin>/share-target?url=<current page>`). That page runs inside the
+ * already-authenticated Lectern session, so the save happens same-origin using
+ * the existing cookie/session — no bearer token is embedded and there is no
+ * cross-origin `fetch`, CORS, or SSO to trip over. Because the link carries NO
+ * secret, it is safe to keep on the bookmarks bar or share.
  *
  * The script body is URL-encoded so it survives being used as an `href` (spaces,
  * quotes, and reserved characters are escaped); browsers decode the `javascript:`
  * URI before executing it.
  */
-export function buildBookmarklet(apiUrl: string, token: string): string {
-	const endpoint = `${apiUrl.replace(/\/+$/, '')}/documents`;
-	// Body shape matches SaveDocumentRequest; `url` is resolved at click time.
+export function buildBookmarklet(appOrigin: string): string {
+	// Strip any trailing slashes so we don't produce `//share-target`.
+	const base = appOrigin.replace(/\/+$/, '');
 	const source =
 		`(function(){` +
-		`fetch(${JSON.stringify(endpoint)},{` +
-		`method:'POST',` +
-		`headers:{'Content-Type':'application/json','Authorization':'Bearer '+${JSON.stringify(token)}},` +
-		`body:JSON.stringify({url:location.href,tags:[],location:'later'})` +
-		`}).then(function(r){alert(r.ok?'Saved to Lectern':'Lectern save failed: '+r.status)})` +
-		`.catch(function(e){alert('Lectern save failed: '+e)})` +
+		`window.open(${JSON.stringify(base)}+'/share-target?url='+encodeURIComponent(location.href),'_blank','noopener')` +
 		`})();`;
 	return `javascript:${encodeURIComponent(source)}`;
 }
