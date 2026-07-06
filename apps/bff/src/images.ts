@@ -163,9 +163,15 @@ export function resolveImageTarget(
   const trimmed = ref.trim();
   if (!trimmed || trimmed.startsWith("data:")) return null;
 
+  // A newsletter's synthetic URL (`newsletter.lectern.local`) is a meaningless
+  // Referer to a real image CDN and can trip hotlink protection that expects the
+  // sender's domain (or none), so drop it for email images.
+  const referer =
+    cardUrl && !cardUrl.startsWith("https://newsletter.lectern.local/") ? cardUrl : null;
+
   const abs = absoluteHttpUrl(trimmed);
   if (abs)
-    return isBlockedHost(abs.hostname) ? null : { kind: "remote", url: abs.href, referer: cardUrl };
+    return isBlockedHost(abs.hostname) ? null : { kind: "remote", url: abs.href, referer };
 
   // Relative reference.
   if (source === "readeck") {
@@ -183,7 +189,7 @@ export function resolveImageTarget(
   if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
   return isBlockedHost(resolved.hostname)
     ? null
-    : { kind: "remote", url: resolved.href, referer: cardUrl };
+    : { kind: "remote", url: resolved.href, referer };
 }
 
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;

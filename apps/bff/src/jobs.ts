@@ -11,6 +11,7 @@ import {
   formatEmailCursor,
   isExcludedSender,
   messageToSaveInput,
+  newsletterContentHtml,
   parseEmailCursor,
   parseExcludedSenders,
 } from "./backends/email-inbox";
@@ -221,7 +222,12 @@ export async function pollEmail(): Promise<number> {
       continue;
     }
     try {
-      await readLater.save(messageToSaveInput(msg));
+      const sourceId = await readLater.save(messageToSaveInput(msg));
+      // Own the newsletter's body ourselves (with the sender's real image URLs)
+      // so the reader serves it instead of Readeck's archived copy — Readeck's
+      // newsletter image archiving is unreliable (most `_resources` URLs 404), so
+      // we keep the original URLs and let the image proxy fetch them at read time.
+      await store.putContent(`readeck:${sourceId}`, newsletterContentHtml(msg));
       saved++;
       await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
     } catch (err) {

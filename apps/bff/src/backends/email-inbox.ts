@@ -148,6 +148,18 @@ export function buildReadeckHtml(msg: ParsedNewsletter): string {
   );
 }
 
+/**
+ * The newsletter's own body HTML (sanitized, unwrapped from any document shell)
+ * that Lectern stores as its content copy for the email document. We serve THIS
+ * instead of Readeck's re-archived version, because Readeck's archiving of
+ * newsletter images is unreliable — most archived `_resources` URLs 404 by read
+ * time. Keeping the sender's original image URLs lets the same-origin image
+ * proxy fetch them live when the article is opened.
+ */
+export function newsletterContentHtml(msg: ParsedNewsletter): string {
+  return extractBody(sanitizeEmailHtml(msg.html));
+}
+
 /** A Readeck label derived from the sender's display name (trimmed, capped). */
 function senderLabel(name: string): string {
   const clean = name.replace(/\s+/g, " ").trim().slice(0, 60);
