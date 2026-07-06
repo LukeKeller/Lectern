@@ -806,9 +806,11 @@
 					</button>
 				</div>
 				<span class="fhint"
-					>Borrow each publication’s own identity: its brand colour and a favicon masthead (Accent),
-					plus its headline font (Full). The reading column always stays yours; takes priority over
-					Adaptive accent.</span
+					><strong>Accent</strong> wears each publication’s brand colour and a favicon masthead —
+					chrome only. <strong>Full</strong> re-skins the whole reading view after the publication:
+					its background, body font, headings, and links, all kept inside Lectern’s readability
+					guardrails. Your reading column’s width and text size stay yours either way. Takes priority
+					over Adaptive accent.</span
 				>
 			</div>
 			<div class="field">
@@ -838,38 +840,74 @@
 						<ul class="sources">
 							{#each sourceThemes as s (s.host)}
 								<li class="source-row">
-									{#if s.faviconUrl}
-										<img
-											class="source-favicon"
-											src={s.faviconUrl}
-											alt=""
-											aria-hidden="true"
-											referrerpolicy="no-referrer"
-											onerror={(e) =>
-												((e.currentTarget as HTMLImageElement).style.display = 'none')}
-										/>
-									{:else}
-										<span class="source-favicon source-favicon-empty" aria-hidden="true"></span>
-									{/if}
-									<span class="source-name">{s.siteName ?? s.host}</span>
-									<span class="source-swatches" aria-hidden="true">
-										{#if s.accent}
-											<span
-												class="source-swatch"
-												style={`background:${s.accent}`}
-												title={`Light accent ${s.accent}`}
-											></span>
+									<div class="source-head">
+										{#if s.faviconUrl}
+											<img
+												class="source-favicon"
+												src={s.faviconUrl}
+												alt=""
+												aria-hidden="true"
+												referrerpolicy="no-referrer"
+												onerror={(e) =>
+													((e.currentTarget as HTMLImageElement).style.display = 'none')}
+											/>
+										{:else}
+											<span class="source-favicon source-favicon-empty" aria-hidden="true"></span>
 										{/if}
-										{#if s.accentDark && s.accentDark !== s.accent}
+										<span class="source-name">{s.siteName ?? s.host}</span>
+										{#if s.derivation}
 											<span
-												class="source-swatch"
-												style={`background:${s.accentDark}`}
-												title={`Dark accent ${s.accentDark}`}
-											></span>
+												class="source-deriv"
+												data-deriv={s.derivation}
+												title={s.derivation === 'literal'
+													? 'Palette read from the source’s own CSS'
+													: 'Palette derived from the brand colour'}>{s.derivation}</span
+											>
 										{/if}
-									</span>
-									<span class="source-font" class:muted={!s.displayFont}>{s.displayFont ?? '—'}</span>
-									<span class="source-time">{relativeTime(s.fetchedAt)}</span>
+										<span class="source-time">{relativeTime(s.fetchedAt)}</span>
+									</div>
+									<div class="source-meta">
+										<span class="source-swatches" aria-hidden="true">
+											{#if s.background}
+												<span
+													class="source-swatch"
+													style={`background:${s.background}`}
+													title={`Light background ${s.background}`}
+												></span>
+											{/if}
+											{#if s.backgroundDark && s.backgroundDark !== s.background}
+												<span
+													class="source-swatch"
+													style={`background:${s.backgroundDark}`}
+													title={`Dark background ${s.backgroundDark}`}
+												></span>
+											{/if}
+											{#if s.accent}
+												<span
+													class="source-swatch source-swatch-accent"
+													style={`background:${s.accent}`}
+													title={`Light accent ${s.accent}`}
+												></span>
+											{/if}
+											{#if s.accentDark && s.accentDark !== s.accent}
+												<span
+													class="source-swatch source-swatch-accent"
+													style={`background:${s.accentDark}`}
+													title={`Dark accent ${s.accentDark}`}
+												></span>
+											{/if}
+										</span>
+										<span class="source-fonts">
+											<span class="source-font" class:muted={!s.bodyFont}
+												>{s.bodyFont ?? '—'}</span
+											>
+											{#if s.displayFont && s.displayFont !== s.bodyFont}
+												<span class="source-font source-font-display" title="Display font"
+													>{s.displayFont}</span
+												>
+											{/if}
+										</span>
+									</div>
 								</li>
 							{/each}
 						</ul>
@@ -1470,12 +1508,17 @@
 	}
 	.source-row {
 		display: flex;
-		align-items: center;
-		gap: 0.55rem;
-		padding: 0.45rem 0.6rem;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 0.5rem 0.6rem;
 	}
 	.source-row + .source-row {
 		border-top: 1px solid var(--border);
+	}
+	.source-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.source-favicon {
 		width: 1.1rem;
@@ -1497,6 +1540,39 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	/* Derivation badge: how the palette was obtained. `literal` (parsed from the
+	   source's own CSS) reads as a confident accent pill; `derived` (synthesized
+	   from the brand colour) is quieter, so the difference is legible at a glance. */
+	.source-deriv {
+		flex: none;
+		padding: 0.05rem 0.4rem;
+		border-radius: var(--radius-full);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.03em;
+		text-transform: capitalize;
+		border: 1px solid var(--border);
+		color: var(--text-muted);
+		background: var(--surface-alt);
+	}
+	.source-deriv[data-deriv='literal'] {
+		color: var(--accent);
+		border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+		background: var(--accent-soft);
+	}
+	.source-time {
+		flex: none;
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Second line: the palette swatches + the font names the re-skin would wear. */
+	.source-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding-left: 1.6rem;
+	}
 	.source-swatches {
 		display: inline-flex;
 		gap: 0.2rem;
@@ -1508,9 +1584,19 @@
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border);
 	}
+	/* Accent swatches read as circles so they're distinct from the square grounds. */
+	.source-swatch-accent {
+		border-radius: var(--radius-full);
+	}
+	.source-fonts {
+		display: flex;
+		flex: 1;
+		min-width: 0;
+		gap: 0.5rem;
+		justify-content: flex-end;
+	}
 	.source-font {
-		flex: none;
-		max-width: 6rem;
+		max-width: 8rem;
 		font-size: var(--text-xs);
 		color: var(--text);
 		overflow: hidden;
@@ -1520,11 +1606,9 @@
 	.source-font.muted {
 		color: var(--text-muted);
 	}
-	.source-time {
-		flex: none;
-		font-size: var(--text-xs);
+	.source-font-display {
 		color: var(--text-muted);
-		font-variant-numeric: tabular-nums;
+		font-style: italic;
 	}
 
 	/* Theme swatches: a small palette tile per theme, each rendered in its own

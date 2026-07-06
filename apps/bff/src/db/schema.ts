@@ -170,9 +170,16 @@ export const sourceTheme = pgTable("source_theme", {
   host: text("host").primaryKey(),
   accent: text("accent").notNull().default(""),
   accentDark: text("accent_dark").notNull().default(""),
-  faviconUrl: text("favicon_url").notNull().default(""),
+  background: text("background").notNull().default(""),
+  backgroundDark: text("background_dark").notNull().default(""),
+  text: text("text").notNull().default(""),
+  link: text("link").notNull().default(""),
+  bodyFont: text("body_font").notNull().default(""),
   displayFont: text("display_font").notNull().default(""),
+  faviconUrl: text("favicon_url").notNull().default(""),
   siteName: text("site_name").notNull().default(""),
+  // '' | 'literal' | 'derived' — how the re-skin palette was obtained.
+  derivation: text("derivation").notNull().default(""),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

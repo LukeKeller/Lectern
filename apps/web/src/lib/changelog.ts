@@ -26,6 +26,39 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.33.0',
+		date: '2026-07-06',
+		title: 'Read each publication in its own dress',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Source dress “Full” now re-skins the whole reading view after each publication — its background, body font, headings, and links — not just the masthead. Lectern reads a source’s own colours and type where its site allows, and tastefully derives a palette from the brand colour where it can’t, so every source looks distinct. Your reading width, text size, and contrast floors stay put, so it never reads worse than the plain reader.'
+			}
+		]
+	},
+	{
+		version: '0.32.0',
+		date: '2026-07-06',
+		title: 'Source dress, made visible',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Source dress is clearer and more dependable: the eyebrow wears the publication’s brand colour, the masthead shows its real name and favicon, and dark themes get a dark-mode accent. Tokens are pulled more robustly (with a browser identity so sites stop turning us away), a failed fetch no longer sticks as a blank, and Settings gains a “Cached sources” summary with a Clear-cache button.'
+			}
+		]
+	},
+	{
+		version: '0.31.0',
+		date: '2026-07-05',
+		title: 'Source theming arrives',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Articles can wear a hint of each publication’s identity — a brand accent and a favicon masthead — drawn from the source’s own site. Turn it on under Settings → Reading → Source dress.'
+			}
+		]
+	},
+	{
 		version: '0.30.0',
 		date: '2026-07-02',
 		title: 'Clear everything you’ve finished in one tap',

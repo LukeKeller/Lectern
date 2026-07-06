@@ -751,9 +751,15 @@ export class DrizzleOverlayStore implements OverlayStore {
       .select({
         accent: sourceTheme.accent,
         accentDark: sourceTheme.accentDark,
-        faviconUrl: sourceTheme.faviconUrl,
+        background: sourceTheme.background,
+        backgroundDark: sourceTheme.backgroundDark,
+        text: sourceTheme.text,
+        link: sourceTheme.link,
+        bodyFont: sourceTheme.bodyFont,
         displayFont: sourceTheme.displayFont,
+        faviconUrl: sourceTheme.faviconUrl,
         siteName: sourceTheme.siteName,
+        derivation: sourceTheme.derivation,
         fetchedAt: sourceTheme.fetchedAt,
       })
       .from(sourceTheme)
@@ -763,9 +769,16 @@ export class DrizzleOverlayStore implements OverlayStore {
       tokens: {
         accent: row.accent === "" ? null : row.accent,
         accentDark: row.accentDark === "" ? null : row.accentDark,
-        faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
+        background: row.background === "" ? null : row.background,
+        backgroundDark: row.backgroundDark === "" ? null : row.backgroundDark,
+        text: row.text === "" ? null : row.text,
+        link: row.link === "" ? null : row.link,
+        bodyFont: row.bodyFont === "" ? null : row.bodyFont,
         displayFont: row.displayFont === "" ? null : row.displayFont,
+        faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
         siteName: row.siteName === "" ? null : row.siteName,
+        // A string union, not a colour: '' means "no re-skin palette".
+        derivation: row.derivation === "" ? null : (row.derivation as "literal" | "derived"),
       },
       fetchedAt: row.fetchedAt,
     };
@@ -776,9 +789,15 @@ export class DrizzleOverlayStore implements OverlayStore {
       host,
       accent: theme.accent ?? "",
       accentDark: theme.accentDark ?? "",
-      faviconUrl: theme.faviconUrl ?? "",
+      background: theme.background ?? "",
+      backgroundDark: theme.backgroundDark ?? "",
+      text: theme.text ?? "",
+      link: theme.link ?? "",
+      bodyFont: theme.bodyFont ?? "",
       displayFont: theme.displayFont ?? "",
+      faviconUrl: theme.faviconUrl ?? "",
       siteName: theme.siteName ?? "",
+      derivation: theme.derivation ?? "",
       fetchedAt: new Date(),
     };
     await this.db
@@ -789,9 +808,15 @@ export class DrizzleOverlayStore implements OverlayStore {
         set: {
           accent: values.accent,
           accentDark: values.accentDark,
-          faviconUrl: values.faviconUrl,
+          background: values.background,
+          backgroundDark: values.backgroundDark,
+          text: values.text,
+          link: values.link,
+          bodyFont: values.bodyFont,
           displayFont: values.displayFont,
+          faviconUrl: values.faviconUrl,
           siteName: values.siteName,
+          derivation: values.derivation,
           fetchedAt: values.fetchedAt,
         },
       });
@@ -805,9 +830,15 @@ export class DrizzleOverlayStore implements OverlayStore {
       host: row.host,
       accent: row.accent === "" ? null : row.accent,
       accentDark: row.accentDark === "" ? null : row.accentDark,
-      faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
+      background: row.background === "" ? null : row.background,
+      backgroundDark: row.backgroundDark === "" ? null : row.backgroundDark,
+      text: row.text === "" ? null : row.text,
+      link: row.link === "" ? null : row.link,
+      bodyFont: row.bodyFont === "" ? null : row.bodyFont,
       displayFont: row.displayFont === "" ? null : row.displayFont,
+      faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
       siteName: row.siteName === "" ? null : row.siteName,
+      derivation: row.derivation === "" ? null : (row.derivation as "literal" | "derived"),
       fetchedAt: row.fetchedAt.toISOString(),
     }));
   }

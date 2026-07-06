@@ -377,6 +377,75 @@ export function clampAccentContrast(accentHex: string, bgHex: string, textHex: s
 }
 
 /**
+ * Raise body-text contrast to AAA for a full re-skin: while `textHex`'s contrast
+ * against `bgHex` is below `target` (default 7:1), push it toward the far
+ * luminance extreme — #fff on a dark ground, #000 on a light one, whichever is
+ * FARTHER from the background — in ~12% steps (max 6 iterations). Non-hex input
+ * passes through unchanged (fail open). Mirrors {@link clampAccentContrast}.
+ */
+export function ensureReadableText(textHex: string, bgHex: string, target = 7): string {
+	const bg = parseHex(bgHex);
+	let cur = parseHex(textHex);
+	if (!bg || !cur) return textHex;
+	// Push toward the extreme with the greater luminance gap from the background,
+	// so text always moves the readable direction (never toward the ground).
+	const bgLum = relativeLuminance(bg);
+	const extreme: [number, number, number] = bgLum < 0.5 ? [255, 255, 255] : [0, 0, 0];
+	for (let i = 0; i < 6 && contrastRatio(cur, bg) < target; i++) {
+		cur = mixRgb(cur, extreme, 0.12);
+	}
+	return toHex(cur);
+}
+
+/** The source tokens a full re-skin consumes (a subset of `SourceThemeResponse`). */
+export interface ReskinTokens {
+	accent?: string | null;
+	accentDark?: string | null;
+	background?: string | null;
+	backgroundDark?: string | null;
+	text?: string | null;
+	link?: string | null;
+	bodyFont?: string | null;
+	displayFont?: string | null;
+}
+
+/**
+ * The CSS custom properties that drive a FULL source re-skin of the reading
+ * column, within readability guardrails. Picks the dark tokens when the pane is
+ * dark (falling back to the light ones), clamps body text to AAA against the
+ * background with {@link ensureReadableText}, clamps the link/accent to >= 4.5:1
+ * with {@link clampAccentContrast}, and maps the body/display font names through
+ * {@link sourceFontStack}. Keys whose token is absent are omitted. Pure — the
+ * component folds the result into `.doc`'s inline style. Returns `{}` (no re-skin)
+ * when the source exposed no background to paint.
+ */
+export function reskinVars(tokens: ReskinTokens, dark: boolean): Record<string, string> {
+	const vars: Record<string, string> = {};
+	const bgHex = (dark && tokens.backgroundDark) || tokens.background;
+	if (!bgHex) return vars;
+	vars['--source-bg'] = bgHex;
+	// Always resolve a readable ink: use the source's text when it gave one, else a
+	// neutral grey that ensureReadableText drives to the readable extreme for this
+	// ground. Emitting it unconditionally lets the CSS set --text without a
+	// self-referencing (cyclic, hence invalid) fallback.
+	vars['--source-text'] = ensureReadableText(tokens.text ?? '#808080', bgHex, 7);
+	// Link colour wins for the accent (it drives the prose links); fall back to the
+	// brand accent. Clamp it for legibility, mixing toward the clamped body text.
+	const accentRaw = (dark && tokens.accentDark) || tokens.accent;
+	const linkRaw = tokens.link || accentRaw;
+	if (linkRaw) {
+		const safe = clampAccentContrast(linkRaw, bgHex, vars['--source-text']);
+		vars['--accent'] = safe;
+		vars['--accent-soft'] = `color-mix(in srgb, ${safe} 16%, transparent)`;
+	}
+	const body = sourceFontStack(tokens.bodyFont);
+	if (body) vars['--source-body-font'] = body;
+	const display = sourceFontStack(tokens.displayFont);
+	if (display) vars['--source-display-font'] = display;
+	return vars;
+}
+
+/**
  * Resolve a theme to its `{ bg, dark }` chrome values. `auto` defers to the OS
  * scheme via the supplied `prefersDark` (callers pass `matchMedia` result so this
  * stays pure/testable).
