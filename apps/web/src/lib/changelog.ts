@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.36.0',
+		date: '2026-07-06',
+		title: 'Newsletter images that actually load',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Images in newsletters now load reliably. Lectern had been leaning on the archive backend to keep each email’s images, but most of those archived copies had gone missing — so pictures showed as broken. Lectern now holds on to each newsletter’s own images when it arrives and serves them through its image proxy. New newsletters are fixed going forward.'
+			}
+		]
+	},
+	{
 		version: '0.35.0',
 		date: '2026-07-06',
 		title: 'Save a link the easy way',

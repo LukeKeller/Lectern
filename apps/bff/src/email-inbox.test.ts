@@ -7,6 +7,7 @@ import {
   fromParsedMail,
   isExcludedSender,
   messageToSaveInput,
+  newsletterContentHtml,
   newsletterUrl,
   parseEmailCursor,
   parseExcludedSenders,
@@ -55,6 +56,23 @@ describe("isExcludedSender", () => {
   it("never excludes a message with no From address", () => {
     expect(isExcludedSender({ ...baseMsg, fromAddress: "" }, excluded)).toBe(false);
     expect(isExcludedSender(baseMsg, parseExcludedSenders(""))).toBe(false);
+  });
+});
+
+describe("newsletterContentHtml", () => {
+  it("keeps the sender's original image URLs (unwrapped body, no doc shell)", () => {
+    const html = newsletterContentHtml(baseMsg);
+    expect(html).toContain("https://x/y.png"); // real image URL preserved for the proxy
+    expect(html).toContain("Hi there");
+    expect(html).not.toMatch(/<\/?(html|head|body|title)\b/i); // unwrapped body only
+    expect(html).not.toContain("marketing junk"); // the <title> is dropped with the head
+  });
+
+  it("still strips dangerous markup", () => {
+    const msg = { ...baseMsg, html: "<body><script>evil()</script><p>ok</p></body>" };
+    const html = newsletterContentHtml(msg);
+    expect(html).not.toContain("<script");
+    expect(html).toContain("ok");
   });
 });
 
