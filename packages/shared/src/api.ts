@@ -82,11 +82,27 @@ export type DocumentAccentResponse = z.infer<typeof DocumentAccentResponse>;
  * source shares it. Each field is null when the source doesn't expose it.
  */
 export const SourceThemeResponse = z.object({
+  /** Brand accent for light chrome, `#rrggbb`, or null. */
   accent: z.string().nullable(),
+  /** Brand accent for dark chrome (the source's dark-mode theme-color), or null. */
+  accentDark: z.string().nullable(),
   faviconUrl: z.string().nullable(),
   displayFont: z.string().nullable(),
+  /** The publication's own name (og:site_name / application-name / title), or null. */
+  siteName: z.string().nullable(),
 });
 export type SourceThemeResponse = z.infer<typeof SourceThemeResponse>;
+
+/** One cached source's tokens plus its host + when it was last fetched. Powers the
+ *  Settings "Cached sources" summary (what's been parsed and saved per source). */
+export const SourceThemeSummary = SourceThemeResponse.extend({
+  host: z.string(),
+  fetchedAt: z.string(),
+});
+export type SourceThemeSummary = z.infer<typeof SourceThemeSummary>;
+
+export const SourceThemesResponse = z.object({ themes: z.array(SourceThemeSummary) });
+export type SourceThemesResponse = z.infer<typeof SourceThemesResponse>;
 
 export const SearchQuery = z.object({
   q: z.string().min(1),
@@ -410,6 +426,23 @@ export const endpoints: Endpoint[] = [
     tags: ["documents"],
     response: SourceThemeResponse,
     status: 200,
+  },
+  {
+    method: "GET",
+    path: "/source-themes",
+    operationId: "listSourceThemes",
+    summary: "List every cached per-source theme (what's parsed and saved per host)",
+    tags: ["documents"],
+    response: SourceThemesResponse,
+    status: 200,
+  },
+  {
+    method: "DELETE",
+    path: "/source-themes",
+    operationId: "clearSourceThemes",
+    summary: "Clear the source-theme cache so every host re-fetches on next open",
+    tags: ["documents"],
+    status: 204,
   },
   {
     method: "GET",

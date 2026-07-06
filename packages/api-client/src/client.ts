@@ -29,6 +29,7 @@ import {
   SaveDocumentRequest,
   SearchResponse,
   SourceThemeResponse,
+  SourceThemesResponse,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
@@ -206,6 +207,17 @@ export class LecternClient {
       query: opts?.refresh ? { refresh: 1 } : undefined,
       schema: SourceThemeResponse,
     });
+  }
+  /**
+   * Every source theme cached server-side (one per host), with its host and when
+   * it was last fetched. Powers the Settings "Cached sources" summary.
+   */
+  listSourceThemes() {
+    return this.request("GET", "/source-themes", { schema: SourceThemesResponse });
+  }
+  /** Drop every cached source theme, forcing a re-fetch on the next open. 204. */
+  clearSourceThemes() {
+    return this.request<void>("DELETE", "/source-themes");
   }
   /** Full-text search over owned article bodies (server-side; online only). */
   search(q: string, limit = 20) {

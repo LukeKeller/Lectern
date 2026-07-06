@@ -36,6 +36,8 @@ import {
   SavedView,
   SearchQuery,
   SearchResponse,
+  SourceThemeResponse,
+  SourceThemesResponse,
   SubscribeFeedRequest,
   SynthesizeAudioRequest,
   SyncPullQuery,
@@ -140,6 +142,10 @@ function ttsReady(cfg: { provider: TtsProvider; apiKey: string | null }): boolea
 
 /** Short sample read aloud when auditioning a voice (kept brief to bound cost). */
 const TTS_PREVIEW_TEXT = "This is a preview of how this voice sounds reading your articles aloud.";
+
+/** How long a cached source theme is served before it's re-fetched (30 days). A
+ *  source's rebrand thus surfaces within a month without any manual refresh. */
+const SOURCE_THEME_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function coerceListQuery(raw: Record<string, unknown>): ListDocumentsQuery {
   return ListDocumentsQuery.parse({
@@ -357,8 +363,11 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   // Per-source ("dress") theming tokens for a document's publication, keyed and
   // cached by host so every article from a source shares one fetch. Computed
-  // lazily on first read; `?refresh=1` re-fetches the site and re-caches.
-  // Returns `{ accent, faviconUrl, displayFont }`, each null when unavailable.
+  // lazily on first read; a cache entry is served while fresh (within the TTL),
+  // and `?refresh=1` (or a stale entry) re-fetches the site and re-caches. A
+  // failed origin fetch is never cached, so it retries on the next open. Returns
+  // `{ accent, accentDark, faviconUrl, displayFont, siteName }`, each null when
+  // unavailable.
   app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
     "/documents/:id/source-theme",
     async (req) => {
@@ -367,17 +376,40 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       const refresh = req.query.refresh === "1" || req.query.refresh === "true";
       const card = await loadDocument(deps, id);
       const host = hostFromUrl(card.url);
-      const empty = { accent: null, faviconUrl: null, displayFont: null };
-      if (!host) return empty;
+      const empty = {
+        accent: null,
+        accentDark: null,
+        faviconUrl: null,
+        displayFont: null,
+        siteName: null,
+      };
+      if (!host) return SourceThemeResponse.parse(empty);
       if (!refresh) {
         const cached = await deps.overlay.getSourceTheme(host);
-        if (cached !== undefined) return cached;
+        // Serve the cache only while it's fresh; a stale entry re-fetches so a
+        // source's rebrand eventually shows up without a manual refresh.
+        if (cached && Date.now() - cached.fetchedAt.getTime() < SOURCE_THEME_TTL_MS) {
+          return SourceThemeResponse.parse(cached.tokens);
+        }
       }
-      const theme = await sourceThemeFromUrl(card.url);
-      await deps.overlay.putSourceTheme(host, theme);
-      return theme;
+      const { ok, tokens } = await sourceThemeFromUrl(card.url);
+      // Only cache a successful origin fetch — a transient network failure must
+      // not stick "no theme" onto a source forever.
+      if (ok) await deps.overlay.putSourceTheme(host, tokens);
+      return SourceThemeResponse.parse(tokens);
     },
   );
+
+  // Every cached per-source theme (Settings "Cached sources" summary).
+  app.get("/source-themes", async () =>
+    SourceThemesResponse.parse({ themes: await deps.overlay.listSourceThemes() }),
+  );
+
+  // Clear the source-theme cache so every host re-fetches its theme on next open.
+  app.delete("/source-themes", async (_req, reply) => {
+    await deps.overlay.clearSourceThemes();
+    return reply.code(204).send();
+  });
 
   // ---- text-to-speech ("Listen") -----------------------------------------
   app.get("/settings/tts", async () => ttsSettings(deps));

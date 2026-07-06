@@ -2,6 +2,7 @@
 	import type {
 		EmailSender,
 		ImportReadwiseResponse,
+		SourceThemeSummary,
 		TtsProvider,
 		TtsUsage,
 		TtsVoice
@@ -215,6 +216,66 @@
 		} finally {
 			emailBusy = false;
 		}
+	}
+
+	// ---- Cached source themes ("dress") ----
+	// What Lectern has parsed and saved per publication (one per host). Loaded on
+	// first expand; "Clear cache" drops them all so any host that cached a failed
+	// or empty result gets re-fetched on the next open.
+	let sourcesOpen = $state(false);
+	let sourceThemes = $state<SourceThemeSummary[]>([]);
+	let sourcesLoaded = $state(false);
+	let sourcesBusy = $state(false);
+	let sourcesError = $state<string | undefined>(undefined);
+
+	async function loadSourceThemes() {
+		sourcesBusy = true;
+		sourcesError = undefined;
+		try {
+			sourceThemes = (await getClient().listSourceThemes()).themes;
+			sourcesLoaded = true;
+		} catch {
+			sourcesError = 'Could not load cached sources.';
+		} finally {
+			sourcesBusy = false;
+		}
+	}
+
+	function toggleSources() {
+		sourcesOpen = !sourcesOpen;
+		if (sourcesOpen && !sourcesLoaded) void loadSourceThemes();
+	}
+
+	async function clearSourceThemes() {
+		if (sourcesBusy) return;
+		sourcesBusy = true;
+		sourcesError = undefined;
+		try {
+			await getClient().clearSourceThemes();
+			sourceThemes = [];
+			await loadSourceThemes();
+		} catch {
+			sourcesError = 'Could not clear the cache.';
+		} finally {
+			sourcesBusy = false;
+		}
+	}
+
+	// Compact "fetched N ago" label for the cached-sources rows.
+	function relativeTime(iso: string): string {
+		const then = new Date(iso).getTime();
+		if (Number.isNaN(then)) return '';
+		const secs = Math.round((Date.now() - then) / 1000);
+		if (secs < 60) return 'just now';
+		const mins = Math.round(secs / 60);
+		if (mins < 60) return `${mins}m ago`;
+		const hrs = Math.round(mins / 60);
+		if (hrs < 24) return `${hrs}h ago`;
+		const days = Math.round(hrs / 24);
+		if (days < 30) return `${days}d ago`;
+		const months = Math.round(days / 30);
+		if (months < 12) return `${months}mo ago`;
+		return `${Math.round(months / 12)}y ago`;
 	}
 
 	// ---- Notifications (Web Push) ----
@@ -749,6 +810,81 @@
 					plus its headline font (Full). The reading column always stays yours; takes priority over
 					Adaptive accent.</span
 				>
+			</div>
+			<div class="field">
+				<button
+					type="button"
+					class="disclose"
+					aria-expanded={sourcesOpen}
+					onclick={toggleSources}
+				>
+					<span class="flabel">Cached sources</span>
+					<span class="disclose-icon" class:open={sourcesOpen} aria-hidden="true">▸</span>
+				</button>
+				<span class="fhint"
+					>What Lectern has parsed and saved per publication. Clear to force a re-fetch of any host
+					that cached a failed or empty result.</span
+				>
+				{#if sourcesOpen}
+					{#if sourcesError}
+						<p class="err">{sourcesError}</p>
+					{:else if sourcesBusy && !sourceThemes.length}
+						<p class="fhint">Loading…</p>
+					{:else if !sourceThemes.length}
+						<p class="fhint">
+							No sources cached yet. Open an article with Source dress on to fill this in.
+						</p>
+					{:else}
+						<ul class="sources">
+							{#each sourceThemes as s (s.host)}
+								<li class="source-row">
+									{#if s.faviconUrl}
+										<img
+											class="source-favicon"
+											src={s.faviconUrl}
+											alt=""
+											aria-hidden="true"
+											referrerpolicy="no-referrer"
+											onerror={(e) =>
+												((e.currentTarget as HTMLImageElement).style.display = 'none')}
+										/>
+									{:else}
+										<span class="source-favicon source-favicon-empty" aria-hidden="true"></span>
+									{/if}
+									<span class="source-name">{s.siteName ?? s.host}</span>
+									<span class="source-swatches" aria-hidden="true">
+										{#if s.accent}
+											<span
+												class="source-swatch"
+												style={`background:${s.accent}`}
+												title={`Light accent ${s.accent}`}
+											></span>
+										{/if}
+										{#if s.accentDark && s.accentDark !== s.accent}
+											<span
+												class="source-swatch"
+												style={`background:${s.accentDark}`}
+												title={`Dark accent ${s.accentDark}`}
+											></span>
+										{/if}
+									</span>
+									<span class="source-font" class:muted={!s.displayFont}>{s.displayFont ?? '—'}</span>
+									<span class="source-time">{relativeTime(s.fetchedAt)}</span>
+								</li>
+							{/each}
+						</ul>
+						<div class="row">
+							<button
+								type="button"
+								class="btn ghost"
+								disabled={sourcesBusy}
+								onclick={clearSourceThemes}
+							>
+								{sourcesBusy ? 'Clearing…' : 'Clear cache'}
+							</button>
+						</div>
+					{/if}
+				{/if}
 			</div>
 			<label class="toggle">
 				<input
@@ -1295,6 +1431,100 @@
 	}
 	.picker {
 		max-width: 18rem;
+	}
+
+	/* Cached-sources disclosure: a flat "label + chevron" toggle that reads as part
+	   of the surrounding fields, plus a bordered list of one row per parsed host. */
+	.disclose {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		width: 100%;
+		max-width: 18rem;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+	}
+	.disclose .flabel {
+		cursor: pointer;
+	}
+	.disclose-icon {
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		transition: transform var(--dur-fast) var(--ease);
+	}
+	.disclose-icon.open {
+		transform: rotate(90deg);
+	}
+	.sources {
+		list-style: none;
+		margin: 0.2rem 0 0;
+		padding: 0;
+		max-width: 30rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.source-row {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		padding: 0.45rem 0.6rem;
+	}
+	.source-row + .source-row {
+		border-top: 1px solid var(--border);
+	}
+	.source-favicon {
+		width: 1.1rem;
+		height: 1.1rem;
+		border-radius: var(--radius-sm);
+		object-fit: contain;
+		flex: none;
+	}
+	.source-favicon-empty {
+		background: var(--surface-alt);
+		border: 1px solid var(--border);
+	}
+	.source-name {
+		flex: 1;
+		min-width: 0;
+		font-size: var(--text-sm);
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.source-swatches {
+		display: inline-flex;
+		gap: 0.2rem;
+		flex: none;
+	}
+	.source-swatch {
+		width: 0.9rem;
+		height: 0.9rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+	}
+	.source-font {
+		flex: none;
+		max-width: 6rem;
+		font-size: var(--text-xs);
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.source-font.muted {
+		color: var(--text-muted);
+	}
+	.source-time {
+		flex: none;
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* Theme swatches: a small palette tile per theme, each rendered in its own

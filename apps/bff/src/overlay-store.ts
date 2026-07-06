@@ -24,6 +24,7 @@ import type {
   SavedView,
   SearchResult,
   Source,
+  SourceThemeSummary,
   Tag,
   TtsProvider,
   UpdateViewRequest,
@@ -738,24 +739,35 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   /**
-   * Cached per-source theming tokens for a host, or undefined if never fetched.
-   * Stored empty strings mean "checked, none" and read back as null, distinct
-   * from the undefined "never computed" so callers skip re-fetching the site.
+   * Cached per-source theming tokens for a host with the time they were fetched
+   * (so the caller can apply a TTL), or undefined if never fetched. Stored empty
+   * strings mean "checked, none" and read back as null, distinct from the
+   * undefined "never computed" so callers skip re-fetching the site.
    */
-  async getSourceTheme(host: string): Promise<SourceThemeTokens | undefined> {
+  async getSourceTheme(
+    host: string,
+  ): Promise<{ tokens: SourceThemeTokens; fetchedAt: Date } | undefined> {
     const [row] = await this.db
       .select({
         accent: sourceTheme.accent,
+        accentDark: sourceTheme.accentDark,
         faviconUrl: sourceTheme.faviconUrl,
         displayFont: sourceTheme.displayFont,
+        siteName: sourceTheme.siteName,
+        fetchedAt: sourceTheme.fetchedAt,
       })
       .from(sourceTheme)
       .where(eq(sourceTheme.host, host));
     if (!row) return undefined;
     return {
-      accent: row.accent === "" ? null : row.accent,
-      faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
-      displayFont: row.displayFont === "" ? null : row.displayFont,
+      tokens: {
+        accent: row.accent === "" ? null : row.accent,
+        accentDark: row.accentDark === "" ? null : row.accentDark,
+        faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
+        displayFont: row.displayFont === "" ? null : row.displayFont,
+        siteName: row.siteName === "" ? null : row.siteName,
+      },
+      fetchedAt: row.fetchedAt,
     };
   }
 
@@ -763,8 +775,10 @@ export class DrizzleOverlayStore implements OverlayStore {
     const values = {
       host,
       accent: theme.accent ?? "",
+      accentDark: theme.accentDark ?? "",
       faviconUrl: theme.faviconUrl ?? "",
       displayFont: theme.displayFont ?? "",
+      siteName: theme.siteName ?? "",
       fetchedAt: new Date(),
     };
     await this.db
@@ -774,11 +788,33 @@ export class DrizzleOverlayStore implements OverlayStore {
         target: sourceTheme.host,
         set: {
           accent: values.accent,
+          accentDark: values.accentDark,
           faviconUrl: values.faviconUrl,
           displayFont: values.displayFont,
+          siteName: values.siteName,
           fetchedAt: values.fetchedAt,
         },
       });
+  }
+
+  /** Every cached source theme as a summary (host + tokens + fetch time), ordered
+   *  by host. Powers the Settings "Cached sources" list. */
+  async listSourceThemes(): Promise<SourceThemeSummary[]> {
+    const rows = await this.db.select().from(sourceTheme).orderBy(sourceTheme.host);
+    return rows.map((row) => ({
+      host: row.host,
+      accent: row.accent === "" ? null : row.accent,
+      accentDark: row.accentDark === "" ? null : row.accentDark,
+      faviconUrl: row.faviconUrl === "" ? null : row.faviconUrl,
+      displayFont: row.displayFont === "" ? null : row.displayFont,
+      siteName: row.siteName === "" ? null : row.siteName,
+      fetchedAt: row.fetchedAt.toISOString(),
+    }));
+  }
+
+  /** Drop every cached source theme so each host re-fetches on next open. */
+  async clearSourceThemes(): Promise<void> {
+    await this.db.delete(sourceTheme);
   }
 
   async getPlayerState(): Promise<PlayerState> {

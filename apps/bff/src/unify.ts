@@ -10,6 +10,7 @@ import type {
   SavedView,
   SearchResult,
   Source,
+  SourceThemeSummary,
   Tag,
   TtsProvider,
   UpdateViewRequest,
@@ -354,10 +355,17 @@ export interface AssetStore {
   putAccent(documentId: string, color: string | null): Promise<void>;
 
   // --- per-source ("dress") theming (host-keyed token cache) ---
-  /** Cached source theming tokens for a host, or undefined when not yet fetched. */
-  getSourceTheme(host: string): Promise<SourceThemeTokens | undefined>;
+  /** Cached source theming tokens for a host plus the time they were fetched (for
+   *  a TTL), or undefined when not yet fetched. */
+  getSourceTheme(
+    host: string,
+  ): Promise<{ tokens: SourceThemeTokens; fetchedAt: Date } | undefined>;
   /** Persist a source's theming tokens (empty fields record "checked, none"). */
   putSourceTheme(host: string, theme: SourceThemeTokens): Promise<void>;
+  /** Every cached source theme as a summary (host + tokens + fetch time). */
+  listSourceThemes(): Promise<SourceThemeSummary[]>;
+  /** Drop every cached source theme so each host re-fetches on next open. */
+  clearSourceThemes(): Promise<void>;
 
   // --- cross-device Listen player state ---
   /** The player's queue/index/position/rate (defaults when never saved). */

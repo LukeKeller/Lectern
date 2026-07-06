@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  brandFromTitle,
   googleFontFamily,
+  googleFontFromImport,
   hostFromUrl,
   isVividAccent,
   normalizeHexColor,
   parseSourceHead,
+  sourceThemeFromUrl,
 } from "./source-theme";
 
 describe("normalizeHexColor", () => {
@@ -46,6 +49,46 @@ describe("googleFontFamily", () => {
   });
 });
 
+describe("googleFontFromImport", () => {
+  it("extracts the family from an @import url() with quotes", () => {
+    expect(
+      googleFontFromImport(`@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400');`),
+    ).toBe("Lora");
+  });
+  it("handles a bare @import url() without quotes", () => {
+    expect(
+      googleFontFromImport(`@import url(https://fonts.googleapis.com/css?family=Roboto+Slab);`),
+    ).toBe("Roboto Slab");
+  });
+  it("handles @import with a bare quoted string (no url())", () => {
+    expect(
+      googleFontFromImport(`@import "https://fonts.googleapis.com/css2?family=Merriweather";`),
+    ).toBe("Merriweather");
+  });
+  it("ignores non-Google @imports", () => {
+    expect(googleFontFromImport(`@import url('https://example.com/app.css');`)).toBeNull();
+  });
+});
+
+describe("brandFromTitle", () => {
+  it("takes the last segment when a separator is present", () => {
+    expect(brandFromTitle("Some Long Headline | The Verge")).toBe("The Verge");
+    expect(brandFromTitle("Article – Ars Technica")).toBe("Ars Technica");
+    expect(brandFromTitle("Story: NPR")).toBe("NPR");
+  });
+  it("returns the whole title when there's no separator", () => {
+    expect(brandFromTitle("The Daily Bugle")).toBe("The Daily Bugle");
+  });
+  it("caps very long titles and trims", () => {
+    const long = "x".repeat(200);
+    expect(brandFromTitle(`  ${long}  `)?.length).toBe(80);
+  });
+  it("returns null for empty / whitespace", () => {
+    expect(brandFromTitle("   ")).toBeNull();
+    expect(brandFromTitle(null)).toBeNull();
+  });
+});
+
 describe("hostFromUrl", () => {
   it("lowercases and strips www", () => {
     expect(hostFromUrl("https://www.The-Verge.com/x/y")).toBe("the-verge.com");
@@ -69,6 +112,16 @@ describe("parseSourceHead", () => {
     expect(parseSourceHead(html).themeColor).toBe("#aabbcc");
   });
 
+  it("surfaces a dark-media theme-color separately as themeColorDark", () => {
+    const html = `<head>
+      <meta name="theme-color" content="#3a5e8c">
+      <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a84ff">
+    </head>`;
+    const p = parseSourceHead(html);
+    expect(p.themeColor).toBe("#3a5e8c");
+    expect(p.themeColorDark).toBe("#0a84ff");
+  });
+
   it("prefers apple-touch-icon over a plain icon, and finds the manifest + font", () => {
     const html = `<head>
       <link rel="icon" href="/favicon.ico">
@@ -82,13 +135,42 @@ describe("parseSourceHead", () => {
     expect(p.displayFont).toBe("Merriweather");
   });
 
+  it("detects a Google font imported inside a <style> block", () => {
+    const html = `<head>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;600');
+        body { margin: 0; }
+      </style>
+    </head>`;
+    expect(parseSourceHead(html).displayFont).toBe("Spectral");
+  });
+
+  it("extracts siteName from og:site_name (preferred)", () => {
+    const html = `<head>
+      <meta property="og:site_name" content="The Verge">
+      <meta name="application-name" content="verge-app">
+      <title>Headline | Something Else</title>
+    </head>`;
+    expect(parseSourceHead(html).siteName).toBe("The Verge");
+  });
+
+  it("falls back to application-name, then to the title's brand segment", () => {
+    const appOnly = `<head><meta name="application-name" content="Ars Technica"></head>`;
+    expect(parseSourceHead(appOnly).siteName).toBe("Ars Technica");
+
+    const titleOnly = `<head><title>Some Article Headline | NPR</title></head>`;
+    expect(parseSourceHead(titleOnly).siteName).toBe("NPR");
+  });
+
   it("returns nulls when the head has no signals", () => {
-    const p = parseSourceHead(`<head><title>Nothing</title></head>`);
+    const p = parseSourceHead(`<head><meta charset="utf-8"></head>`);
     expect(p).toEqual({
       themeColor: null,
+      themeColorDark: null,
       faviconHref: null,
       manifestHref: null,
       displayFont: null,
+      siteName: null,
     });
   });
 
@@ -97,5 +179,55 @@ describe("parseSourceHead", () => {
     const p = parseSourceHead(html);
     expect(p.themeColor).toBe("#ff8800");
     expect(p.faviconHref).toBeNull();
+  });
+});
+
+describe("sourceThemeFromUrl", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const htmlResponse = (body: string) =>
+    ({
+      ok: true,
+      headers: { get: (h: string) => (h === "content-length" ? String(body.length) : null) },
+      text: async () => body,
+    }) as unknown as Response;
+
+  it("upgrades an http favicon to https and returns the full token shape", async () => {
+    const html = `<head>
+      <meta name="theme-color" content="#3a5e8c">
+      <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a84ff">
+      <meta property="og:site_name" content="Example News">
+      <link rel="apple-touch-icon" href="http://example.com/touch.png">
+    </head>`;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(htmlResponse(html));
+
+    const { ok, tokens } = await sourceThemeFromUrl("https://example.com/some/article");
+    expect(ok).toBe(true);
+    expect(tokens).toEqual({
+      accent: "#3a5e8c",
+      accentDark: "#0a84ff",
+      faviconUrl: "https://example.com/touch.png",
+      displayFont: null,
+      siteName: "Example News",
+    });
+  });
+
+  it("signals ok:false with all-null tokens when the origin fetch fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network"));
+    const { ok, tokens } = await sourceThemeFromUrl("https://example.com/x");
+    expect(ok).toBe(false);
+    expect(tokens).toEqual({
+      accent: null,
+      accentDark: null,
+      faviconUrl: null,
+      displayFont: null,
+      siteName: null,
+    });
+  });
+
+  it("signals ok:false for a bad host", async () => {
+    const { ok, tokens } = await sourceThemeFromUrl("not a url");
+    expect(ok).toBe(false);
+    expect(tokens.faviconUrl).toBeNull();
   });
 });
