@@ -391,10 +391,35 @@ export function ensureReadableText(textHex: string, bgHex: string, target = 7): 
 	// so text always moves the readable direction (never toward the ground).
 	const bgLum = relativeLuminance(bg);
 	const extreme: [number, number, number] = bgLum < 0.5 ? [255, 255, 255] : [0, 0, 0];
-	for (let i = 0; i < 6 && contrastRatio(cur, bg) < target; i++) {
-		cur = mixRgb(cur, extreme, 0.12);
+	// Step firmly toward the extreme until the target is met (or we've effectively
+	// reached the extreme) — enough headroom to hit AAA (7:1) from light text on a
+	// light ground, which a gentler step can't reach.
+	for (let i = 0; i < 14 && contrastRatio(cur, bg) < target; i++) {
+		cur = mixRgb(cur, extreme, 0.18);
 	}
 	return toHex(cur);
+}
+
+/**
+ * Tame a source background for long-form reading: keep its hue and light/dark
+ * character but cut saturation (~40%) and ground it toward a comfortable paper
+ * or dark base, so a vivid or deep brand colour (e.g. an electric navy) becomes
+ * a calm reading surface rather than a harsh slab. Near-neutral papers are
+ * barely touched. Non-hex input passes through. The reader re-clamps body text
+ * against the *softened* colour, so contrast still holds.
+ */
+export function softenBackground(hex: string): string {
+	const rgb = parseHex(hex);
+	if (!rgb) return hex;
+	const [r, g, b] = rgb;
+	// Desaturate toward a grey of the same HSL lightness (mid of max/min channel).
+	const lgrey = (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+	const desat = mixRgb(rgb, [lgrey, lgrey, lgrey], 0.4);
+	// Ground toward a comfortable paper (light sources) or a soft dark (dark
+	// sources), which lowers overall intensity without washing out the hue.
+	const base: [number, number, number] =
+		relativeLuminance(rgb) >= 0.5 ? [247, 245, 239] : [23, 21, 15];
+	return toHex(mixRgb(desat, base, 0.22));
 }
 
 /** The source tokens a full re-skin consumes (a subset of `SourceThemeResponse`). */
@@ -421,13 +446,17 @@ export interface ReskinTokens {
  */
 export function reskinVars(tokens: ReskinTokens, dark: boolean): Record<string, string> {
 	const vars: Record<string, string> = {};
-	const bgHex = (dark && tokens.backgroundDark) || tokens.background;
-	if (!bgHex) return vars;
+	const rawBg = (dark && tokens.backgroundDark) || tokens.background;
+	if (!rawBg) return vars;
+	// Soften the ground for reading comfort, then clamp everything against the
+	// softened colour so contrast is measured against what's actually painted.
+	const bgHex = softenBackground(rawBg);
 	vars['--source-bg'] = bgHex;
 	// Always resolve a readable ink: use the source's text when it gave one, else a
 	// neutral grey that ensureReadableText drives to the readable extreme for this
 	// ground. Emitting it unconditionally lets the CSS set --text without a
-	// self-referencing (cyclic, hence invalid) fallback.
+	// self-referencing (cyclic, hence invalid) fallback. AAA (7:1) against the
+	// softened background — the guardrail that prevents light-on-light text.
 	vars['--source-text'] = ensureReadableText(tokens.text ?? '#808080', bgHex, 7);
 	// Link colour wins for the accent (it drives the prose links); fall back to the
 	// brand accent. Clamp it for legibility, mixing toward the clamped body text.

@@ -1,5 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { cleanArticleHtml, titlesMatch } from './article-html';
+import { cleanArticleHtml, stripInlineColors, titlesMatch } from './article-html';
+
+describe('stripInlineColors', () => {
+	it('drops colour, background and text-fill declarations', () => {
+		expect(stripInlineColors('color: #ccc; text-align: center; background: #111')).toBe(
+			'text-align: center'
+		);
+		expect(stripInlineColors('BACKGROUND-COLOR:#fff;-webkit-text-fill-color:#eee')).toBe('');
+	});
+
+	it('keeps non-colour declarations intact', () => {
+		expect(stripInlineColors('font-weight: 700; margin: 0')).toBe('font-weight: 700; margin: 0');
+	});
+
+	it('does not strip properties that merely contain "color" mid-name', () => {
+		expect(stripInlineColors('caret-color: red; border-color: blue')).toBe(
+			'caret-color: red; border-color: blue'
+		);
+	});
+});
 
 describe('titlesMatch', () => {
 	it('matches identical titles regardless of case and punctuation', () => {
