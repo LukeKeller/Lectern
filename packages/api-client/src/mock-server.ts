@@ -628,7 +628,42 @@ const handlers: Record<string, MockHandler> = {
     return { json: { id: params.id, html: `<main>${html}</main>` } };
   },
   getDocumentAccent: () => ({ json: { color: null } }),
-  getSourceTheme: () => ({ json: { accent: null, faviconUrl: null, displayFont: null } }),
+  // A realistic non-null sample so `pnpm dev` actually shows the source-theming
+  // feature (accent + favicon + site name) instead of a bare null theme.
+  getSourceTheme: () => ({
+    json: {
+      accent: "#c2410c",
+      accentDark: "#fb923c",
+      faviconUrl: "https://lectern.example/favicon.png",
+      displayFont: null,
+      siteName: "The Lectern Post",
+    },
+  }),
+  listSourceThemes: () => ({
+    json: {
+      themes: [
+        {
+          host: "lectern.example",
+          accent: "#c2410c",
+          accentDark: "#fb923c",
+          faviconUrl: "https://lectern.example/favicon.png",
+          displayFont: null,
+          siteName: "The Lectern Post",
+          fetchedAt: NOW,
+        },
+        {
+          host: "overreacted.io",
+          accent: "#2563eb",
+          accentDark: "#60a5fa",
+          faviconUrl: "https://overreacted.io/favicon.png",
+          displayFont: "Inter",
+          siteName: "overreacted",
+          fetchedAt: NOW,
+        },
+      ],
+    },
+  }),
+  clearSourceThemes: () => ({}),
   importReadwise: ({ body }) => {
     const total = (body as ImportReadwiseRequest).csv
       .split("\n")

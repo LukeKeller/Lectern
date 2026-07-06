@@ -1,10 +1,11 @@
 /**
  * Source ("dress") theming: derive a small set of theming tokens from a
- * publication's own site — a brand accent, a favicon, and an optional
- * Google-hosted display font — so the reader can wear a hint of each source's
- * identity without becoming a webview. Everything is extracted from the site's
- * `<head>` (plus, at most, its web-app manifest and favicon bytes) server-side,
- * so there's no client CORS and no source CSS ever reaches the page.
+ * publication's own site — a brand accent (light + dark), a favicon, an optional
+ * Google-hosted display font, and the publication's own name — so the reader can
+ * wear a hint of each source's identity without becoming a webview. Everything is
+ * extracted from the site's `<head>` (plus, at most, its web-app manifest and
+ * favicon bytes) server-side, so there's no client CORS and no source CSS ever
+ * reaches the page.
  *
  * The design boundary mirrors the cover-accent feature: we emit *tokens*, never
  * stylesheets. The accent is a plain hex the reader clamps for contrast; the
@@ -13,21 +14,39 @@
  *
  * Best-effort throughout: any network/parse problem yields nulls so callers can
  * cache "no theme" and move on. Keyed by host — every article from a source
- * shares one theme.
+ * shares one theme. The one exception is a failed origin fetch, surfaced as
+ * `ok: false` so a transient network blip doesn't poison a host's cache forever.
  */
 
 import { accentFromImageBytes, isFetchableUrl, rgbToHsl } from "./palette";
 
 export interface SourceThemeTokens {
-  /** Brand accent as `#rrggbb`, or null when the source exposes none usable. */
+  /** Brand accent as `#rrggbb` (light-mode), or null when none usable. */
   accent: string | null;
-  /** Absolute URL of a favicon / touch icon, or null. */
+  /** Dark-mode brand accent as `#rrggbb`, or null when none usable. */
+  accentDark: string | null;
+  /** Absolute (https-preferred) URL of a favicon / touch icon, or null. */
   faviconUrl: string | null;
   /** A Google-hosted font family name for headline slots, or null. */
   displayFont: string | null;
+  /** The publication's own name, or null. */
+  siteName: string | null;
 }
 
-const EMPTY: SourceThemeTokens = { accent: null, faviconUrl: null, displayFont: null };
+const EMPTY: SourceThemeTokens = {
+  accent: null,
+  accentDark: null,
+  faviconUrl: null,
+  displayFont: null,
+  siteName: null,
+};
+
+// Browser-like request headers so bot-blocking CDNs don't 403 a bare Node fetch.
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+const ACCEPT_HTML =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+const ACCEPT_IMAGE = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 
 // ---- Pure head parsing (unit-tested) ---------------------------------------
 
@@ -41,6 +60,31 @@ function attr(tag: string, name: string): string | null {
 /** All tags of one kind (`meta` / `link`) within an HTML fragment. */
 function tags(html: string, kind: string): string[] {
   return html.match(new RegExp(`<${kind}\\b[^>]*>`, "gi")) ?? [];
+}
+
+/** Trim, drop-if-empty, and cap a candidate site-name string. */
+function cleanName(raw: string | null | undefined): string | null {
+  const t = raw?.trim();
+  return t && t.length > 0 ? t.slice(0, 80).trim() : null;
+}
+
+/**
+ * Reduce a page `<title>` to its brand. Publications commonly format titles as
+ * `Article Headline | The Verge` — the brand is the LAST segment when split on a
+ * common separator. Falls back to the whole (trimmed, capped) title when there's
+ * no separator. Pure so it's unit-tested.
+ */
+export function brandFromTitle(raw: string | null | undefined): string | null {
+  const title = raw?.trim();
+  if (!title) return null;
+  // Separators: pipe, en/em dash, middle dot, colon. (Plain hyphen excluded —
+  // it appears inside real brand names too often.)
+  const parts = title
+    .split(/\s*[|–—·:]\s*/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const last = parts.length > 0 ? parts[parts.length - 1] : title;
+  return cleanName(last);
 }
 
 /** Normalise a colour string to `#rrggbb`, or null if not a plain hex colour. */
@@ -79,11 +123,27 @@ export function googleFontFamily(href: string): string | null {
   return raw.length > 0 && raw.length <= 64 ? raw : null;
 }
 
+/**
+ * The first Google Fonts family pulled in via an `@import` inside a `<style>`
+ * block — e.g. `@import url('https://fonts.googleapis.com/css2?family=Lora');`.
+ * Many publications embed fonts this way rather than with a `<link>`. Pure so
+ * it's unit-tested.
+ */
+export function googleFontFromImport(css: string): string | null {
+  const m = css.match(
+    /@import\s+(?:url\(\s*)?['"]?([^'")\s]*fonts\.googleapis\.com\/css[^'")\s]*)['"]?\s*\)?/i,
+  );
+  if (!m?.[1]) return null;
+  return googleFontFamily(m[1]);
+}
+
 interface ParsedHead {
   themeColor: string | null;
+  themeColorDark: string | null;
   faviconHref: string | null;
   manifestHref: string | null;
   displayFont: string | null;
+  siteName: string | null;
 }
 
 /**
@@ -95,20 +155,34 @@ export function parseSourceHead(html: string): ParsedHead {
   const headEnd = html.search(/<\/head>/i);
   const head = headEnd >= 0 ? html.slice(0, headEnd) : html;
 
-  // theme-color: prefer a plain <meta> without a media query (light default).
+  // theme-color: a plain <meta> (no media) is the light default; a
+  // `prefers-color-scheme: dark` media-scoped one is the dark accent; any other
+  // media-scoped one backs up the light default.
   let themeColor: string | null = null;
-  let themeColorFallback: string | null = null;
+  let themeColorLightMedia: string | null = null;
+  let themeColorDark: string | null = null;
+  let ogSiteName: string | null = null;
+  let applicationName: string | null = null;
   for (const tag of tags(head, "meta")) {
-    if (attr(tag, "name")?.toLowerCase() !== "theme-color") continue;
-    const color = normalizeHexColor(attr(tag, "content"));
-    if (!color) continue;
-    if (attr(tag, "media")) themeColorFallback ??= color;
-    else {
-      themeColor = color;
-      break;
+    const name = attr(tag, "name")?.toLowerCase();
+    const property = attr(tag, "property")?.toLowerCase();
+
+    if (name === "theme-color") {
+      const color = normalizeHexColor(attr(tag, "content"));
+      if (color) {
+        const media = attr(tag, "media");
+        if (media) {
+          if (/dark/i.test(media)) themeColorDark ??= color;
+          else themeColorLightMedia ??= color;
+        } else themeColor ??= color;
+      }
     }
+
+    if (property === "og:site_name" || name === "og:site_name")
+      ogSiteName ??= cleanName(attr(tag, "content"));
+    if (name === "application-name") applicationName ??= cleanName(attr(tag, "content"));
   }
-  themeColor ??= themeColorFallback;
+  themeColor ??= themeColorLightMedia;
 
   // Favicon: prefer an apple-touch-icon (usually a rich PNG), then any icon.
   let touch: string | null = null;
@@ -124,8 +198,19 @@ export function parseSourceHead(html: string): ParsedHead {
     else if (rel.includes("manifest")) manifestHref ??= href;
     if (!displayFont) displayFont = googleFontFamily(href);
   }
+  // Fall back to a Google font pulled in via @import inside a <style> block.
+  if (!displayFont) {
+    for (const style of head.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) ?? []) {
+      displayFont = googleFontFromImport(style);
+      if (displayFont) break;
+    }
+  }
 
-  return { themeColor, faviconHref: touch ?? icon, manifestHref, displayFont };
+  // Site name: og:site_name → application-name → the title's brand segment.
+  const titleMatch = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const siteName = ogSiteName ?? applicationName ?? brandFromTitle(titleMatch?.[1]);
+
+  return { themeColor, themeColorDark, faviconHref: touch ?? icon, manifestHref, displayFont, siteName };
 }
 
 // ---- Fetch + resolve (impure) ----------------------------------------------
@@ -149,7 +234,11 @@ async function fetchText(url: string, maxBytes: number): Promise<string | null> 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow" });
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: "follow",
+      headers: { "user-agent": CHROME_UA, accept: ACCEPT_HTML },
+    });
     if (!res.ok) return null;
     const len = Number(res.headers.get("content-length") ?? "0");
     if (len && len > maxBytes) return null;
@@ -168,7 +257,11 @@ async function accentFromIcon(url: string): Promise<string | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow" });
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: "follow",
+      headers: { "user-agent": CHROME_UA, accept: ACCEPT_IMAGE },
+    });
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") ?? "";
     if (!/image\/(png|jpeg|jpg)/i.test(ct)) return null;
@@ -186,20 +279,32 @@ async function accentFromIcon(url: string): Promise<string | null> {
  * Compute a source's theme from any article URL on it. Fetches the site origin
  * (`https://host/`), reads its `<head>`, and — for the accent — prefers a vivid
  * `theme-color`, then the manifest's `theme_color`, then the favicon's dominant
- * colour. Best-effort: returns all-null tokens on any failure.
+ * colour.
+ *
+ * Returns `{ ok, tokens }`. `ok` is false only when the origin HTML fetch itself
+ * fails (bad host, network error, timeout, non-2xx) — the caller should NOT
+ * cache that, so a transient failure doesn't poison the host forever. `ok: true`
+ * means the `<head>` was read; the tokens may still be all-null ("checked,
+ * none"), which is a legitimate cacheable result. Best-effort throughout: any
+ * parse/sub-fetch problem yields nulls, never throws.
  */
-export async function sourceThemeFromUrl(url: string): Promise<SourceThemeTokens> {
+export async function sourceThemeFromUrl(
+  url: string,
+): Promise<{ ok: boolean; tokens: SourceThemeTokens }> {
   const host = hostFromUrl(url);
-  if (!host) return EMPTY;
+  if (!host) return { ok: false, tokens: EMPTY };
   const origin = `https://${host}/`;
   const html = await fetchText(origin, MAX_HTML_BYTES);
-  if (!html) return EMPTY;
+  if (!html) return { ok: false, tokens: EMPTY };
 
   const head = parseSourceHead(html);
   const resolve = (href: string | null): string | null => {
     if (!href) return null;
     try {
-      return new URL(href, origin).href;
+      const u = new URL(href, origin);
+      // The reader page is https; upgrade http assets to dodge mixed-content blocks.
+      if (u.protocol === "http:") u.protocol = "https:";
+      return u.href;
     } catch {
       return null;
     }
@@ -207,7 +312,7 @@ export async function sourceThemeFromUrl(url: string): Promise<SourceThemeTokens
 
   const faviconUrl = resolve(head.faviconHref) ?? `${origin}favicon.ico`;
 
-  // Accent: vivid theme-color → manifest theme_color → favicon dominant colour.
+  // Light accent: vivid theme-color → manifest theme_color → favicon colour.
   let accent: string | null =
     head.themeColor && isVividAccent(head.themeColor) ? head.themeColor : null;
   if (!accent && head.manifestHref) {
@@ -225,5 +330,12 @@ export async function sourceThemeFromUrl(url: string): Promise<SourceThemeTokens
   }
   if (!accent) accent = await accentFromIcon(faviconUrl);
 
-  return { accent, faviconUrl, displayFont: head.displayFont };
+  // Dark accent: the media-scoped `prefers-color-scheme: dark` theme-color.
+  const accentDark =
+    head.themeColorDark && isVividAccent(head.themeColorDark) ? head.themeColorDark : null;
+
+  return {
+    ok: true,
+    tokens: { accent, accentDark, faviconUrl, displayFont: head.displayFont, siteName: head.siteName },
+  };
 }

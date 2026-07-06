@@ -15,6 +15,7 @@ import {
   type RssBackend,
   type SearchResult,
   type Source,
+  type SourceThemeSummary,
   type SavedView,
   type Tag,
   type TtsProvider,
@@ -569,12 +570,30 @@ class FakeOverlayStore implements OverlayStore {
     this.accentCache.set(documentId, color ?? "");
   }
 
-  sourceThemeCache = new Map<string, SourceThemeTokens>();
-  async getSourceTheme(host: string): Promise<SourceThemeTokens | undefined> {
+  sourceThemeCache = new Map<string, { tokens: SourceThemeTokens; fetchedAt: Date }>();
+  async getSourceTheme(
+    host: string,
+  ): Promise<{ tokens: SourceThemeTokens; fetchedAt: Date } | undefined> {
     return this.sourceThemeCache.get(host);
   }
   async putSourceTheme(host: string, theme: SourceThemeTokens) {
-    this.sourceThemeCache.set(host, theme);
+    this.sourceThemeCache.set(host, { tokens: theme, fetchedAt: new Date() });
+  }
+  async listSourceThemes(): Promise<SourceThemeSummary[]> {
+    return [...this.sourceThemeCache.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([host, { tokens, fetchedAt }]) => ({
+        host,
+        accent: tokens.accent,
+        accentDark: tokens.accentDark,
+        faviconUrl: tokens.faviconUrl,
+        displayFont: tokens.displayFont,
+        siteName: tokens.siteName,
+        fetchedAt: fetchedAt.toISOString(),
+      }));
+  }
+  async clearSourceThemes(): Promise<void> {
+    this.sourceThemeCache.clear();
   }
 
   player: PlayerState = PlayerState.parse({});
@@ -1260,6 +1279,46 @@ describe("tags", () => {
     const byName = Object.fromEntries(res.json().tags.map((t: Tag) => [t.name, t.count]));
     expect(byName.a).toBe(2);
     expect(byName.b).toBe(1);
+    await a.close();
+  });
+});
+
+describe("source themes", () => {
+  it("lists cached source themes and clears them", async () => {
+    await harness.deps.overlay.putSourceTheme("overreacted.io", {
+      accent: "#2563eb",
+      accentDark: "#60a5fa",
+      faviconUrl: "https://overreacted.io/favicon.png",
+      displayFont: "Inter",
+      siteName: "overreacted",
+    });
+    const a = app();
+
+    const listed = await a.inject({
+      method: "GET",
+      url: "/api/v1/source-themes",
+      headers: auth,
+    });
+    expect(listed.statusCode).toBe(200);
+    const themes = listed.json().themes as SourceThemeSummary[];
+    expect(themes).toHaveLength(1);
+    expect(themes[0]!.host).toBe("overreacted.io");
+    expect(themes[0]!.accent).toBe("#2563eb");
+    expect(themes[0]!.siteName).toBe("overreacted");
+
+    const cleared = await a.inject({
+      method: "DELETE",
+      url: "/api/v1/source-themes",
+      headers: auth,
+    });
+    expect(cleared.statusCode).toBe(204);
+
+    const after = await a.inject({
+      method: "GET",
+      url: "/api/v1/source-themes",
+      headers: auth,
+    });
+    expect(after.json().themes).toHaveLength(0);
     await a.close();
   });
 });

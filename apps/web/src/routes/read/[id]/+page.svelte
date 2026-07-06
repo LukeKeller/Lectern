@@ -19,6 +19,7 @@
 	import {
 		clampAccentContrast,
 		googleFontHref,
+		isDarkTheme,
 		readerCssVars,
 		readerThemeAttr,
 		sourceFontStack,
@@ -89,8 +90,10 @@
 	// let it re-dress the reader chrome. Best-effort; failures leave the theme.
 	let sourceThemeData = $state<{
 		accent: string | null;
+		accentDark: string | null;
 		faviconUrl: string | null;
 		displayFont: string | null;
+		siteName: string | null;
 	} | null>(null);
 	let refreshingSourceTheme = $state(false);
 	$effect(() => {
@@ -209,8 +212,14 @@
 	// then null (leave the theme accent). Source theming and adaptive accent are
 	// independent toggles; this is their precedence when both are on.
 	const activeAccent = $derived.by((): string | null => {
-		if (readerSettings.current.sourceTheme !== 'off' && sourceThemeData?.accent) {
-			return sourceThemeData.accent;
+		if (readerSettings.current.sourceTheme !== 'off' && sourceThemeData) {
+			// On a dark pane, prefer the source's dark-mode accent when it exposed one;
+			// otherwise fall back to its light accent. (The contrast clamp in
+			// `accentStyle` still lifts whichever we pick against the theme background.)
+			const dark = isDarkTheme(effectiveReaderTheme);
+			const sourceAccent =
+				(dark && sourceThemeData.accentDark) || sourceThemeData.accent;
+			if (sourceAccent) return sourceAccent;
 		}
 		if (readerSettings.current.adaptiveAccent && accentColor) return accentColor;
 		return null;
@@ -1253,7 +1262,10 @@
 						>{card.readingTimeMinutes} min read{/if}
 				</p>
 			{:else}
-				<div class="eyebrow">
+				<div
+					class="eyebrow"
+					class:source-dressed={readerSettings.current.sourceTheme !== 'off' && !!activeAccent}
+				>
 					{#if readerSettings.current.sourceTheme !== 'off' && sourceThemeData?.faviconUrl}
 						<img
 							class="source-mark"
@@ -1265,7 +1277,9 @@
 							onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
 						/>
 					{/if}
-					{card.siteName ?? new URL(card.url).hostname}
+					{(readerSettings.current.sourceTheme !== 'off' ? sourceThemeData?.siteName : null) ??
+						card.siteName ??
+						new URL(card.url).hostname}
 				</div>
 				<h1>{card.title}</h1>
 				{#if card.author || card.publishedAt || card.readingTimeMinutes}
@@ -1880,6 +1894,19 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-muted);
+	}
+	/* Dressed masthead: when source theming is on and the source exposed an accent,
+	   tint the eyebrow with it and hang a short accent rule under the lockup so the
+	   borrowed identity is obvious at a glance. Chrome only — never the reading
+	   column. --accent is the contrast-clamped source colour set on .doc. */
+	.eyebrow.source-dressed {
+		color: var(--accent);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--accent);
+		/* Rule hugs the eyebrow content rather than spanning the full measure. */
+		align-self: start;
+		width: fit-content;
+		max-width: 100%;
 	}
 	/* Source favicon in the masthead: small, quiet, rounded to the app radius so
 	   it reads as a mark, not a raw favicon. Only shown under source theming. */

@@ -169,8 +169,10 @@ export const documentAccent = pgTable("document_accent", {
 export const sourceTheme = pgTable("source_theme", {
   host: text("host").primaryKey(),
   accent: text("accent").notNull().default(""),
+  accentDark: text("accent_dark").notNull().default(""),
   faviconUrl: text("favicon_url").notNull().default(""),
   displayFont: text("display_font").notNull().default(""),
+  siteName: text("site_name").notNull().default(""),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
