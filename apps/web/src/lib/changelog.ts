@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.34.0',
+		date: '2026-07-06',
+		title: 'See a source’s dress — and read it comfortably',
+		changes: [
+			{
+				kind: 'added',
+				text: 'A new “Source styling” item in the reader’s ⋯ menu opens a popup showing exactly what Lectern saved for the article’s publication — colour swatches with their real values and font previews set in the actual typeface, plus whether the palette was read from the source’s own site or derived from its brand colour.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Full source dress no longer renders faint, low-contrast text: the whole ink layer — body, muted text, quotes, captions — is clamped to high-contrast against the source’s background, and colours baked into the article’s own HTML are ignored so the reader’s theme always wins.'
+			},
+			{
+				kind: 'improved',
+				text: 'Source backgrounds are gentler for long reading. Vivid or deep brand colours are eased into a comfortable reading surface while keeping the publication’s hue and character, so a re-skin never feels harsh.'
+			}
+		]
+	},
+	{
 		version: '0.33.0',
 		date: '2026-07-06',
 		title: 'Read each publication in its own dress',

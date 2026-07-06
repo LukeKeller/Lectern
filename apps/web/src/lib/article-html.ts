@@ -39,10 +39,33 @@ function textBefore(root: Element, el: Element): number {
 	return range.toString().trim().length;
 }
 
+/**
+ * Drop colour-bearing declarations (`color`, `background[-color]`,
+ * `-webkit-text-fill-color`) from an inline `style` value, leaving the rest
+ * (alignment, etc.) intact. The reader owns text/surface colour — a source's
+ * captured inline colours must not override the theme (or a re-skin), which is
+ * how a dark-site capture renders as light text on the reader's light ground.
+ * Returns the trimmed remainder (possibly empty).
+ */
+export function stripInlineColors(style: string): string {
+	return style
+		.split(';')
+		.map((d) => d.trim())
+		.filter((d) => d && !/^(color|background|background-color|-webkit-text-fill-color)\s*:/i.test(d))
+		.join('; ');
+}
+
 export function cleanArticleHtml(html: string, title?: string | null): string {
 	if (!html || typeof DOMParser === 'undefined') return html;
 	const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
 	const body = doc.body;
+	// Strip captured inline colours so the reader's theme/re-skin governs ink and
+	// surface — never the source's own (often dark-site) colours.
+	for (const el of Array.from(body.querySelectorAll<HTMLElement>('[style]'))) {
+		const cleaned = stripInlineColors(el.getAttribute('style') ?? '');
+		if (cleaned) el.setAttribute('style', cleaned);
+		else el.removeAttribute('style');
+	}
 	// Strip the leading h1 when it repeats the document title. "Leading" allows
 	// a little front matter (a kicker or byline) before it, but not body prose.
 	const first = body.querySelector('h1');

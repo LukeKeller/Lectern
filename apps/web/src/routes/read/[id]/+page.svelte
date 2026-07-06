@@ -43,6 +43,8 @@
 	import { nextIssue, senderName, issueDate } from '$lib/newsletters';
 	import TagEditor from '$lib/components/TagEditor.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import SourceStyling from '$lib/components/SourceStyling.svelte';
+	import type { SourceThemeResponse } from '@lectern/shared';
 	import { scrollIntoViewMotion, scrollBehavior } from '$lib/motion';
 
 	const id = $derived(page.params.id);
@@ -131,6 +133,82 @@
 			refreshingSourceTheme = false;
 		}
 	}
+	// Source styling inspector: a read-only popover showing the theming Lectern has
+	// saved for this source. Works regardless of the Source-dress setting — when the
+	// live re-skin isn't fetching (dress off), it fetches its own copy on demand.
+	let inspectorOpen = $state(false);
+	let inspectorTheme = $state<SourceThemeResponse | null>(null);
+	let inspectorLoading = $state(false);
+	// Prefer the live re-skin's fetched theme when present; else the inspector's copy.
+	const inspectorData = $derived<SourceThemeResponse | null>(sourceThemeData ?? inspectorTheme);
+	const inspectorHost = $derived.by(() => {
+		if (!card?.url) return '';
+		try {
+			return new URL(card.url).hostname;
+		} catch {
+			return '';
+		}
+	});
+
+	// Reset the inspector's on-demand copy when the document changes (and close it,
+	// so a reader→reader hop doesn't strand a stale popover open).
+	$effect(() => {
+		void id;
+		inspectorTheme = null;
+		inspectorOpen = false;
+	});
+
+	// Open the inspector: reuse the live theme if we have it, else fetch on demand
+	// into the inspector's own copy (never clobbering the reactive re-skin data).
+	async function openInspector(): Promise<void> {
+		menuOpen = false;
+		showDisplay = false;
+		inspectorOpen = true;
+		if (sourceThemeData || inspectorTheme || inspectorLoading || !id) return;
+		inspectorLoading = true;
+		try {
+			inspectorTheme = await getClient().getSourceTheme(id);
+		} catch {
+			// leave null — the inspector renders its "No palette" state
+		} finally {
+			inspectorLoading = false;
+		}
+	}
+
+	// Re-fetch this source's theme from its site, bypassing the cache. Updates the
+	// inspector's copy and, when the live re-skin is active, keeps it in sync too.
+	async function refreshInspector(): Promise<void> {
+		if (!id || refreshingSourceTheme) return;
+		refreshingSourceTheme = true;
+		try {
+			const fresh = await getClient().getSourceTheme(id, { refresh: true });
+			inspectorTheme = fresh;
+			if (sourceThemeData) sourceThemeData = fresh;
+		} catch {
+			// leave the current data in place
+		} finally {
+			refreshingSourceTheme = false;
+		}
+	}
+
+	// While the inspector is open, load the Google Fonts stylesheet for the preview
+	// faces so the samples render in the real family (dedup by href, mirroring the
+	// full-dress font loader above). Non-Google families fall back to serif.
+	$effect(() => {
+		if (!inspectorOpen) return;
+		const data = inspectorData;
+		for (const family of [data?.displayFont, data?.bodyFont]) {
+			const href = googleFontHref(family);
+			if (!href) continue;
+			if (document.head.querySelector(`link[data-source-font][href="${href}"]`)) continue;
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = href;
+			link.setAttribute('data-source-font', '');
+			document.head.appendChild(link);
+		}
+	});
+
 	let html = $state('');
 	let error = $state<string | undefined>(undefined);
 	let loading = $state(true);
@@ -517,6 +595,8 @@
 		if (e.key !== 'Escape') return;
 		if (showDisplay) {
 			showDisplay = false;
+		} else if (inspectorOpen) {
+			inspectorOpen = false;
 		} else if (menuOpen) {
 			menuOpen = false;
 		} else if (findOpen) {
@@ -1092,6 +1172,18 @@
 					<span>Re-fetch content</span>
 				</button>
 			{/if}
+			{#if card && card.category !== 'email' && card.url}
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={openInspector}
+					title="Inspect this source's saved theming"
+				>
+					<Icon name="sliders" size={16} />
+					<span>Source styling</span>
+				</button>
+			{/if}
 			{#if card && card.category !== 'email'}
 				<!-- card.url is an external absolute URL, not an internal route -->
 				<!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -1230,6 +1322,25 @@
 					</button>
 				{/if}
 			</div>
+		</div>
+	{/if}
+
+	{#if inspectorOpen}
+		<button
+			type="button"
+			class="display-scrim"
+			aria-label="Close source styling"
+			onclick={() => (inspectorOpen = false)}
+		></button>
+		<div class="panel ss-panel" role="dialog" aria-label="Source styling">
+			<SourceStyling
+				theme={inspectorData}
+				host={inspectorHost}
+				loading={inspectorLoading}
+				refreshing={refreshingSourceTheme}
+				onRefresh={refreshInspector}
+				onClose={() => (inspectorOpen = false)}
+			/>
 		</div>
 	{/if}
 </nav>
@@ -1900,6 +2011,15 @@
 		color: var(--source-text);
 		--bg: var(--source-bg);
 		--text: var(--source-text);
+		/* Pin the ENTIRE ink layer to source-derived, contrast-clamped values so
+		   nothing falls back to the reader theme's ink (which, under a dark theme on
+		   a light source ground, would render light-on-light). --text-muted /
+		   --prose-faded get a muted tone mixed toward the ground so captions, byline,
+		   and faded prose stay legible on the source surface. */
+		--text-muted: color-mix(in srgb, var(--source-text) 62%, var(--source-bg));
+		--prose-fg: var(--source-text);
+		--prose-faded: color-mix(in srgb, var(--source-text) 62%, var(--source-bg));
+		--prose-quote-fg: var(--source-text);
 		--surface-alt: color-mix(in srgb, var(--source-text) 7%, var(--source-bg));
 		box-shadow: none;
 	}
