@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.36.1',
+		date: '2026-07-06',
+		title: 'Sturdier newsletter capture',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Hardened the new newsletter-image handling: unusual bytes in an email can no longer trip up saving its content, and a hiccup while storing a newsletter can never cause it to be pulled in more than once.'
+			}
+		]
+	},
+	{
 		version: '0.36.0',
 		date: '2026-07-06',
 		title: 'Newsletter images that actually load',

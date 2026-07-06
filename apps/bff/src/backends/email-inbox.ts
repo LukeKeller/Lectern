@@ -157,7 +157,11 @@ export function buildReadeckHtml(msg: ParsedNewsletter): string {
  * proxy fetch them live when the article is opened.
  */
 export function newsletterContentHtml(msg: ParsedNewsletter): string {
-  return extractBody(sanitizeEmailHtml(msg.html));
+  // Strip bytes a Postgres text column rejects and that email encodings sometimes
+  // leave behind — NUL and the other C0 control chars (tab/newline/CR are kept).
+  // A stray 0x00 otherwise fails the content insert on store.
+  // eslint-disable-next-line no-control-regex
+  return extractBody(sanitizeEmailHtml(msg.html)).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 }
 
 /** A Readeck label derived from the sender's display name (trimmed, capped). */
