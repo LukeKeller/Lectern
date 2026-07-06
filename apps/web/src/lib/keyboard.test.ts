@@ -58,6 +58,15 @@ describe('resolveKey', () => {
 		});
 	});
 
+	it('maps a to add a link, without shadowing the g→a archive chord', () => {
+		expect(resolveKey(null, { key: 'a' })).toEqual({
+			action: { type: 'addLink' },
+			pending: null
+		});
+		// The `g` prefix still wins for the archive nav chord.
+		expect(resolveKey('g', { key: 'a' }).action).toEqual({ type: 'navigate', path: '/archive' });
+	});
+
 	it('maps / to focus search', () => {
 		expect(resolveKey(null, { key: '/' }).action).toEqual({ type: 'focusSearch' });
 	});

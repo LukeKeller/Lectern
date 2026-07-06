@@ -30,7 +30,8 @@
 				['s', 'Move to Shortlist'],
 				['e', 'Archive'],
 				['Space', 'Mark read'],
-				['r', 'Refresh list']
+				['r', 'Refresh list'],
+				['a', 'Add a link']
 			]
 		},
 		{

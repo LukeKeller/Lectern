@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.35.0',
+		date: '2026-07-06',
+		title: 'Save a link the easy way',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The “Save to Lectern” bookmarklet no longer 404s. It now opens a Lectern tab and saves the page through your existing session, so it works from any site, embeds no personal token, and is safe to keep on your bookmarks bar.'
+			},
+			{
+				kind: 'added',
+				text: 'Save a link faster on the desktop: press “a” anywhere, or pick “Add link” from the command palette (⌘K / Ctrl-K), to open the paste-a-URL box — it even pre-fills from your clipboard. (The sidebar’s Tools → Add link still works too.)'
+			}
+		]
+	},
+	{
 		version: '0.34.0',
 		date: '2026-07-06',
 		title: 'See a source’s dress — and read it comfortably',

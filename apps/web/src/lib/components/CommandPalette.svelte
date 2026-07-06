@@ -8,7 +8,8 @@
 	import { viewsStore } from '$lib/views-store.svelte';
 	import { trapFocus } from '$lib/focus-trap';
 
-	let { open = $bindable(false) }: { open?: boolean } = $props();
+	let { open = $bindable(false), onAddLink }: { open?: boolean; onAddLink?: () => void } =
+		$props();
 
 	interface Command {
 		id: string;
@@ -23,6 +24,7 @@
 
 	const commands = $derived.by<Command[]>(() => {
 		const list: Command[] = [
+			{ id: 'add-link', label: 'Add link…', group: 'Go to', run: () => onAddLink?.() },
 			{ id: 'go-home', label: 'Home', group: 'Go to', run: () => void goto(resolve('/')) },
 			{
 				id: 'go-inbox',

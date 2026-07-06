@@ -22,6 +22,7 @@ import type { Location } from '@lectern/shared';
  *   s              shortlist  (setLocation)
  *   i              inbox      (setLocation)
  *   r              refresh the list  (refresh)
+ *   a              add a link (paste a URL)
  *   /              focus search
  *   g then i/l/s/a/f/b/h   jump to a view
  *   Cmd/Ctrl-K     open the command palette
@@ -47,6 +48,7 @@ export type KeyAction =
 	| { type: 'refresh' }
 	| { type: 'focusSearch' }
 	| { type: 'navigate'; path: NavTarget }
+	| { type: 'addLink' }
 	| { type: 'palette' };
 
 /** The minimal slice of a `KeyboardEvent` the resolver reads. */
@@ -79,6 +81,7 @@ export const SINGLE_KEYS: Record<string, KeyAction> = {
 	s: { type: 'setLocation', location: 'shortlist' },
 	i: { type: 'setLocation', location: 'inbox' },
 	r: { type: 'refresh' },
+	a: { type: 'addLink' },
 	' ': { type: 'markRead' },
 	'/': { type: 'focusSearch' }
 };

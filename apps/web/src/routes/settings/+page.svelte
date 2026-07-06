@@ -27,13 +27,16 @@
 	import { DEFAULT_VOICE, voiceOptions } from '$lib/tts-voices';
 	import { ttsPlayer } from '$lib/tts-player.svelte';
 	import { disablePush, enablePush, getPermission, isPushSupported, isSubscribed } from '$lib/push';
+	import { browser } from '$app/environment';
 
 	let token = $state('');
 	let saved = $state(false);
 	let copied = $state(false);
 	const apiUrl = getApiUrl();
 
-	const bookmarklet = $derived(buildBookmarklet(apiUrl, token.trim()));
+	// Built for the deployed app's own origin so it opens Lectern's authenticated
+	// share-target tab. Guarded for SSR, where `location` is unavailable.
+	const bookmarklet = $derived(buildBookmarklet(browser ? location.origin : ''));
 
 	let importing = $state(false);
 	let importResult = $state<ImportReadwiseResponse | undefined>(undefined);
@@ -580,8 +583,9 @@
 	<section>
 		<h2>Save bookmarklet</h2>
 		<p class="hint">
-			Drag this link to your bookmarks bar to save the current page to Lectern from any browser. It
-			embeds your personal token, so keep it private.
+			Drag this link to your bookmarks bar to save the current page to Lectern. Clicking it opens a
+			Lectern tab that saves the page using your existing session — no token is embedded, so it's
+			safe to keep on your bookmarks bar or share.
 		</p>
 		<div class="row">
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
@@ -591,7 +595,6 @@
 			<button type="button" class="btn" onclick={copyBookmarklet}>Copy</button>
 			{#if copied}<span class="ok">Copied.</span>{/if}
 		</div>
-		{#if !token.trim()}<p class="hint">Save a bearer token above first.</p>{/if}
 	</section>
 
 	<section>
