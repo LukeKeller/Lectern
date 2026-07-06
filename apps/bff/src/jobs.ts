@@ -227,7 +227,20 @@ export async function pollEmail(): Promise<number> {
       // so the reader serves it instead of Readeck's archived copy — Readeck's
       // newsletter image archiving is unreliable (most `_resources` URLs 404), so
       // we keep the original URLs and let the image proxy fetch them at read time.
-      await store.putContent(`readeck:${sourceId}`, newsletterContentHtml(msg));
+      // Best-effort: a content-store failure must NOT stick the cursor (which would
+      // re-save the message every poll and, since Readeck doesn't dedupe these
+      // synthetic URLs, pile up duplicates). Log and move on — the reader falls
+      // back to Readeck's copy for this one.
+      try {
+        await store.putContent(`readeck:${sourceId}`, newsletterContentHtml(msg));
+      } catch (contentErr) {
+        await logIngestion(
+          "email",
+          "poll",
+          "error",
+          `uid ${msg.uid} content store: ${contentErr instanceof Error ? contentErr.message : String(contentErr)}`,
+        );
+      }
       saved++;
       await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
     } catch (err) {

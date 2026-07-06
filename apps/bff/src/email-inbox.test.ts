@@ -74,6 +74,13 @@ describe("newsletterContentHtml", () => {
     expect(html).not.toContain("<script");
     expect(html).toContain("ok");
   });
+
+  it("strips NUL and C0 control bytes that break the Postgres text insert", () => {
+    const msg = { ...baseMsg, html: "<body><p>a\u0000b\u0007c</p></body>" };
+    const html = newsletterContentHtml(msg);
+    expect(html).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/);
+    expect(html).toContain("abc");
+  });
 });
 
 describe("sanitizeEmailHtml", () => {
