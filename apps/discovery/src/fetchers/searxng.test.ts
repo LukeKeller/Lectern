@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiscoveryConfig } from "@lectern/shared";
-import { createSearxngFetcher } from "./searxng";
+import { createSearxngFetcher, parseSearxngTarget } from "./searxng";
 import { DiscoveryHttpError, type FetchContext } from "./types";
 
 const cfg: DiscoveryConfig = {
@@ -53,5 +53,29 @@ describe("searxng fetcher", () => {
     const fakeFetch = async () => new Response("nope", { status: 502 });
     const f = createSearxngFetcher({ fetch: fakeFetch as typeof fetch });
     await expect(f.fetch(ctx)).rejects.toBeInstanceOf(DiscoveryHttpError);
+  });
+});
+
+describe("parseSearxngTarget", () => {
+  it("treats http(s) URLs as an HTTP base (trailing slash trimmed)", () => {
+    expect(parseSearxngTarget("http://searx.local/")).toEqual({
+      mode: "http",
+      base: "http://searx.local",
+    });
+    expect(parseSearxngTarget("https://s.example.com:8080")).toEqual({
+      mode: "http",
+      base: "https://s.example.com:8080",
+    });
+  });
+
+  it("parses a unix socket target (with or without //)", () => {
+    expect(parseSearxngTarget("unix:/run/searxng.sock")).toEqual({
+      mode: "unix",
+      socketPath: "/run/searxng.sock",
+    });
+    expect(parseSearxngTarget("unix:///run/searxng.sock")).toEqual({
+      mode: "unix",
+      socketPath: "/run/searxng.sock",
+    });
   });
 });

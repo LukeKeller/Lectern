@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.37.1',
+		date: '2026-07-08',
+		title: 'Connect Discover to a local SearXNG',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Discover can now talk to a self-hosted SearXNG that listens on a local unix socket, not just an http address. Set the SearXNG URL to “unix:/path/to/searxng.sock” and Lectern reaches it directly over the machine — no public URL or login needed.'
+			}
+		]
+	},
+	{
 		version: '0.37.0',
 		date: '2026-07-08',
 		title: 'Discover new things to read',
