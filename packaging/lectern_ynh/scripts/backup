@@ -7,6 +7,7 @@ ynh_print_info "Backing up Lectern..."
 ynh_backup "$install_dir"
 ynh_backup "/etc/nginx/conf.d/$domain.d/$app.conf"
 ynh_backup "/etc/systemd/system/$app.service"
+ynh_backup "/etc/systemd/system/$app-discovery.service"
 ynh_backup "/var/log/$app"
 
 # Glue database dump.

@@ -2,10 +2,14 @@
 
 source /usr/share/yunohost/helpers
 
+if yunohost service status "$app-discovery" >/dev/null 2>&1; then
+    yunohost service remove "$app-discovery"
+fi
 if yunohost service status "$app" >/dev/null 2>&1; then
     yunohost service remove "$app"
 fi
 
+ynh_config_remove_systemd --service="$app-discovery"
 ynh_config_remove_systemd
 ynh_config_remove_nginx
 ynh_safe_rm "/var/log/$app"

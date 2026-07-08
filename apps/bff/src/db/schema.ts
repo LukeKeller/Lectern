@@ -206,6 +206,72 @@ export const feedNotificationPrefs = pgTable("feed_notification_prefs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Content-discovery candidates: articles the discovery worker found on the open
+ * web and scored (TF-IDF cosine to the interest profile). One row per deduped
+ * URL. `termVector` is the candidate's TF map, persisted so a later vote can
+ * train the Rocchio profile without re-fetching the page. BFF-owned; the worker
+ * writes these only via the API.
+ */
+export const discoveryCandidates = pgTable("discovery_candidates", {
+  id: text("id").primaryKey(), // disc:<sha1(url_normalized)>
+  url: text("url").notNull(),
+  urlNormalized: text("url_normalized").notNull().unique(),
+  title: text("title"),
+  excerpt: text("excerpt"),
+  fetcher: text("fetcher").notNull(), // searxng | brave | crawl
+  score: real("score").notNull().default(0),
+  termVector: jsonb("term_vector").$type<Record<string, number>>().notNull().default({}),
+  status: text("status").notNull().default("active"), // active | dismissed | saved
+  vote: text("vote"), // null | up | down
+  runId: text("run_id"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(), // author/siteName/imageUrl/publishedAt
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only vote signal log. Each vote copies the candidate's `termVector` at
+ * vote time so a later-pruned candidate still trains the model. `processed`
+ * flips true once a run folds it into the profile.
+ */
+export const discoveryVotes = pgTable("discovery_votes", {
+  id: serial("id").primaryKey(),
+  candidateId: text("candidate_id").notNull(),
+  value: text("value").notNull(), // up | down
+  termVector: jsonb("term_vector").$type<Record<string, number>>().notNull().default({}),
+  processed: boolean("processed").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** The persisted Rocchio interest model (one logical row, keyed by name). */
+export const discoveryProfile = pgTable("discovery_profile", {
+  name: text("name").primaryKey().default("default"),
+  vector: jsonb("vector").$type<Record<string, number>>().notNull().default({}),
+  idf: jsonb("idf").$type<Record<string, number>>().notNull().default({}),
+  docCount: integer("doc_count").notNull().default(0),
+  seededAt: timestamp("seeded_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  lastVoteProcessedAt: timestamp("last_vote_processed_at", { withTimezone: true }),
+});
+
+/**
+ * One row per discovery run, updated live by the worker so the Activity page can
+ * show progress. `stats` holds fetched/deduped/scored/inserted counts + a
+ * per-fetcher tally.
+ */
+export const discoveryRuns = pgTable("discovery_runs", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull().default("running"), // running | succeeded | failed
+  stage: text("stage").notNull().default("starting"),
+  trigger: text("trigger").notNull().default("manual"), // cron | manual
+  stats: jsonb("stats").$type<Record<string, unknown>>().notNull().default({}),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
 /** Append-only ingestion audit log for observability/debugging of sync runs. */
 export const ingestionLog = pgTable("ingestion_log", {
   id: serial("id").primaryKey(),
@@ -230,3 +296,11 @@ export type NewPodcastEpisodeRow = typeof podcastEpisodes.$inferInsert;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscriptionRow = typeof pushSubscriptions.$inferInsert;
 export type FeedNotificationPrefRow = typeof feedNotificationPrefs.$inferSelect;
+export type DiscoveryCandidateRow = typeof discoveryCandidates.$inferSelect;
+export type NewDiscoveryCandidateRow = typeof discoveryCandidates.$inferInsert;
+export type DiscoveryVoteRow = typeof discoveryVotes.$inferSelect;
+export type NewDiscoveryVoteRow = typeof discoveryVotes.$inferInsert;
+export type DiscoveryProfileRow = typeof discoveryProfile.$inferSelect;
+export type NewDiscoveryProfileRow = typeof discoveryProfile.$inferInsert;
+export type DiscoveryRunRow = typeof discoveryRuns.$inferSelect;
+export type NewDiscoveryRunRow = typeof discoveryRuns.$inferInsert;

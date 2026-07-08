@@ -11,7 +11,10 @@ ynh_restore_everything
 ynh_psql_db_shell <"db.sql"
 
 ynh_config_add_systemd
+ynh_config_add_systemd --service="$app-discovery" --template="systemd-discovery.service"
 systemctl daemon-reload
 yunohost service add "$app" --description="Lectern reader" --log="/var/log/$app/$app.log"
+yunohost service add "$app-discovery" --description="Lectern discovery worker" --log="/var/log/$app/$app-discovery.log"
 
 ynh_systemctl --service="$app" --action="start" --wait_until="Lectern BFF listening" --log_path="systemd"
+ynh_systemctl --service="$app-discovery" --action="start"

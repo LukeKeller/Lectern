@@ -8,7 +8,7 @@ import { registerAuth } from "./auth";
 import { registerApiRoutes, NotFoundError } from "./routes";
 import { registerPodcastRoutes } from "./podcast";
 import { registerMediaRoutes } from "./media";
-import { buildRealDeps } from "./deps";
+import { buildRealDeps, type DiscoveryTrigger } from "./deps";
 import { BackendHttpError } from "./errors";
 import fastifyStatic from "@fastify/static";
 import { resolve as resolvePath } from "node:path";
@@ -24,6 +24,7 @@ export interface AppDeps {
   overlay: OverlayStore;
   unify: UnificationService;
   tts: TtsRouter;
+  discovery: DiscoveryTrigger;
 }
 
 function statusCodeOf(err: unknown): number | undefined {

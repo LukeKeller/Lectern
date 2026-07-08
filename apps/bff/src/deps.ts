@@ -10,6 +10,32 @@ import { UnificationService } from "./unify";
 import type { AppDeps } from "./app";
 
 /**
+ * Fires a content-discovery run on the worker. Injectable so route tests can
+ * fake it; the real impl POSTs to `${DISCOVERY_URL}/run` and never throws (a
+ * down worker must not 500 the user's "Discover now" request).
+ */
+export interface DiscoveryTrigger {
+  triggerRun(): Promise<void>;
+}
+
+/** Real trigger client: a fire-and-forget POST to the worker's `/run`. Errors
+ *  are swallowed/logged, not thrown, so an unreachable worker is a no-op. */
+export function buildDiscoveryTrigger(): DiscoveryTrigger {
+  return {
+    async triggerRun(): Promise<void> {
+      try {
+        await fetch(`${config.DISCOVERY_URL}/run`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${config.DISCOVERY_TOKEN}` },
+        });
+      } catch (err) {
+        console.error("[lectern] discovery triggerRun failed:", err);
+      }
+    },
+  };
+}
+
+/**
  * Constructs the real dependency graph from `config` + the glue DB pool: the
  * MiniFlux + Readeck adapters, the drizzle-backed overlay store, and the
  * unification service over all three. Adapter/pool construction is connection-
@@ -31,5 +57,6 @@ export function buildRealDeps(): AppDeps {
     elevenlabs: new ElevenLabsBackend(),
     kokoro: new KokoroBackend({ baseUrl: config.KOKORO_BASE_URL }),
   });
-  return { rss, readLater, overlay, unify, tts };
+  const discovery = buildDiscoveryTrigger();
+  return { rss, readLater, overlay, unify, tts, discovery };
 }

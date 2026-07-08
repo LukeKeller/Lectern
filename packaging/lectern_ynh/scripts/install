@@ -38,6 +38,12 @@ ynh_app_setting_set --key=enable_email --value="$enable_email"
 kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
 ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
 
+# Content discovery worker. Shared secret the BFF presents when triggering a run
+# on the sibling worker. Persist as a setting so it survives upgrades and is
+# re-rendered into .env each time (both services read the same value).
+discovery_token=$(ynh_string_random --length=48)
+ynh_app_setting_set --key=discovery_token --value="$discovery_token"
+
 #=================================================
 # INSTALL APP FILES (prebuilt artifact)
 #=================================================
@@ -46,6 +52,7 @@ ynh_script_progression "Installing Lectern files..."
 mkdir -p "$install_dir"
 cp -a "$YNH_APP_BASEDIR/sources/server" "$install_dir/server"
 cp -a "$YNH_APP_BASEDIR/sources/web" "$install_dir/web"
+cp -a "$YNH_APP_BASEDIR/sources/discovery" "$install_dir/discovery"
 chmod -R o-rwx "$install_dir"
 chown -R "$app:$app" "$install_dir"
 
@@ -109,10 +116,15 @@ ynh_config_add_nginx
 ynh_config_add_systemd
 yunohost service add "$app" --description="Lectern reader" --log="/var/log/$app/$app.log"
 
+# Discovery worker: its own systemd unit (localhost-only sibling service).
+ynh_config_add_systemd --service="$app-discovery" --template="systemd-discovery.service"
+yunohost service add "$app-discovery" --description="Lectern discovery worker" --log="/var/log/$app/$app-discovery.log"
+
 #=================================================
 # START SYSTEMD SERVICE
 #=================================================
 ynh_script_progression "Starting Lectern..."
 ynh_systemctl --service="$app" --action="start" --wait_until="Lectern BFF listening" --log_path="systemd"
+ynh_systemctl --service="$app-discovery" --action="start"
 
 ynh_script_progression "Installation of $app completed"

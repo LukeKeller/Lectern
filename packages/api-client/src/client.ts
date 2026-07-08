@@ -48,6 +48,25 @@ import {
   UpdateTtsSettingsRequest,
   UpdateViewRequest,
   ViewsResponse,
+  CreateCandidatesRequest,
+  CreateCandidatesResponse,
+  CreateRunRequest,
+  DiscoveryCandidate,
+  DiscoveryCandidatesResponse,
+  DiscoveryConfig,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoveryRunsResponse,
+  DiscoverySeed,
+  DiscoverySettings,
+  LatestRunResponse,
+  ListCandidatesQuery,
+  PutDiscoveryProfileRequest,
+  TriggerRunResponse,
+  UnprocessedVotesResponse,
+  UpdateDiscoverySettingsRequest,
+  UpdateRunRequest,
+  VoteValue,
 } from "@lectern/shared";
 import { z } from "zod";
 
@@ -373,6 +392,81 @@ export class LecternClient {
   /** Rotate the podcast feed token, revoking the previous subscribe URL. */
   regeneratePodcastFeed() {
     return this.request("POST", "/settings/podcast/regenerate", { schema: PodcastSettings });
+  }
+
+  // ---- Discovery (user-facing) ----
+  /** List discovered candidates, optionally filtered by status. */
+  listCandidates(query?: Partial<ListCandidatesQuery>) {
+    return this.request("GET", "/discovery/candidates", {
+      query,
+      schema: DiscoveryCandidatesResponse,
+    });
+  }
+  /** Vote a candidate up (signal only) or down (signal + dismiss). */
+  voteCandidate(id: string, value: VoteValue) {
+    return this.request("POST", `/discovery/candidates/${id}/vote`, {
+      body: { value },
+      schema: DiscoveryCandidate,
+    });
+  }
+  /** Save a candidate to Readeck; it becomes a library document. */
+  saveCandidate(id: string) {
+    return this.request("POST", `/discovery/candidates/${id}/save`, {
+      schema: DiscoveryCandidate,
+    });
+  }
+  /** Trigger a discovery run now (fire-and-forget to the worker). */
+  triggerDiscoveryRun() {
+    return this.request("POST", "/discovery/run", { schema: TriggerRunResponse });
+  }
+  getDiscoverySettings() {
+    return this.request("GET", "/discovery/settings", { schema: DiscoverySettings });
+  }
+  updateDiscoverySettings(body: UpdateDiscoverySettingsRequest) {
+    return this.request("PATCH", "/discovery/settings", { body, schema: DiscoverySettings });
+  }
+  /** Rebuild the interest profile from the current library. */
+  reseedDiscoveryProfile() {
+    return this.request("POST", "/discovery/profile/reseed", { schema: DiscoveryProfile });
+  }
+  /** Recent runs (history for the Activity page). */
+  listDiscoveryRuns(limit = 20) {
+    return this.request("GET", "/discovery/runs", { query: { limit }, schema: DiscoveryRunsResponse });
+  }
+  /** Current/most-recent run (poll while running). */
+  getLatestDiscoveryRun() {
+    return this.request("GET", "/discovery/runs/latest", { schema: LatestRunResponse });
+  }
+
+  // ---- Discovery (service-facing: used by the discovery worker) ----
+  getDiscoveryConfig() {
+    return this.request("GET", "/discovery/config", { schema: DiscoveryConfig });
+  }
+  getDiscoveryProfile() {
+    return this.request("GET", "/discovery/profile", { schema: DiscoveryProfile });
+  }
+  putDiscoveryProfile(body: PutDiscoveryProfileRequest) {
+    return this.request("PUT", "/discovery/profile", { body, schema: DiscoveryProfile });
+  }
+  getDiscoverySeed() {
+    return this.request("GET", "/discovery/seed", { schema: DiscoverySeed });
+  }
+  listUnprocessedVotes() {
+    return this.request("GET", "/discovery/votes/unprocessed", {
+      schema: UnprocessedVotesResponse,
+    });
+  }
+  createCandidates(body: CreateCandidatesRequest) {
+    return this.request("POST", "/discovery/candidates", {
+      body,
+      schema: CreateCandidatesResponse,
+    });
+  }
+  createDiscoveryRun(body: CreateRunRequest) {
+    return this.request("POST", "/discovery/runs", { body, schema: DiscoveryRun });
+  }
+  updateDiscoveryRun(id: string, body: UpdateRunRequest) {
+    return this.request("PATCH", `/discovery/runs/${id}`, { body, schema: DiscoveryRun });
   }
 
   /** Fetch a short spoken sample of a voice (binary; bypasses the JSON helper). */

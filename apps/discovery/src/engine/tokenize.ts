@@ -1,0 +1,57 @@
+import { stemmer } from "stemmer";
+import type { TermVector } from "@lectern/shared";
+
+/**
+ * Text -> normalized term tokens. The SAME tokenizer is used for the seed
+ * corpus AND for candidate articles, so profile terms and candidate terms live
+ * in the same stemmed vocabulary (a prerequisite for meaningful TF-IDF cosine).
+ *
+ * Pipeline: lowercase -> strip non-alpha -> drop stopwords -> Porter stem.
+ * Stopwords are matched BEFORE stemming (they are ordinary English words).
+ */
+
+// ~150 common English stopwords. Kept inline (no runtime dependency) so the
+// tokenizer is fully deterministic and self-contained.
+const STOPWORDS = new Set<string>([
+  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
+  "any", "are", "aren", "as", "at", "be", "because", "been", "before", "being",
+  "below", "between", "both", "but", "by", "can", "cannot", "could", "couldn",
+  "did", "didn", "do", "does", "doesn", "doing", "don", "down", "during", "each",
+  "few", "for", "from", "further", "had", "hadn", "has", "hasn", "have", "haven",
+  "having", "he", "her", "here", "hers", "herself", "him", "himself", "his", "how",
+  "i", "if", "in", "into", "is", "isn", "it", "its", "itself", "just", "let",
+  "me", "more", "most", "mustn", "my", "myself", "no", "nor", "not", "now", "of",
+  "off", "on", "once", "only", "or", "other", "ought", "our", "ours", "ourselves",
+  "out", "over", "own", "same", "shan", "she", "should", "shouldn", "so", "some",
+  "such", "than", "that", "the", "their", "theirs", "them", "themselves", "then",
+  "there", "these", "they", "this", "those", "through", "to", "too", "under",
+  "until", "up", "very", "was", "wasn", "we", "were", "weren", "what", "when",
+  "where", "which", "while", "who", "whom", "why", "will", "with", "won", "would",
+  "wouldn", "you", "your", "yours", "yourself", "yourselves", "s", "t", "re",
+  "ve", "ll", "d", "m", "o", "y", "also", "get", "got", "one", "two", "may",
+]);
+
+/** Lowercase, strip non-alpha, drop stopwords, Porter-stem. Deterministic. */
+export function tokenize(text: string): string[] {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    // Replace every non a-z run with a single space so contractions/punctuation
+    // split cleanly (e.g. "don't" -> "don" "t", both stopwords).
+    .replace(/[^a-z]+/g, " ")
+    .split(" ")
+    .filter((w) => w.length > 1 && !STOPWORDS.has(w))
+    .map((w) => stemmer(w));
+}
+
+/**
+ * Fold a token list into a sparse term-frequency vector. `weight` scales each
+ * occurrence (used to fold a seed doc's weight into its term counts).
+ */
+export function termFrequencies(tokens: string[], weight = 1): TermVector {
+  const tf: TermVector = {};
+  for (const token of tokens) {
+    tf[token] = (tf[token] ?? 0) + weight;
+  }
+  return tf;
+}

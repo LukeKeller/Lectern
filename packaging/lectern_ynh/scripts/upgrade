@@ -4,6 +4,8 @@ source /usr/share/yunohost/helpers
 
 ynh_script_progression "Stopping Lectern..."
 ynh_systemctl --service="$app" --action="stop"
+# The discovery worker may not exist yet (upgrade from a pre-discovery install).
+systemctl stop "$app-discovery" 2>/dev/null || true
 
 #=================================================
 # UPGRADE APP FILES (prebuilt artifact)
@@ -11,8 +13,10 @@ ynh_systemctl --service="$app" --action="stop"
 ynh_script_progression "Upgrading Lectern files..."
 ynh_safe_rm "$install_dir/server"
 ynh_safe_rm "$install_dir/web"
+ynh_safe_rm "$install_dir/discovery"
 cp -a "$YNH_APP_BASEDIR/sources/server" "$install_dir/server"
 cp -a "$YNH_APP_BASEDIR/sources/web" "$install_dir/web"
+cp -a "$YNH_APP_BASEDIR/sources/discovery" "$install_dir/discovery"
 chmod -R o-rwx "$install_dir"
 chown -R "$app:$app" "$install_dir"
 
@@ -57,6 +61,17 @@ ynh_app_setting_set --key=enable_email --value="$enable_email"
 kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
 ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
 
+# Content discovery worker. Generate the BFF->worker shared secret on the first
+# upgrade that predates discovery support, then persist it (durable across upgrades).
+discovery_token="${discovery_token:-}"
+if [ -z "$discovery_token" ]; then
+    discovery_token=$(ynh_string_random --length=48)
+fi
+ynh_app_setting_set --key=discovery_token --value="$discovery_token"
+# The `discovery` port resource provisions $port_discovery; default it defensively
+# so the .env render never hard-errors on an unset placeholder.
+port_discovery="${port_discovery:-8790}"
+
 # Web Push (optional). Generate a VAPID keypair on the first upgrade that predates
 # push support, then persist it so it's durable (re-keying would invalidate every
 # existing browser subscription). Existing keys are preserved as-is.
@@ -82,10 +97,16 @@ chown "$app:$app" "$install_dir/.env"
 ynh_config_add_nginx
 ynh_config_add_systemd
 
+# Discovery worker unit (idempotent; also registers it on the first upgrade that
+# introduces discovery). `yunohost service add` is idempotent.
+ynh_config_add_systemd --service="$app-discovery" --template="systemd-discovery.service"
+yunohost service add "$app-discovery" --description="Lectern discovery worker" --log="/var/log/$app/$app-discovery.log"
+
 # Refresh the app logo (admin UI renders applogos/$app.png directly).
 cp -f "$YNH_APP_BASEDIR/conf/lectern.png" /usr/share/yunohost/applogos/lectern.png 2>/dev/null || true
 
 ynh_script_progression "Starting Lectern..."
 ynh_systemctl --service="$app" --action="start" --wait_until="Lectern BFF listening" --log_path="systemd"
+ynh_systemctl --service="$app-discovery" --action="start"
 
 ynh_script_progression "Upgrade of $app completed"

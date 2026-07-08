@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.37.0',
+		date: '2026-07-08',
+		title: 'Discover new things to read',
+		changes: [
+			{
+				kind: 'added',
+				text: 'New Discover view: Lectern now goes looking for fresh articles and blog posts from around the web that match your interests, and shows you a handful to react to. Vote each one up or down — thumbs-up teaches Lectern what you like and keeps the item around, thumbs-down clears it away. Hit Save on anything you want to keep and it lands in your library like any other saved page.'
+			},
+			{
+				kind: 'added',
+				text: 'Lectern learns entirely from your own saved reading and your votes — no outside AI involved. It seeds your tastes from what you have shortlisted, highlighted, read, and tagged, then refines with every vote.'
+			},
+			{
+				kind: 'added',
+				text: 'A Discover → Activity page shows each discovery run as it happens: what stage it is on, how many articles it looked at, and how many it surfaced. Tune topics, sources, and schedule under Settings → Discover, or press “Discover now” anytime.'
+			}
+		]
+	},
+	{
 		version: '0.36.1',
 		date: '2026-07-06',
 		title: 'Sturdier newsletter capture',
