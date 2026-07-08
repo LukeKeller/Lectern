@@ -113,9 +113,14 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
 
     // 5. Fetch candidates from every enabled fetcher.
     await client.updateDiscoveryRun(runId, { stage: "fetching" });
-    const queries = [...topTerms(profile.vector, QUERY_TERM_COUNT), ...cfg.topics].filter(
-      (q) => q.length > 0,
-    );
+    // Prefer the user's topics as queries: they are clean multi-word phrases that
+    // make good searches. Only fall back to profile terms when NO topics are set
+    // — bare stemmed profile terms ("issu", "vol", "cultur") make terrible
+    // single-word queries (they return dictionary/disambiguation pages), so we
+    // never mix them in alongside real topics.
+    const queries = (
+      cfg.topics.length > 0 ? cfg.topics : topTerms(profile.vector, QUERY_TERM_COUNT)
+    ).filter((q) => q.trim().length > 0);
     const fetchers = (opts.fetchers ?? allFetchers).filter((f) => f.enabled(cfg));
     const ctx: FetchContext = {
       queries,

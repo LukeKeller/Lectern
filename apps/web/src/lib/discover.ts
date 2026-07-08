@@ -1,4 +1,4 @@
-import type { DiscoveryCandidate } from '@lectern/shared';
+import type { Card, DiscoveryCandidate } from '@lectern/shared';
 
 /**
  * Pure state transitions for the Discover candidate list. The list is held in
@@ -31,4 +31,45 @@ export function applyCandidateAction(
 		default:
 			return list;
 	}
+}
+
+/**
+ * Project a discovered candidate onto the unified `Card` shape so CardList can
+ * render it with the exact same magazine-index treatment as feed/library items.
+ * Candidates are NOT library documents, so the fields a real Card carries from a
+ * backend (reading progress, highlights, tags, word count) are zeroed; the card
+ * is presented as an undated "Article". CardList's discover mode reads the
+ * candidate-only signals (score, fetcher, vote, saved) from a separate metadata
+ * map keyed by id, so nothing candidate-specific has to be smuggled through Card.
+ *
+ * - `coverImage` <- `imageUrl` (the thumbnail rail)
+ * - `savedAt`/`updatedAt` <- `firstSeenAt` (Card requires both; used only for order)
+ * - `title` falls back to '' so CardList shows the hostname, as it does elsewhere
+ */
+export function candidateToCard(c: DiscoveryCandidate): Card {
+	return {
+		id: c.id,
+		source: 'readeck',
+		sourceId: c.id,
+		category: 'article',
+		location: 'inbox',
+		readState: 'unopened',
+		title: c.title ?? '',
+		excerpt: c.excerpt,
+		author: c.author,
+		siteName: c.siteName,
+		senderDomain: null,
+		url: c.url,
+		coverImage: c.imageUrl,
+		wordCount: null,
+		readingTimeMinutes: null,
+		readingProgress: 0,
+		readAnchor: null,
+		tags: [],
+		highlightCount: 0,
+		note: null,
+		savedAt: c.firstSeenAt,
+		updatedAt: c.firstSeenAt,
+		publishedAt: c.publishedAt
+	};
 }

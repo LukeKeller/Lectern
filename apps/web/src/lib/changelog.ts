@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.37.2',
+		date: '2026-07-08',
+		title: 'Better Discover results, shown like your feed',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Discovered items now look and behave just like your normal feed and library cards — same layout, cover, and byline — with up/down vote and Save controls added to each one.'
+			},
+			{
+				kind: 'improved',
+				text: 'Much better recommendations. Discover now searches using your chosen topics (clean phrases) instead of stray single words, filters out newsletter/website boilerplate (“issue”, “vol”, “subscribe”, “read more”) that was drowning out your real interests, and the crawler skips social-media profile pages so results are actual articles.'
+			}
+		]
+	},
+	{
 		version: '0.37.1',
 		date: '2026-07-08',
 		title: 'Connect Discover to a local SearXNG',

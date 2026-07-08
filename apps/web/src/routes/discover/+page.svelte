@@ -11,9 +11,9 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
-	import { applyCandidateAction } from '$lib/discover';
+	import { applyCandidateAction, candidateToCard } from '$lib/discover';
 	import { SvelteSet } from 'svelte/reactivity';
-	import DiscoverList from '$lib/components/DiscoverList.svelte';
+	import CardList from '$lib/components/CardList.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
 	let candidates = $state<DiscoveryCandidate[]>([]);
@@ -21,6 +21,25 @@
 	let error = $state<string | undefined>(undefined);
 	let triggering = $state(false);
 	const busyIds = new SvelteSet<string>();
+
+	// Render candidates with the app's real card treatment (CardList) instead of a
+	// bespoke row: map each to a Card, and pass the candidate-only signals CardList
+	// can't read off a Card (score, fetcher, vote, saved, busy) via a lookup map.
+	const cards = $derived(candidates.map(candidateToCard));
+	const discoverMeta = $derived(
+		new Map(
+			candidates.map((c) => [
+				c.id,
+				{
+					score: c.score,
+					fetcher: c.fetcher,
+					vote: c.vote,
+					saved: c.status === 'saved',
+					busy: busyIds.has(c.id)
+				}
+			])
+		)
+	);
 
 	onMount(load);
 
@@ -127,7 +146,7 @@
 			</p>
 		</div>
 	{:else}
-		<DiscoverList {candidates} {busyIds} onvote={vote} onsave={save} />
+		<CardList {cards} discover={{ meta: discoverMeta, onvote: vote, onsave: save }} />
 	{/if}
 </div>
 

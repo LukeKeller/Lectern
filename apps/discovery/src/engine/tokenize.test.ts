@@ -21,6 +21,18 @@ describe("tokenize", () => {
     expect(tokens).toEqual([]);
   });
 
+  it("drops publication/web boilerplate but keeps real interest terms", () => {
+    // Newsletter/nav boilerplate that otherwise dominates the profile.
+    const boiler = tokenize("Issue Vol New Subscribe Newsletter Read More Home Page Weekly");
+    expect(boiler).toEqual([]);
+    // Genuine interest terms survive (stemmed).
+    const real = tokenize("artificial intelligence video games photography poetry");
+    expect(real).toContain("intellig");
+    expect(real).toContain("game");
+    expect(real).not.toContain("issue");
+    expect(real).not.toContain("new");
+  });
+
   it("Porter-stems tokens (running -> run)", () => {
     expect(tokenize("running")).toEqual(["run"]);
     // Different surface forms collapse to a shared stem.

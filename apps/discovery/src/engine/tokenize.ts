@@ -29,6 +29,26 @@ const STOPWORDS = new Set<string>([
   "where", "which", "while", "who", "whom", "why", "will", "with", "won", "would",
   "wouldn", "you", "your", "yours", "yourself", "yourselves", "s", "t", "re",
   "ve", "ll", "d", "m", "o", "y", "also", "get", "got", "one", "two", "may",
+  // --- Publication / newsletter / web-chrome boilerplate ---
+  // These dominate raw body text (mastheads, "in this issue", nav, footers) and
+  // otherwise swamp the interest profile with no-signal terms, so a candidate
+  // scores high just for containing "issue" or "read more". Matched pre-stem.
+  "issue", "issues", "vol", "volume", "edition", "editions", "newsletter",
+  "subscribe", "subscriber", "subscription", "unsubscribe", "archive", "archives",
+  "digest", "weekly", "daily", "monthly", "roundup", "briefing", "dispatch",
+  "home", "page", "pages", "click", "read", "reads", "comment", "comments",
+  "share", "sign", "email", "follow", "menu", "login", "register", "account",
+  "contact", "privacy", "terms", "copyright", "rights", "reserved", "cookie",
+  "cookies", "today", "yesterday", "tomorrow", "week", "weeks", "month", "months",
+  "year", "years", "day", "days", "monday", "tuesday", "wednesday", "thursday",
+  "friday", "saturday", "sunday", "january", "february", "march", "april", "june",
+  "july", "august", "september", "october", "november", "december",
+  "new", "news", "post", "posts", "update", "updates", "latest", "top", "best",
+  "via", "link", "links", "blog", "blogs", "site", "website", "www", "com",
+  "http", "https", "url", "us", "use", "used", "using", "like", "make", "makes",
+  "made", "thing", "things", "way", "ways", "people", "time", "times", "first",
+  "last", "next", "back", "said", "says", "say", "want", "need", "know", "think",
+  "see", "look", "going", "really", "much", "many", "lot", "good", "great",
 ]);
 
 /** Lowercase, strip non-alpha, drop stopwords, Porter-stem. Deterministic. */

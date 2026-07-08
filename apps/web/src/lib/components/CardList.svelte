@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { FINISHED_THRESHOLD, type Card, type Location } from '@lectern/shared';
+	import {
+		FINISHED_THRESHOLD,
+		type Card,
+		type DiscoveryFetcher,
+		type Location,
+		type VoteValue
+	} from '@lectern/shared';
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
@@ -16,6 +22,29 @@
 		location: Location;
 	}
 
+	/** Per-card Discover signals, keyed by card id (see `DiscoverMode`). */
+	interface DiscoverMeta {
+		score: number;
+		fetcher: DiscoveryFetcher;
+		vote: VoteValue | null;
+		saved: boolean;
+		busy: boolean;
+	}
+
+	/**
+	 * Opts the list into "discover" mode: candidates render with the identical card
+	 * treatment, but the title links out to the original (new tab) instead of the
+	 * reader, and the action row is ▲ Upvote / ▼ Downvote / Save instead of the
+	 * library triage + overflow menu. Candidate-only signals arrive via `meta` so
+	 * nothing discover-specific has to ride on the Card. Handlers call back to the
+	 * page, which owns the optimistic list (candidates never touch Dexie/sync).
+	 */
+	interface DiscoverMode {
+		meta: ReadonlyMap<string, DiscoverMeta>;
+		onvote: (id: string, value: VoteValue) => void;
+		onsave: (id: string) => void;
+	}
+
 	let {
 		cards,
 		loading = false,
@@ -27,6 +56,7 @@
 		selectedIndex = -1,
 		scrollNonce = 0,
 		fadedIds,
+		discover,
 		ontriage,
 		onread,
 		onselect,
@@ -47,6 +77,8 @@
 		scrollNonce?: number;
 		/** Ids to render faded (e.g. read-but-kept items awaiting a refresh). */
 		fadedIds?: ReadonlySet<string>;
+		/** When set, render candidates in Discover mode (see `DiscoverMode`). */
+		discover?: DiscoverMode;
 		ontriage?: (id: string, location: Location) => void;
 		/** Fired when a card's read state is toggled here (swipe), so the parent can track it. */
 		onread?: (id: string, read: boolean) => void;
@@ -144,6 +176,14 @@
 			return url;
 		}
 	}
+
+	// ---- Discover mode helpers ----
+	const FETCHER_LABEL: Record<DiscoveryFetcher, string> = {
+		searxng: 'SearXNG',
+		brave: 'Brave',
+		crawl: 'Crawl'
+	};
+	const dmeta = (id: string) => discover?.meta.get(id);
 
 	/** Byline: author · publication · reading time (de-duplicated). */
 	function meta(card: Card): string {
@@ -350,24 +390,30 @@
 				{@const card = row.card}
 				{@const i = row.index}
 				<li class="row" class:selected={i === selectedIndex} class:faded={fadedIds?.has(card.id)}>
-					<div class="swipe" use:swipeable={{ onCommit: (dir) => onSwipe(card, dir) }}>
-						<div class="swipe-bg" aria-hidden="true">
-							<span class="swipe-action read">
-								<Icon name="check" size={16} />
-								{card.readState === 'finished' ? 'Unread' : 'Read'}
-							</span>
-							<span class="swipe-action archive">
-								Archive
-								<Icon name="archive" size={16} />
-							</span>
-						</div>
+					<div
+						class="swipe"
+						use:swipeable={{ enabled: !discover, onCommit: (dir) => onSwipe(card, dir) }}
+					>
+						{#if !discover}
+							<div class="swipe-bg" aria-hidden="true">
+								<span class="swipe-action read">
+									<Icon name="check" size={16} />
+									{card.readState === 'finished' ? 'Unread' : 'Read'}
+								</span>
+								<span class="swipe-action archive">
+									Archive
+									<Icon name="archive" size={16} />
+								</span>
+							</div>
+						{/if}
 						<article
 							class="card swipe-front"
 							class:read={card.readState === 'finished'}
 							class:menu-open={menuOpenId === card.id}
+							class:saved={dmeta(card.id)?.saved}
 							onmouseenter={() => onselect?.(i)}
 						>
-							{#if card.readState !== 'finished'}
+							{#if card.readState !== 'finished' && !discover}
 								<span class="dot" aria-hidden="true"></span>
 							{/if}
 
@@ -384,13 +430,22 @@
 							{/if}
 
 							<div class="body">
-								<a
-									class="title"
-									href={resolve('/read/[id]', { id: card.id })}
-									onclick={() => onopen?.()}
-								>
-									{card.title || hostname(card.url)}
-								</a>
+								{#if discover}
+									<!-- Discovered items live off-site; the title opens the original. -->
+									<!-- eslint-disable svelte/no-navigation-without-resolve -->
+									<a class="title" href={card.url} target="_blank" rel="noreferrer noopener">
+										{card.title || hostname(card.url)}
+									</a>
+									<!-- eslint-enable svelte/no-navigation-without-resolve -->
+								{:else}
+									<a
+										class="title"
+										href={resolve('/read/[id]', { id: card.id })}
+										onclick={() => onopen?.()}
+									>
+										{card.title || hostname(card.url)}
+									</a>
+								{/if}
 								{#if card.excerpt}<p class="snippet">{card.excerpt}</p>{/if}
 								<p class="meta">
 									<SourceAvatar
@@ -399,177 +454,230 @@
 										size={16}
 									/>
 									<span class="byline">{meta(card)}</span>
-									{#if card.highlightCount > 0}
-										<span class="hl"><Icon name="highlight" size={13} />{card.highlightCount}</span>
+									{#if discover}
+										{@const dm = dmeta(card.id)}
+										{#if dm}
+											<span class="badges">
+												<span class="score" title="Relevance to your interests"
+													>{Math.round(dm.score * 100)}%</span
+												>
+												<span class="source">{FETCHER_LABEL[dm.fetcher] ?? dm.fetcher}</span>
+												{#if dm.saved}<span class="saved-badge">Saved</span>{/if}
+											</span>
+										{/if}
+									{:else}
+										{#if card.highlightCount > 0}
+											<span class="hl"
+												><Icon name="highlight" size={13} />{card.highlightCount}</span
+											>
+										{/if}
+										<span class="when">{kindLabel(card)} · {publishedStamp(card)}</span>
 									{/if}
-									<span class="when">{kindLabel(card)} · {publishedStamp(card)}</span>
 								</p>
 							</div>
 
 							<div class="trail">
-								<div class="quick">
-									{#if card.location !== 'later'}
+								{#if discover}
+									{@const dm = dmeta(card.id)}
+									<div class="discover-actions">
 										<button
 											type="button"
 											class="round"
-											title="Read later"
-											aria-label="Read later"
-											onclick={() => triage(card.id, 'later')}
+											class:on={dm?.vote === 'up'}
+											title="More like this"
+											aria-label="More like this"
+											aria-pressed={dm?.vote === 'up'}
+											disabled={dm?.busy}
+											onclick={() => discover.onvote(card.id, 'up')}
 										>
-											<Icon name="clock" size={17} />
+											<span class="glyph">▲</span>
 										</button>
-									{/if}
-									{#if card.location !== 'archive'}
 										<button
 											type="button"
 											class="round"
-											title="Archive"
-											aria-label="Archive"
-											onclick={() => triage(card.id, 'archive')}
+											title="Not interested"
+											aria-label="Not interested"
+											disabled={dm?.busy}
+											onclick={() => discover.onvote(card.id, 'down')}
 										>
-											<Icon name="archive" size={17} />
+											<span class="glyph">▼</span>
 										</button>
-									{/if}
-								</div>
-								<div class="menu-wrap">
-									<button
-										type="button"
-										class="round more-btn"
-										title="More"
-										aria-label="More actions"
-										aria-expanded={menuOpenId === card.id}
-										onclick={(e) => {
-											e.stopPropagation();
-											toggleMenu(card.id);
-										}}
-									>
-										<Icon name="more" size={18} />
-									</button>
-									{#if menuOpenId === card.id}
-										<div class="menu" role="menu">
+										<button
+											type="button"
+											class="round save"
+											title="Save to library"
+											aria-label="Save to library"
+											disabled={dm?.busy || dm?.saved}
+											onclick={() => discover.onsave(card.id)}
+										>
+											<Icon name="bookmark" size={16} />
+										</button>
+									</div>
+								{:else}
+									<div class="quick">
+										{#if card.location !== 'later'}
 											<button
 												type="button"
-												role="menuitem"
-												onclick={(e) => {
-													e.stopPropagation();
-													ttsPlayer.listen({ id: card.id, title: queueTitle(card) });
-													menuOpenId = null;
-												}}
+												class="round"
+												title="Read later"
+												aria-label="Read later"
+												onclick={() => triage(card.id, 'later')}
 											>
-												<Icon name="headphones" size={15} /> Listen
+												<Icon name="clock" size={17} />
 											</button>
+										{/if}
+										{#if card.location !== 'archive'}
 											<button
 												type="button"
-												role="menuitem"
-												onclick={(e) => {
-													e.stopPropagation();
-													ttsPlayer.enqueue({ id: card.id, title: queueTitle(card) });
-													menuOpenId = null;
-												}}
+												class="round"
+												title="Archive"
+												aria-label="Archive"
+												onclick={() => triage(card.id, 'archive')}
 											>
-												<Icon name="plus" size={15} /> Add to queue
+												<Icon name="archive" size={17} />
 											</button>
-											<button
-												type="button"
-												role="menuitem"
-												disabled={podcastStatus === 'busy'}
-												onclick={(e) => {
-													e.stopPropagation();
-													addToPodcast(card);
-												}}
-											>
-												<Icon name={podcastStatus === 'done' ? 'check' : 'rss'} size={15} />
-												{podcastStatus === 'busy'
-													? 'Rendering…'
-													: podcastStatus === 'done'
-														? 'Added'
-														: podcastStatus === 'error'
-															? 'Failed — retry'
-															: 'Add to podcast'}
-											</button>
-											<button
-												type="button"
-												role="menuitem"
-												onclick={(e) => {
-													e.stopPropagation();
-													toggleRead(card);
-													menuOpenId = null;
-												}}
-											>
-												<Icon name="check" size={15} /> Mark {card.readState === 'finished'
-													? 'unread'
-													: 'read'}
-											</button>
-											{#each actions as action (action.location)}
-												{#if action.location !== 'later' && action.location !== 'archive'}
-													<button
-														type="button"
-														role="menuitem"
-														onclick={(e) => {
-															e.stopPropagation();
-															triage(card.id, action.location);
-															menuOpenId = null;
-														}}
-													>
-														<Icon name={actionIcon(action.location)} size={15} />
-														{action.label}
-													</button>
-												{/if}
-											{/each}
-											{#if card.source === 'miniflux'}
+										{/if}
+									</div>
+									<div class="menu-wrap">
+										<button
+											type="button"
+											class="round more-btn"
+											title="More"
+											aria-label="More actions"
+											aria-expanded={menuOpenId === card.id}
+											onclick={(e) => {
+												e.stopPropagation();
+												toggleMenu(card.id);
+											}}
+										>
+											<Icon name="more" size={18} />
+										</button>
+										{#if menuOpenId === card.id}
+											<div class="menu" role="menu">
 												<button
 													type="button"
 													role="menuitem"
-													disabled={savingId === card.id}
 													onclick={(e) => {
 														e.stopPropagation();
-														saveToLater(card);
+														ttsPlayer.listen({ id: card.id, title: queueTitle(card) });
 														menuOpenId = null;
 													}}
 												>
-													<Icon name="bookmark" size={15} />
-													{savingId === card.id ? 'Saving…' : 'Save to library'}
+													<Icon name="headphones" size={15} /> Listen
 												</button>
-											{/if}
-											{#if card.category !== 'email'}
-												<!-- eslint-disable svelte/no-navigation-without-resolve -->
-												<a
-													class="menu-link"
+												<button
+													type="button"
 													role="menuitem"
-													href={card.url}
-													target="_blank"
-													rel="noreferrer noopener"
 													onclick={(e) => {
 														e.stopPropagation();
+														ttsPlayer.enqueue({ id: card.id, title: queueTitle(card) });
 														menuOpenId = null;
 													}}
 												>
-													<Icon name="external" size={15} /> Open original
-												</a>
-												<!-- eslint-enable svelte/no-navigation-without-resolve -->
-											{/if}
-											<div class="menu-sep" role="separator"></div>
-											<button
-												type="button"
-												role="menuitem"
-												class="danger"
-												aria-label="Delete permanently"
-												disabled={deletingId === card.id}
-												onclick={(e) => {
-													e.stopPropagation();
-													deleteCard(card);
-												}}
-											>
-												<Icon name="trash" size={15} />
-												{deletingId === card.id
-													? 'Deleting…'
-													: deleteError
-														? 'Failed — retry'
-														: 'Delete'}
-											</button>
-										</div>
-									{/if}
-								</div>
+													<Icon name="plus" size={15} /> Add to queue
+												</button>
+												<button
+													type="button"
+													role="menuitem"
+													disabled={podcastStatus === 'busy'}
+													onclick={(e) => {
+														e.stopPropagation();
+														addToPodcast(card);
+													}}
+												>
+													<Icon name={podcastStatus === 'done' ? 'check' : 'rss'} size={15} />
+													{podcastStatus === 'busy'
+														? 'Rendering…'
+														: podcastStatus === 'done'
+															? 'Added'
+															: podcastStatus === 'error'
+																? 'Failed — retry'
+																: 'Add to podcast'}
+												</button>
+												<button
+													type="button"
+													role="menuitem"
+													onclick={(e) => {
+														e.stopPropagation();
+														toggleRead(card);
+														menuOpenId = null;
+													}}
+												>
+													<Icon name="check" size={15} /> Mark {card.readState === 'finished'
+														? 'unread'
+														: 'read'}
+												</button>
+												{#each actions as action (action.location)}
+													{#if action.location !== 'later' && action.location !== 'archive'}
+														<button
+															type="button"
+															role="menuitem"
+															onclick={(e) => {
+																e.stopPropagation();
+																triage(card.id, action.location);
+																menuOpenId = null;
+															}}
+														>
+															<Icon name={actionIcon(action.location)} size={15} />
+															{action.label}
+														</button>
+													{/if}
+												{/each}
+												{#if card.source === 'miniflux'}
+													<button
+														type="button"
+														role="menuitem"
+														disabled={savingId === card.id}
+														onclick={(e) => {
+															e.stopPropagation();
+															saveToLater(card);
+															menuOpenId = null;
+														}}
+													>
+														<Icon name="bookmark" size={15} />
+														{savingId === card.id ? 'Saving…' : 'Save to library'}
+													</button>
+												{/if}
+												{#if card.category !== 'email'}
+													<!-- eslint-disable svelte/no-navigation-without-resolve -->
+													<a
+														class="menu-link"
+														role="menuitem"
+														href={card.url}
+														target="_blank"
+														rel="noreferrer noopener"
+														onclick={(e) => {
+															e.stopPropagation();
+															menuOpenId = null;
+														}}
+													>
+														<Icon name="external" size={15} /> Open original
+													</a>
+													<!-- eslint-enable svelte/no-navigation-without-resolve -->
+												{/if}
+												<div class="menu-sep" role="separator"></div>
+												<button
+													type="button"
+													role="menuitem"
+													class="danger"
+													aria-label="Delete permanently"
+													disabled={deletingId === card.id}
+													onclick={(e) => {
+														e.stopPropagation();
+														deleteCard(card);
+													}}
+												>
+													<Icon name="trash" size={15} />
+													{deletingId === card.id
+														? 'Deleting…'
+														: deleteError
+															? 'Failed — retry'
+															: 'Delete'}
+												</button>
+											</div>
+										{/if}
+									</div>
+								{/if}
 							</div>
 
 							{#if card.readingProgress > 0 && !finished(card)}
@@ -905,6 +1013,76 @@
 	.round:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+
+	/* Discover mode: the vote/save row is the primary interaction, so unlike the
+	   hover-revealed triage quick-actions it stays visible at rest. */
+	.discover-actions {
+		display: flex;
+		gap: 0.25rem;
+	}
+	.discover-actions .round {
+		font-size: var(--text-sm);
+		line-height: 1;
+	}
+	.discover-actions .round:hover:not(:disabled),
+	.discover-actions .round.on {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.discover-actions .glyph {
+		font-size: 0.7rem;
+		line-height: 1;
+	}
+	@media (hover: none) {
+		.discover-actions .round {
+			min-width: 2.5rem;
+			min-height: 2.5rem;
+		}
+	}
+	/* Saved candidates recede in place until the next refresh drops them. */
+	.card.saved {
+		opacity: 0.6;
+	}
+
+	/* Right-aligned relevance/source cluster, matching the byline's dateline slot.
+	   The score reads as a confident accent pill; the fetcher is a quieter tag. */
+	.badges {
+		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-shrink: 0;
+	}
+	.score {
+		padding: 0.05rem 0.4rem;
+		border-radius: var(--radius-full);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+	}
+	.source {
+		padding: 0.05rem 0.4rem;
+		border-radius: var(--radius-full);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		color: var(--text-muted);
+		background: var(--surface-alt);
+		border: 1px solid var(--border);
+	}
+	.saved-badge {
+		padding: 0.05rem 0.4rem;
+		border-radius: var(--radius-full);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		color: var(--ok);
+		background: color-mix(in srgb, var(--ok) 12%, transparent);
+		border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
 	}
 	.swipe-hint {
 		display: none;

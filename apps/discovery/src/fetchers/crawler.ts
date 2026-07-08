@@ -17,6 +17,20 @@ const PER_HOST_CAP = 15;
 /** Extensions that are clearly not article pages. */
 const NON_ARTICLE_EXT = /\.(?:png|jpe?g|gif|webp|svg|ico|css|js|mjs|json|xml|rss|pdf|zip|gz|mp4|mp3|woff2?|ttf)(?:$|\?)/i;
 
+/** Social networks / profile silos — never article content. */
+const SOCIAL_HOST = /(?:^|\.)(?:bsky\.app|twitter\.com|x\.com|facebook\.com|instagram\.com|linkedin\.com|youtube\.com|youtu\.be|reddit\.com|tiktok\.com|threads\.net|t\.me|hachyderm\.io|mstdn\.social)$/i;
+
+/** Profile/user paths (mastodon @handles, /profile/, /user/, /author/). */
+const PROFILE_PATH = /\/(?:@|profile|profiles|user|users|author|authors)(?:\/|$)/i;
+
+/** True when a URL looks like real article content (not a social/profile page). */
+function isArticleLike(u: URL): boolean {
+  if (SOCIAL_HOST.test(u.host)) return false;
+  if (u.pathname.startsWith("/@")) return false;
+  if (PROFILE_PATH.test(u.pathname)) return false;
+  return true;
+}
+
 function extractTitle(html: string): string | undefined {
   const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return m?.[1] ? decodeEntities(m[1].trim()) : undefined;
@@ -55,11 +69,14 @@ function extractLinks(html: string, base: string): string[] {
     const href = m[1];
     if (!href) continue;
     try {
-      const abs = new URL(href, base).toString();
+      const absUrl = new URL(href, base);
+      const abs = absUrl.toString();
       if (!/^https?:/i.test(abs)) continue;
       if (NON_ARTICLE_EXT.test(abs)) continue;
+      // Skip social/profile pages (bsky, mastodon @handles, /user/, …).
+      if (!isArticleLike(absUrl)) continue;
       // Article-like: has a non-trivial path (more than just "/").
-      if (new URL(abs).pathname.replace(/\/+$/, "").length <= 1) continue;
+      if (absUrl.pathname.replace(/\/+$/, "").length <= 1) continue;
       out.push(abs);
     } catch {
       // ignore malformed hrefs

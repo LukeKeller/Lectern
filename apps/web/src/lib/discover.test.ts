@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoveryCandidate } from '@lectern/shared';
-import { applyCandidateAction } from './discover';
+import { applyCandidateAction, candidateToCard } from './discover';
 
 function makeCandidate(overrides: Partial<DiscoveryCandidate> = {}): DiscoveryCandidate {
 	return DiscoveryCandidate.parse({
@@ -46,5 +46,50 @@ describe('applyCandidateAction', () => {
 		const list = [makeCandidate({ id: 'a' })];
 		expect(applyCandidateAction(list, { type: 'downvote', id: 'zzz' })).toHaveLength(1);
 		expect(applyCandidateAction(list, { type: 'upvote', id: 'zzz' })[0].vote).toBe(null);
+	});
+});
+
+describe('candidateToCard', () => {
+	it('maps candidate fields onto the Card shape CardList renders', () => {
+		const c = makeCandidate({
+			id: 'x1',
+			url: 'https://example.com/post',
+			title: 'A Discovered Post',
+			excerpt: 'A short summary.',
+			author: 'Jane Doe',
+			siteName: 'Example',
+			imageUrl: 'https://example.com/cover.jpg',
+			publishedAt: '2026-02-02T00:00:00Z',
+			firstSeenAt: '2026-03-03T00:00:00Z'
+		});
+		const card = candidateToCard(c);
+		expect(card.id).toBe('x1');
+		expect(card.url).toBe('https://example.com/post');
+		expect(card.title).toBe('A Discovered Post');
+		expect(card.excerpt).toBe('A short summary.');
+		expect(card.author).toBe('Jane Doe');
+		expect(card.siteName).toBe('Example');
+		expect(card.coverImage).toBe('https://example.com/cover.jpg');
+		expect(card.publishedAt).toBe('2026-02-02T00:00:00Z');
+		// firstSeenAt stands in for both save/update timestamps (Card requires them).
+		expect(card.savedAt).toBe('2026-03-03T00:00:00Z');
+		expect(card.updatedAt).toBe('2026-03-03T00:00:00Z');
+		// Presented as a plain, unread, undiscovered-by-a-backend article.
+		expect(card.category).toBe('article');
+		expect(card.readState).toBe('unopened');
+		expect(card.readingProgress).toBe(0);
+		expect(card.highlightCount).toBe(0);
+		expect(card.tags).toEqual([]);
+	});
+
+	it('falls back to an empty title so CardList shows the hostname', () => {
+		const card = candidateToCard(makeCandidate({ title: null }));
+		expect(card.title).toBe('');
+	});
+
+	it('carries null cover/publish dates through when the candidate has none', () => {
+		const card = candidateToCard(makeCandidate({ imageUrl: null, publishedAt: null }));
+		expect(card.coverImage).toBe(null);
+		expect(card.publishedAt).toBe(null);
 	});
 });
