@@ -511,6 +511,98 @@ function emailKnown(): EmailSender[] {
 let mockPodcastToken = "mocktoken";
 const mockPodcast = new Set<string>();
 
+// In-memory discovery state for dev: a few candidates, settings, profile, and the
+// most-recent run so the Discover view and Activity page render real content.
+interface MockCandidate {
+  id: string;
+  url: string;
+  title: string | null;
+  excerpt: string | null;
+  fetcher: "searxng" | "brave" | "crawl";
+  score: number;
+  status: "active" | "dismissed" | "saved";
+  vote: "up" | "down" | null;
+  runId: string | null;
+  author: string | null;
+  siteName: string | null;
+  imageUrl: string | null;
+  publishedAt: string | null;
+  firstSeenAt: string;
+}
+const mockCandidates: MockCandidate[] = [
+  {
+    id: "disc:1",
+    url: "https://example.com/rust-async-internals",
+    title: "How async/await actually works in Rust",
+    excerpt: "A tour of the state-machine transform behind Rust's futures…",
+    fetcher: "searxng",
+    score: 0.82,
+    status: "active",
+    vote: null,
+    runId: "run:mock",
+    author: "Jane Dev",
+    siteName: "example.com",
+    imageUrl: "https://picsum.photos/seed/rust/640/320",
+    publishedAt: "2026-07-01T00:00:00.000Z",
+    firstSeenAt: "2026-07-08T00:00:00.000Z",
+  },
+  {
+    id: "disc:2",
+    url: "https://example.org/homelab-backup-strategy",
+    title: "A pragmatic homelab backup strategy",
+    excerpt: "3-2-1 backups without spending a fortune on cloud storage…",
+    fetcher: "searxng",
+    score: 0.71,
+    status: "active",
+    vote: null,
+    runId: "run:mock",
+    author: null,
+    siteName: "example.org",
+    imageUrl: null,
+    publishedAt: null,
+    firstSeenAt: "2026-07-08T00:00:00.000Z",
+  },
+];
+let mockDiscoverySettings: Record<string, unknown> = {
+  enabled: false,
+  topics: ["rust", "homelab", "self-hosting"],
+  seedUrls: [],
+  fetchers: { searxng: true, brave: false, crawl: false },
+  schedule: "0 */6 * * *",
+  searxngUrl: "",
+  braveConfigured: false,
+  crawlDepth: 1,
+  crawlTimeMs: 30000,
+  rocchio: { a: 1, b: 0.75, c: 0.25 },
+  targetCount: 5,
+};
+const mockDiscoveryProfile = {
+  name: "default",
+  vector: { rust: 0.6, homelab: 0.4 },
+  idf: {},
+  docCount: 42,
+  seededAt: "2026-07-08T00:00:00.000Z",
+  updatedAt: "2026-07-08T00:00:00.000Z",
+  lastVoteProcessedAt: null,
+};
+let mockRun = {
+  id: "run:mock",
+  status: "succeeded" as "running" | "succeeded" | "failed",
+  stage: "done",
+  trigger: "manual" as "cron" | "manual",
+  stats: {
+    fetched: 40,
+    deduped: 12,
+    scored: 12,
+    inserted: 2,
+    perFetcher: { searxng: 40 } as Record<string, number>,
+  },
+  error: null as string | null,
+  startedAt: "2026-07-08T00:00:00.000Z",
+  updatedAt: "2026-07-08T00:00:05.000Z",
+  finishedAt: "2026-07-08T00:00:05.000Z" as string | null,
+};
+
 type MockContext = { params: Record<string, string>; query: URLSearchParams; body: unknown };
 type MockResult = {
   status?: number;
@@ -889,6 +981,80 @@ const handlers: Record<string, MockHandler> = {
   savePlayerState: ({ body }) => {
     mockPlayer = PlayerState.parse({ ...(body as object), updatedAt: new Date().toISOString() });
     return { json: mockPlayer };
+  },
+
+  // ---- discovery ----
+  listCandidates: ({ query }) => {
+    const status = query.get("status");
+    const list = status ? mockCandidates.filter((c) => c.status === status) : mockCandidates;
+    return { json: { candidates: list } };
+  },
+  voteCandidate: ({ params, body }) => {
+    const value = (body as { value: "up" | "down" }).value;
+    const c = mockCandidates.find((x) => x.id === params.id);
+    if (!c) return { status: 404, json: { message: "not found" } };
+    c.vote = value;
+    if (value === "down") c.status = "dismissed";
+    return { json: c };
+  },
+  saveCandidate: ({ params }) => {
+    const c = mockCandidates.find((x) => x.id === params.id);
+    if (!c) return { status: 404, json: { message: "not found" } };
+    c.status = "saved";
+    return { json: c };
+  },
+  triggerDiscoveryRun: () => ({ status: 202, json: { triggered: true, runId: mockRun.id } }),
+  getDiscoverySettings: () => ({ json: mockDiscoverySettings }),
+  updateDiscoverySettings: ({ body }) => {
+    const b = body as Record<string, unknown>;
+    delete b.braveApiKey;
+    mockDiscoverySettings = { ...mockDiscoverySettings, ...b };
+    return { json: mockDiscoverySettings };
+  },
+  reseedDiscoveryProfile: () => ({ json: mockDiscoveryProfile }),
+  listDiscoveryRuns: () => ({ json: { runs: [mockRun] } }),
+  getLatestDiscoveryRun: () => ({ json: { run: mockRun } }),
+  getDiscoveryConfig: () => ({
+    json: { ...mockDiscoverySettings, braveApiKey: "", braveConfigured: undefined as never },
+  }),
+  getDiscoveryProfile: () => ({ json: mockDiscoveryProfile }),
+  putDiscoveryProfile: ({ body }) => ({ json: (body as { profile: unknown }).profile }),
+  getDiscoverySeed: () => ({ json: { docs: [], tags: [] } }),
+  listUnprocessedVotes: () => ({ json: { votes: [] } }),
+  createCandidates: ({ body }) => ({
+    json: { inserted: (body as { candidates: unknown[] }).candidates.length, skipped: 0 },
+  }),
+  createDiscoveryRun: ({ body }) => {
+    const b = body as { id: string; trigger?: string; stage?: string };
+    const now = new Date().toISOString();
+    mockRun = {
+      id: b.id,
+      status: "running",
+      stage: b.stage ?? "starting",
+      trigger: (b.trigger as "cron" | "manual") ?? "manual",
+      stats: { fetched: 0, deduped: 0, scored: 0, inserted: 0, perFetcher: {} },
+      error: null,
+      startedAt: now,
+      updatedAt: now,
+      finishedAt: null,
+    };
+    return { status: 201, json: mockRun };
+  },
+  updateDiscoveryRun: ({ params, body }) => {
+    if (params.id !== mockRun.id) return { status: 404, json: { message: "not found" } };
+    const b = body as Record<string, unknown>;
+    mockRun = {
+      ...mockRun,
+      ...(b.stage !== undefined ? { stage: b.stage as string } : {}),
+      ...(b.status !== undefined ? { status: b.status as typeof mockRun.status } : {}),
+      ...(b.error !== undefined ? { error: b.error as string | null } : {}),
+      ...(b.stats !== undefined
+        ? { stats: { ...mockRun.stats, ...(b.stats as object) } }
+        : {}),
+      updatedAt: new Date().toISOString(),
+      ...(b.status && b.status !== "running" ? { finishedAt: new Date().toISOString() } : {}),
+    };
+    return { json: mockRun };
   },
 };
 

@@ -9,6 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PKG="$ROOT/packaging/lectern_ynh"
 SRC="$PKG/sources"
 DEPLOY="/tmp/lectern-bff-deploy"
+DEPLOY_DISCOVERY="/tmp/lectern-discovery-deploy"
 
 cd "$ROOT"
 
@@ -25,16 +26,23 @@ pnpm --filter @lectern/web build
 echo "==> Building bff (bundle)"
 pnpm --filter @lectern/bff build
 
+echo "==> Building discovery worker (bundle)"
+pnpm --filter @lectern/discovery build
+
 echo "==> Resolving production node_modules (pnpm deploy)"
-rm -rf "$DEPLOY"
+rm -rf "$DEPLOY" "$DEPLOY_DISCOVERY"
 pnpm --filter @lectern/bff deploy --prod --legacy "$DEPLOY"
+pnpm --filter @lectern/discovery deploy --prod --legacy "$DEPLOY_DISCOVERY"
 
 echo "==> Assembling artifact -> $SRC"
 rm -rf "$SRC"
-mkdir -p "$SRC/server" "$SRC/web" "$SRC/migrations"
+mkdir -p "$SRC/server" "$SRC/web" "$SRC/migrations" "$SRC/discovery"
 cp -a "$DEPLOY/dist" "$SRC/server/dist"
 cp -a "$DEPLOY/node_modules" "$SRC/server/node_modules"
 cp -a "$DEPLOY/package.json" "$SRC/server/package.json"
+cp -a "$DEPLOY_DISCOVERY/dist" "$SRC/discovery/dist"
+cp -a "$DEPLOY_DISCOVERY/node_modules" "$SRC/discovery/node_modules"
+cp -a "$DEPLOY_DISCOVERY/package.json" "$SRC/discovery/package.json"
 cp -a "$ROOT/apps/web/build/." "$SRC/web/"
 cp -a "$ROOT/apps/bff/drizzle/"*.sql "$SRC/migrations/"
 
@@ -42,4 +50,4 @@ echo "==> Restoring full workspace deps (pnpm deploy --prod prunes dev deps)"
 pnpm install --frozen-lockfile >/dev/null
 
 echo "==> Done. Artifact sizes:"
-du -sh "$SRC"/server "$SRC"/web "$SRC"/migrations
+du -sh "$SRC"/server "$SRC"/discovery "$SRC"/web "$SRC"/migrations

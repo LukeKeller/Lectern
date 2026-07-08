@@ -52,6 +52,11 @@ const EnvSchema = z.object({
   LECTERN_VAPID_PRIVATE_KEY: z.string().default(""),
   /** VAPID `sub` contact (mailto: or https: URL) per the Web Push spec. */
   LECTERN_VAPID_SUBJECT: z.string().default("mailto:admin@example.com"),
+  /** Base URL of the content-discovery worker. The BFF POSTs `/run` here to
+   * fire off a discovery run (fire-and-forget). */
+  DISCOVERY_URL: z.string().default("http://127.0.0.1:8790"),
+  /** Bearer token the BFF presents to the discovery worker's trigger endpoint. */
+  DISCOVERY_TOKEN: z.string().default(""),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

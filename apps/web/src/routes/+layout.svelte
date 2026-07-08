@@ -62,6 +62,7 @@
 		{ id: '/archive', label: 'Archive', icon: 'archive' }
 	] as const satisfies readonly NavItem[];
 	const tools = [
+		{ id: '/discover', label: 'Discover', icon: 'compass' },
 		{ id: '/search', label: 'Search', icon: 'search' }
 	] as const satisfies readonly NavItem[];
 
@@ -741,6 +742,15 @@
 			{#if counts.feed > 0}<span class="bn-count" aria-hidden="true"></span>{/if}
 		</span>
 		<span class="bn-label">Feed</span>
+	</a>
+	<a
+		href={resolve('/discover')}
+		class="bn-item"
+		class:active={isActive('/discover')}
+		aria-current={isActive('/discover') ? 'page' : undefined}
+	>
+		<span class="bn-ico"><Icon name="compass" size={22} /></span>
+		<span class="bn-label">Discover</span>
 	</a>
 	<button
 		type="button"

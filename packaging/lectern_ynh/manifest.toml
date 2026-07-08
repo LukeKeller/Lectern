@@ -5,7 +5,7 @@ id = "lectern"
 name = "Lectern"
 description.en = "Self-hosted RSS + read-later reader (unifies MiniFlux + Readeck)"
 
-version = "0.36.1~ynh1"
+version = "0.37.0~ynh1"
 maintainers = ["lukekeller"]
 
 [upstream]
@@ -116,6 +116,9 @@ ram.runtime = "250M"
 
     [resources.ports]
     main.default = 8787
+    # Localhost-only port for the sibling discovery worker (apps/discovery). Bound
+    # to 127.0.0.1; never exposed through nginx. The BFF triggers runs over it.
+    discovery.default = 8790
 
     [resources.apt]
     packages = "postgresql"

@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   Card,
+  DiscoveryCandidate,
+  DiscoveryConfig,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoverySeed,
+  DiscoveryVote,
   Feed,
   FINISHED_THRESHOLD,
   PlayerState,
   type BackendPage,
   type BackendResource,
   type BackendListParams,
+  type CandidateStatus,
+  type CreateCandidateInput,
+  type CreateRunRequest,
   type CreateViewRequest,
   type FeedFolder,
   type Highlight,
@@ -18,9 +27,15 @@ import {
   type SourceThemeSummary,
   type SavedView,
   type Tag,
+  type TermVector,
   type TtsProvider,
+  type UpdateDiscoverySettingsRequest,
+  type UpdateRunRequest,
   type UpdateViewRequest,
+  type VoteValue,
 } from "@lectern/shared";
+import { createHash } from "node:crypto";
+import { normalizeUrl } from "./discovery-url";
 import { buildApp, type AppDeps } from "./app";
 import type { TtsRouter } from "./backends/tts-router";
 import { BackendHttpError } from "./errors";
@@ -639,6 +654,173 @@ class FakeOverlayStore implements OverlayStore {
   async getPodcastEpisode(documentId: string) {
     return this.podcastEpisodes.get(documentId) ?? null;
   }
+
+  // --- content discovery ---
+  discoveryCandidates = new Map<string, DiscoveryCandidate>();
+  candidateTermVectors = new Map<string, TermVector>();
+  discoveryVotes: DiscoveryVote[] = [];
+  processedVoteIds = new Set<number>();
+  discoveryProfileRow: DiscoveryProfile | null = null;
+  discoverySettings: DiscoveryConfig = DiscoveryConfig.parse({});
+  discoveryRuns = new Map<string, DiscoveryRun>();
+  private voteSeq = 0;
+
+  async listCandidates(params: { status?: CandidateStatus; limit: number }) {
+    let all = [...this.discoveryCandidates.values()];
+    if (params.status) all = all.filter((c) => c.status === params.status);
+    all.sort((a, b) => b.score - a.score);
+    return all.slice(0, params.limit);
+  }
+
+  async insertCandidates(inputs: CreateCandidateInput[]) {
+    const savedNorm = new Set<string>();
+    for (const card of this.index.values()) if (card.url) savedNorm.add(normalizeUrl(card.url));
+    const seen = new Set<string>();
+    let inserted = 0;
+    for (const input of inputs) {
+      const norm = normalizeUrl(input.url);
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      if (savedNorm.has(norm)) continue;
+      const id = `disc:${createHash("sha1").update(norm).digest("hex")}`;
+      if (this.discoveryCandidates.has(id)) continue;
+      this.discoveryCandidates.set(
+        id,
+        DiscoveryCandidate.parse({
+          id,
+          url: input.url,
+          title: input.title ?? null,
+          excerpt: input.excerpt ?? null,
+          fetcher: input.fetcher,
+          score: input.score,
+          status: "active",
+          vote: null,
+          runId: input.runId ?? null,
+          author: input.author ?? null,
+          siteName: input.siteName ?? null,
+          imageUrl: input.imageUrl ?? null,
+          publishedAt: input.publishedAt ?? null,
+          firstSeenAt: "2026-06-01T00:00:00Z",
+        }),
+      );
+      this.candidateTermVectors.set(id, input.termVector);
+      inserted++;
+    }
+    return { inserted, skipped: inputs.length - inserted };
+  }
+
+  async getCandidate(id: string) {
+    return this.discoveryCandidates.get(id) ?? null;
+  }
+
+  async setCandidateStatus(id: string, status: CandidateStatus, vote?: VoteValue | null) {
+    const c = this.discoveryCandidates.get(id);
+    if (!c) return null;
+    const updated = { ...c, status, ...(vote !== undefined ? { vote } : {}) };
+    this.discoveryCandidates.set(id, updated);
+    return updated;
+  }
+
+  async recordVote(candidateId: string, value: VoteValue) {
+    const c = this.discoveryCandidates.get(candidateId);
+    if (!c) return null;
+    this.discoveryVotes.push(
+      DiscoveryVote.parse({
+        id: ++this.voteSeq,
+        candidateId,
+        value,
+        termVector: this.candidateTermVectors.get(candidateId) ?? {},
+        createdAt: "2026-06-05T00:00:00Z",
+      }),
+    );
+    const status = value === "down" ? "dismissed" : "active";
+    const updated = { ...c, vote: value, status: status as CandidateStatus };
+    this.discoveryCandidates.set(candidateId, updated);
+    return updated;
+  }
+
+  async listUnprocessedVotes() {
+    return this.discoveryVotes.filter((v) => !this.processedVoteIds.has(v.id));
+  }
+
+  async putDiscoveryProfile(profile: DiscoveryProfile, processedVoteIds: number[]) {
+    this.discoveryProfileRow = DiscoveryProfile.parse({
+      ...profile,
+      updatedAt: "2026-06-06T00:00:00Z",
+    });
+    for (const id of processedVoteIds) this.processedVoteIds.add(id);
+    return this.discoveryProfileRow;
+  }
+
+  async getDiscoveryProfile() {
+    return this.discoveryProfileRow ?? DiscoveryProfile.parse({});
+  }
+
+  async getDiscoverySettings() {
+    return this.discoverySettings;
+  }
+
+  async setDiscoverySettings(patch: UpdateDiscoverySettingsRequest) {
+    const next = { ...this.discoverySettings };
+    if (patch.enabled !== undefined) next.enabled = patch.enabled;
+    if (patch.topics !== undefined) next.topics = patch.topics;
+    if (patch.seedUrls !== undefined) next.seedUrls = patch.seedUrls;
+    if (patch.fetchers !== undefined) next.fetchers = patch.fetchers;
+    if (patch.schedule !== undefined) next.schedule = patch.schedule;
+    if (patch.searxngUrl !== undefined) next.searxngUrl = patch.searxngUrl;
+    if (patch.braveApiKey !== undefined) next.braveApiKey = patch.braveApiKey ?? "";
+    if (patch.crawlDepth !== undefined) next.crawlDepth = patch.crawlDepth;
+    if (patch.crawlTimeMs !== undefined) next.crawlTimeMs = patch.crawlTimeMs;
+    if (patch.rocchio !== undefined) next.rocchio = patch.rocchio;
+    if (patch.targetCount !== undefined) next.targetCount = patch.targetCount;
+    this.discoverySettings = DiscoveryConfig.parse(next);
+  }
+
+  async buildDiscoverySeed() {
+    return DiscoverySeed.parse({ docs: [], tags: [] });
+  }
+
+  async createRun(input: CreateRunRequest) {
+    const run = DiscoveryRun.parse({
+      id: input.id,
+      status: "running",
+      stage: input.stage,
+      trigger: input.trigger,
+      stats: {},
+      error: null,
+      startedAt: "2026-06-07T00:00:00Z",
+      updatedAt: "2026-06-07T00:00:00Z",
+      finishedAt: null,
+    });
+    this.discoveryRuns.set(run.id, run);
+    return run;
+  }
+
+  async updateRun(id: string, patch: UpdateRunRequest) {
+    const existing = this.discoveryRuns.get(id);
+    if (!existing) return null;
+    const next = { ...existing };
+    if (patch.stage !== undefined) next.stage = patch.stage;
+    if (patch.status !== undefined) next.status = patch.status;
+    if (patch.error !== undefined) next.error = patch.error;
+    if (patch.stats !== undefined) next.stats = { ...existing.stats, ...patch.stats };
+    next.updatedAt = "2026-06-08T00:00:00Z";
+    if (patch.status !== undefined && patch.status !== "running")
+      next.finishedAt = "2026-06-08T00:00:00Z";
+    const parsed = DiscoveryRun.parse(next);
+    this.discoveryRuns.set(id, parsed);
+    return parsed;
+  }
+
+  async listRuns(limit: number) {
+    return [...this.discoveryRuns.values()]
+      .sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0))
+      .slice(0, limit);
+  }
+
+  async getLatestRun() {
+    return (await this.listRuns(1))[0] ?? null;
+  }
 }
 
 class FakeTtsBackend {
@@ -666,6 +848,17 @@ class FakeTtsBackend {
   }
 }
 
+/** In-memory discovery trigger: counts calls (and can be told to throw to
+ *  exercise the `triggered:false` path). */
+class FakeDiscoveryTrigger {
+  calls = 0;
+  shouldThrow = false;
+  async triggerRun(): Promise<void> {
+    this.calls++;
+    if (this.shouldThrow) throw new Error("worker unreachable");
+  }
+}
+
 // ---- Test harness ----------------------------------------------------------
 
 interface Harness {
@@ -674,9 +867,11 @@ interface Harness {
     readLater: FakeReadLaterBackend;
     overlay: FakeOverlayStore;
     tts: TtsRouter;
+    discovery: FakeDiscoveryTrigger;
   };
   /** The single fake backend the router resolves to (for call assertions). */
   tts: FakeTtsBackend;
+  discovery: FakeDiscoveryTrigger;
 }
 
 function makeHarness(): Harness {
@@ -685,9 +880,10 @@ function makeHarness(): Harness {
   const overlay = new FakeOverlayStore();
   const unify = new UnificationService(overlay);
   const tts = new FakeTtsBackend();
+  const discovery = new FakeDiscoveryTrigger();
   // One fake serves every provider; the router just hands it back.
   const ttsRouter: TtsRouter = { forProvider: () => tts };
-  return { deps: { rss, readLater, overlay, unify, tts: ttsRouter }, tts };
+  return { deps: { rss, readLater, overlay, unify, tts: ttsRouter, discovery }, tts, discovery };
 }
 
 const TOKEN = config.LECTERN_API_TOKEN;
@@ -2087,6 +2283,338 @@ describe("article images", () => {
     expect(noRef.statusCode).toBe(400);
     const badId = await a.inject({ method: "GET", url: "/media/documents/nope/image?u=x" });
     expect(badId.statusCode).toBe(404);
+    await a.close();
+  });
+});
+
+describe("discovery", () => {
+  function candidateInput(over: Partial<CreateCandidateInput> = {}): CreateCandidateInput {
+    return {
+      url: "https://example.com/article",
+      fetcher: "searxng",
+      score: 0.5,
+      termVector: { ml: 2, ai: 1 },
+      ...over,
+    };
+  }
+
+  /** Seed candidates through the service-facing bulk-insert endpoint, then read
+   *  them back so tests use the store-assigned ids. */
+  async function seedCandidates(
+    a: ReturnType<typeof app>,
+    inputs: CreateCandidateInput[],
+  ): Promise<DiscoveryCandidate[]> {
+    await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates",
+      headers: auth,
+      payload: { candidates: inputs },
+    });
+    const res = await a.inject({ method: "GET", url: "/api/v1/discovery/candidates", headers: auth });
+    return res.json().candidates as DiscoveryCandidate[];
+  }
+
+  it("lists candidates most-relevant first and filters by status", async () => {
+    const a = app();
+    await seedCandidates(a, [
+      candidateInput({ url: "https://a.test/low", score: 0.1 }),
+      candidateInput({ url: "https://b.test/high", score: 0.9 }),
+    ]);
+    const res = await a.inject({ method: "GET", url: "/api/v1/discovery/candidates", headers: auth });
+    expect(res.statusCode).toBe(200);
+    const candidates = res.json().candidates as DiscoveryCandidate[];
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]!.url).toBe("https://b.test/high"); // higher score first
+
+    // Dismiss one, then filter by status.
+    await harness.deps.overlay.setCandidateStatus(candidates[0]!.id, "dismissed");
+    const active = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/candidates?status=active",
+      headers: auth,
+    });
+    expect((active.json().candidates as DiscoveryCandidate[])).toHaveLength(1);
+    expect((active.json().candidates as DiscoveryCandidate[])[0]!.url).toBe("https://a.test/low");
+    await a.close();
+  });
+
+  it("bulk-insert dedups by normalized URL and skips already-saved documents", async () => {
+    // A document already saved for one of the URLs (utm + trailing slash differ,
+    // but it normalizes to the same thing) must be skipped.
+    harness.deps.overlay.index.set(
+      "readeck:b1",
+      makeCard({ id: "readeck:b1", source: "readeck", url: "https://saved.test/post" }),
+    );
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates",
+      headers: auth,
+      payload: {
+        candidates: [
+          candidateInput({ url: "https://new.test/1" }),
+          candidateInput({ url: "https://new.test/1?utm_source=x" }), // dup of the first
+          candidateInput({ url: "https://saved.test/post/?utm_medium=y" }), // already saved
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ inserted: 1, skipped: 2 });
+    await a.close();
+  });
+
+  it("votes a candidate up: records the vote (with term vector) and keeps it active", async () => {
+    const a = app();
+    const [candidate] = await seedCandidates(a, [candidateInput({ url: "https://a.test/up" })]);
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/v1/discovery/candidates/${candidate!.id}/vote`,
+      headers: auth,
+      payload: { value: "up" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().vote).toBe("up");
+    expect(res.json().status).toBe("active"); // signal only — stays visible
+
+    const votes = await harness.deps.overlay.listUnprocessedVotes();
+    expect(votes).toHaveLength(1);
+    expect(votes[0]!.value).toBe("up");
+    expect(votes[0]!.termVector).toEqual({ ml: 2, ai: 1 });
+    await a.close();
+  });
+
+  it("votes a candidate down: records the vote and dismisses it", async () => {
+    const a = app();
+    const [candidate] = await seedCandidates(a, [candidateInput({ url: "https://a.test/down" })]);
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/v1/discovery/candidates/${candidate!.id}/vote`,
+      headers: auth,
+      payload: { value: "down" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().vote).toBe("down");
+    expect(res.json().status).toBe("dismissed");
+    expect(await harness.deps.overlay.listUnprocessedVotes()).toHaveLength(1);
+    await a.close();
+  });
+
+  it("404s a vote on an unknown candidate", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates/disc:nope/vote",
+      headers: auth,
+      payload: { value: "up" },
+    });
+    expect(res.statusCode).toBe(404);
+    await a.close();
+  });
+
+  it("saves a candidate to Readeck, indexes it, and marks it saved", async () => {
+    const a = app();
+    const [candidate] = await seedCandidates(a, [candidateInput({ url: "https://a.test/save" })]);
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/v1/discovery/candidates/${candidate!.id}/save`,
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("saved");
+    // Pushed to Readeck and indexed into the library.
+    const saved = [...harness.deps.readLater.bookmarks.values()];
+    expect(saved.some((c) => c.url === "https://a.test/save")).toBe(true);
+    expect(harness.deps.overlay.index.size).toBe(1);
+    await a.close();
+  });
+
+  it("404s a save on an unknown candidate", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates/disc:nope/save",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(404);
+    await a.close();
+  });
+
+  it("never leaks the Brave key via GET settings, but returns it via GET config", async () => {
+    const a = app();
+    const patch = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/settings",
+      headers: auth,
+      payload: { enabled: true, braveApiKey: "brv-secret", topics: ["ml"] },
+    });
+    expect(patch.statusCode).toBe(200);
+    const settings = patch.json() as Record<string, unknown>;
+    expect(settings.enabled).toBe(true);
+    expect(settings.braveConfigured).toBe(true);
+    expect(settings).not.toHaveProperty("braveApiKey");
+    expect(JSON.stringify(settings)).not.toContain("brv-secret");
+
+    const get = await a.inject({ method: "GET", url: "/api/v1/discovery/settings", headers: auth });
+    expect(JSON.stringify(get.json())).not.toContain("brv-secret");
+
+    // The worker-only config endpoint DOES return the key.
+    const config = await a.inject({ method: "GET", url: "/api/v1/discovery/config", headers: auth });
+    expect(config.statusCode).toBe(200);
+    expect(config.json().braveApiKey).toBe("brv-secret");
+    expect(config.json()).not.toHaveProperty("braveConfigured");
+    await a.close();
+  });
+
+  it("PATCH leaves the Brave key unchanged when omitted, clears it on empty", async () => {
+    const a = app();
+    await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/settings",
+      headers: auth,
+      payload: { braveApiKey: "brv-secret" },
+    });
+    // Omitting braveApiKey leaves it configured.
+    const unchanged = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/settings",
+      headers: auth,
+      payload: { schedule: "0 0 * * *" },
+    });
+    expect(unchanged.json().braveConfigured).toBe(true);
+    // Clearing it with "" turns configured off.
+    const cleared = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/settings",
+      headers: auth,
+      payload: { braveApiKey: "" },
+    });
+    expect(cleared.json().braveConfigured).toBe(false);
+    await a.close();
+  });
+
+  it("opens a run then progresses its stage and status via PATCH", async () => {
+    const a = app();
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/runs",
+      headers: auth,
+      payload: { id: "run-1", trigger: "manual", stage: "starting" },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json()).toMatchObject({ id: "run-1", status: "running", stage: "starting" });
+    expect(create.json().finishedAt).toBeNull();
+
+    // A mid-run progress update advances the stage and writes the stats snapshot
+    // (the worker PATCHes cumulative counts each step).
+    const progress = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/runs/run-1",
+      headers: auth,
+      payload: { stage: "scoring", stats: { fetched: 40, perFetcher: { searxng: 40 } } },
+    });
+    expect(progress.json().stage).toBe("scoring");
+    expect(progress.json().stats.fetched).toBe(40);
+    expect(progress.json().stats.perFetcher).toEqual({ searxng: 40 });
+    expect(progress.json().status).toBe("running");
+    expect(progress.json().finishedAt).toBeNull();
+
+    // Completing the run stamps finishedAt.
+    const done = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/runs/run-1",
+      headers: auth,
+      payload: { status: "succeeded", stats: { fetched: 40, inserted: 5 } },
+    });
+    expect(done.json().status).toBe("succeeded");
+    expect(done.json().stats).toMatchObject({ fetched: 40, inserted: 5 });
+    expect(done.json().finishedAt).not.toBeNull();
+
+    // The Activity page reads the latest + the history.
+    const latest = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/runs/latest",
+      headers: auth,
+    });
+    expect(latest.json().run.id).toBe("run-1");
+    const list = await a.inject({ method: "GET", url: "/api/v1/discovery/runs", headers: auth });
+    expect((list.json().runs as DiscoveryRun[])).toHaveLength(1);
+    await a.close();
+  });
+
+  it("404s a PATCH on an unknown run", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/discovery/runs/missing",
+      headers: auth,
+      payload: { stage: "x" },
+    });
+    expect(res.statusCode).toBe(404);
+    await a.close();
+  });
+
+  it("triggers a run (202) via the discovery client, and reports failure without a 5xx", async () => {
+    const a = app();
+    const ok = await a.inject({ method: "POST", url: "/api/v1/discovery/run", headers: auth });
+    expect(ok.statusCode).toBe(202);
+    expect(ok.json()).toEqual({ triggered: true, runId: null });
+    expect(harness.discovery.calls).toBe(1);
+
+    // A trigger failure yields triggered:false (never a 5xx — the worker may be down).
+    harness.discovery.shouldThrow = true;
+    const down = await a.inject({ method: "POST", url: "/api/v1/discovery/run", headers: auth });
+    expect(down.statusCode).toBe(202);
+    expect(down.json()).toEqual({ triggered: false, runId: null });
+    await a.close();
+  });
+
+  it("reseeds the profile to an empty default and stamps seededAt", async () => {
+    const a = app();
+    // Seed a non-empty profile, then reseed clears it.
+    await harness.deps.overlay.putDiscoveryProfile(
+      DiscoveryProfile.parse({ vector: { ml: 1 }, idf: { ml: 2 }, docCount: 3 }),
+      [],
+    );
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/profile/reseed",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().vector).toEqual({});
+    expect(res.json().idf).toEqual({});
+    expect(res.json().seededAt).not.toBeNull();
+    await a.close();
+  });
+
+  it("persists the profile and marks folded-in votes processed (worker PUT)", async () => {
+    const a = app();
+    const [candidate] = await seedCandidates(a, [candidateInput({ url: "https://a.test/v" })]);
+    await harness.deps.overlay.recordVote(candidate!.id, "up");
+    const votes = await harness.deps.overlay.listUnprocessedVotes();
+    expect(votes).toHaveLength(1);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/v1/discovery/profile",
+      headers: auth,
+      payload: {
+        profile: DiscoveryProfile.parse({ vector: { ml: 0.5 }, docCount: 1 }),
+        processedVoteIds: [votes[0]!.id],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().vector).toEqual({ ml: 0.5 });
+    // The folded-in vote is no longer unprocessed.
+    expect(await harness.deps.overlay.listUnprocessedVotes()).toHaveLength(0);
+    await a.close();
+  });
+
+  it("serves the empty default profile before any run", async () => {
+    const a = app();
+    const res = await a.inject({ method: "GET", url: "/api/v1/discovery/profile", headers: auth });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ name: "default", vector: {}, idf: {}, docCount: 0 });
     await a.close();
   });
 });

@@ -5,6 +5,26 @@ import {
   BulkMaintenanceRequest,
   BulkMaintenanceResponse,
   Card,
+  CreateCandidatesRequest,
+  CreateCandidatesResponse,
+  CreateRunRequest,
+  DiscoveryCandidate,
+  DiscoveryCandidatesResponse,
+  DiscoveryConfig,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoveryRunsResponse,
+  DiscoverySeed,
+  DiscoverySettings,
+  LatestRunResponse,
+  ListCandidatesQuery,
+  ListRunsQuery,
+  PutDiscoveryProfileRequest,
+  TriggerRunResponse,
+  UnprocessedVotesResponse,
+  UpdateDiscoverySettingsRequest,
+  UpdateRunRequest,
+  VoteRequest,
   EmailIgnoreAddResponse,
   EmailIgnoreSenderRequest,
   EmailIgnoreSettings,
@@ -806,6 +826,127 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     const tombstoned = await reconcileDeletions();
     return ForceSyncResponse.parse({ miniflux, readeck, tombstoned });
   });
+
+  // ---- discovery (user-facing: called by the SPA) ------------------------
+  app.get("/discovery/candidates", async (req) => {
+    const raw = req.query as Record<string, unknown>;
+    const q = ListCandidatesQuery.parse({
+      status: raw.status,
+      limit: raw.limit !== undefined ? Number(raw.limit) : undefined,
+    });
+    const candidates = await deps.overlay.listCandidates({ status: q.status, limit: q.limit });
+    return DiscoveryCandidatesResponse.parse({ candidates });
+  });
+
+  // `up` is signal-only (the candidate stays visible); `down` records the signal
+  // and dismisses it. Both persist a vote row (see recordVote).
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    "/discovery/candidates/:id/vote",
+    async (req) => {
+      const { value } = VoteRequest.parse(req.body);
+      const candidate = await deps.overlay.recordVote(req.params.id, value);
+      if (!candidate) throw new NotFoundError(`candidate not found: ${req.params.id}`);
+      return DiscoveryCandidate.parse(candidate);
+    },
+  );
+
+  // Explicit save: push the URL to Readeck and index it (mirrors POST /documents)
+  // so it appears in the library immediately, then mark the candidate saved.
+  app.post<{ Params: { id: string } }>("/discovery/candidates/:id/save", async (req) => {
+    const { id } = req.params;
+    const candidate = await deps.overlay.getCandidate(id);
+    if (!candidate) throw new NotFoundError(`candidate not found: ${id}`);
+    const sourceId = await deps.readLater.save({ url: candidate.url });
+    const card = await deps.readLater.get(sourceId);
+    await deps.overlay.upsertIndex(card);
+    const updated = await deps.overlay.setCandidateStatus(id, "saved");
+    return DiscoveryCandidate.parse(updated ?? candidate);
+  });
+
+  // Fire-and-forget trigger: kick the worker but don't await its run. A trigger
+  // failure yields `triggered:false` rather than a 5xx (the worker may be down).
+  app.post("/discovery/run", async (_req, reply) => {
+    reply.code(202);
+    try {
+      await deps.discovery.triggerRun();
+      return TriggerRunResponse.parse({ triggered: true, runId: null });
+    } catch {
+      return TriggerRunResponse.parse({ triggered: false, runId: null });
+    }
+  });
+
+  app.get("/discovery/settings", async () =>
+    discoverySettingsView(await deps.overlay.getDiscoverySettings()),
+  );
+
+  app.patch<{ Body: unknown }>("/discovery/settings", async (req) => {
+    const body = UpdateDiscoverySettingsRequest.parse(req.body);
+    await deps.overlay.setDiscoverySettings(body);
+    return discoverySettingsView(await deps.overlay.getDiscoverySettings());
+  });
+
+  // Reset the interest profile. The next worker run rebuilds vector/idf from the
+  // library seed corpus (GET /discovery/seed); until then it's an empty default.
+  app.post("/discovery/profile/reseed", async () => {
+    const profile = await deps.overlay.putDiscoveryProfile(
+      DiscoveryProfile.parse({ seededAt: new Date().toISOString() }),
+      [],
+    );
+    return DiscoveryProfile.parse(profile);
+  });
+
+  app.get("/discovery/runs", async (req) => {
+    const raw = req.query as Record<string, unknown>;
+    const q = ListRunsQuery.parse({ limit: raw.limit !== undefined ? Number(raw.limit) : undefined });
+    return DiscoveryRunsResponse.parse({ runs: await deps.overlay.listRuns(q.limit) });
+  });
+
+  app.get("/discovery/runs/latest", async () =>
+    LatestRunResponse.parse({ run: await deps.overlay.getLatestRun() }),
+  );
+
+  // ---- discovery (service-facing: called by the worker) ------------------
+  // Full config INCLUDING the Brave key — only ever returned here, never to the SPA.
+  app.get("/discovery/config", async () =>
+    DiscoveryConfig.parse(await deps.overlay.getDiscoverySettings()),
+  );
+
+  app.get("/discovery/profile", async () =>
+    DiscoveryProfile.parse(await deps.overlay.getDiscoveryProfile()),
+  );
+
+  app.put<{ Body: unknown }>("/discovery/profile", async (req) => {
+    const body = PutDiscoveryProfileRequest.parse(req.body);
+    const profile = await deps.overlay.putDiscoveryProfile(body.profile, body.processedVoteIds);
+    return DiscoveryProfile.parse(profile);
+  });
+
+  app.get("/discovery/seed", async () =>
+    DiscoverySeed.parse(await deps.overlay.buildDiscoverySeed()),
+  );
+
+  app.get("/discovery/votes/unprocessed", async () =>
+    UnprocessedVotesResponse.parse({ votes: await deps.overlay.listUnprocessedVotes() }),
+  );
+
+  app.post<{ Body: unknown }>("/discovery/candidates", async (req) => {
+    const body = CreateCandidatesRequest.parse(req.body);
+    return CreateCandidatesResponse.parse(await deps.overlay.insertCandidates(body.candidates));
+  });
+
+  app.post<{ Body: unknown }>("/discovery/runs", async (req, reply) => {
+    const body = CreateRunRequest.parse(req.body);
+    const run = await deps.overlay.createRun(body);
+    reply.code(201);
+    return DiscoveryRun.parse(run);
+  });
+
+  app.patch<{ Params: { id: string }; Body: unknown }>("/discovery/runs/:id", async (req) => {
+    const body = UpdateRunRequest.parse(req.body);
+    const run = await deps.overlay.updateRun(req.params.id, body);
+    if (!run) throw new NotFoundError(`run not found: ${req.params.id}`);
+    return DiscoveryRun.parse(run);
+  });
 }
 
 function requireParsed(id: string) {
@@ -878,6 +1019,13 @@ async function loadContentHtml(deps: AppDeps, id: string, refresh = false): Prom
       : await deps.rss.getEntryContent(parsed.sourceId);
   await deps.overlay.putContent(id, html);
   return html;
+}
+
+/** Public discovery settings view: strip the Brave key, expose only whether one
+ *  is configured. `braveConfigured` is true iff a non-empty key is stored. */
+function discoverySettingsView(cfg: DiscoveryConfig) {
+  const { braveApiKey, ...rest } = cfg;
+  return DiscoverySettings.parse({ ...rest, braveConfigured: braveApiKey.trim().length > 0 });
 }
 
 /** Public TTS settings view (never leaks the API key — only whether one is set). */

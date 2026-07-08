@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   and,
   arrayContains,
@@ -14,9 +14,24 @@ import {
   or,
   sql as dsql,
 } from "drizzle-orm";
-import { Card, FINISHED_THRESHOLD, PlayerState } from "@lectern/shared";
+import {
+  Card,
+  CreateCandidateInput,
+  DiscoveryCandidate,
+  DiscoveryConfig,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoverySeed,
+  DiscoveryVote,
+  FINISHED_THRESHOLD,
+  PlayerState,
+} from "@lectern/shared";
 import type {
+  CandidateStatus,
+  CreateRunRequest,
   CreateViewRequest,
+  DiscoverySeedDoc,
+  DiscoverySeedTag,
   Highlight,
   HighlightColor,
   Location,
@@ -27,11 +42,18 @@ import type {
   SourceThemeSummary,
   Tag,
   TtsProvider,
+  UpdateDiscoverySettingsRequest,
+  UpdateRunRequest,
   UpdateViewRequest,
+  VoteValue,
 } from "@lectern/shared";
 import type { Db } from "./db/client";
 import {
   appSettings,
+  discoveryCandidates,
+  discoveryProfile,
+  discoveryRuns,
+  discoveryVotes,
   documentAccent,
   documentContent,
   documents,
@@ -42,11 +64,17 @@ import {
   ttsAudio,
 } from "./db/schema";
 import type {
+  DiscoveryCandidateRow,
+  DiscoveryProfileRow,
+  DiscoveryRunRow,
+  DiscoveryVoteRow,
   DocumentRow,
+  NewDiscoveryCandidateRow,
   NewDocumentRow,
   NewPodcastEpisodeRow,
   PodcastEpisodeRow,
 } from "./db/schema";
+import { normalizeUrl } from "./discovery-url";
 import { parseId } from "./ids";
 import type { SourceThemeTokens } from "./source-theme";
 import {
@@ -864,6 +892,313 @@ export class DrizzleOverlayStore implements OverlayStore {
       .onConflictDoUpdate({ target: appSettings.key, set: { value: next, updatedAt: new Date() } });
     return next;
   }
+
+  // --- content discovery (candidates, votes, profile, settings, runs) ---
+  async listCandidates(params: {
+    status?: CandidateStatus;
+    limit: number;
+  }): Promise<DiscoveryCandidate[]> {
+    const rows = await this.db
+      .select()
+      .from(discoveryCandidates)
+      .where(params.status ? eq(discoveryCandidates.status, params.status) : undefined)
+      .orderBy(desc(discoveryCandidates.score), desc(discoveryCandidates.firstSeenAt))
+      .limit(params.limit);
+    return rows.map(candidateFromRow);
+  }
+
+  async insertCandidates(
+    inputs: CreateCandidateInput[],
+  ): Promise<{ inserted: number; skipped: number }> {
+    if (inputs.length === 0) return { inserted: 0, skipped: 0 };
+    // Dedup within the batch by normalized URL (first wins); the DB unique index
+    // dedups against prior runs (ON CONFLICT DO NOTHING below).
+    const byNorm = new Map<string, NewDiscoveryCandidateRow>();
+    for (const input of inputs) {
+      const urlNormalized = normalizeUrl(input.url);
+      if (byNorm.has(urlNormalized)) continue;
+      byNorm.set(urlNormalized, {
+        id: `disc:${createHash("sha1").update(urlNormalized).digest("hex")}`,
+        url: input.url,
+        urlNormalized,
+        title: input.title ?? null,
+        excerpt: input.excerpt ?? null,
+        fetcher: input.fetcher,
+        score: input.score,
+        termVector: input.termVector,
+        status: "active",
+        vote: null,
+        runId: input.runId ?? null,
+        metadata: {
+          author: input.author ?? null,
+          siteName: input.siteName ?? null,
+          imageUrl: input.imageUrl ?? null,
+          publishedAt: input.publishedAt ?? null,
+        },
+      });
+    }
+    // Never re-surface an article already in the library: drop any candidate whose
+    // normalized URL matches a saved document's URL (single-user scale — a full
+    // scan of the small non-null URL set is fine).
+    const docUrls = await this.db
+      .select({ url: documents.url })
+      .from(documents)
+      .where(isNotNull(documents.url));
+    const savedNorm = new Set(docUrls.map((r) => normalizeUrl(r.url as string)));
+    const rows = [...byNorm.values()].filter((r) => !savedNorm.has(r.urlNormalized));
+    if (rows.length === 0) return { inserted: 0, skipped: inputs.length };
+    const inserted = await this.db
+      .insert(discoveryCandidates)
+      .values(rows)
+      .onConflictDoNothing({ target: discoveryCandidates.urlNormalized })
+      .returning({ id: discoveryCandidates.id });
+    return { inserted: inserted.length, skipped: inputs.length - inserted.length };
+  }
+
+  async getCandidate(id: string): Promise<DiscoveryCandidate | null> {
+    const [row] = await this.db
+      .select()
+      .from(discoveryCandidates)
+      .where(eq(discoveryCandidates.id, id));
+    return row ? candidateFromRow(row) : null;
+  }
+
+  async setCandidateStatus(
+    id: string,
+    status: CandidateStatus,
+    vote?: VoteValue | null,
+  ): Promise<DiscoveryCandidate | null> {
+    const set: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (vote !== undefined) set.vote = vote;
+    const [row] = await this.db
+      .update(discoveryCandidates)
+      .set(set)
+      .where(eq(discoveryCandidates.id, id))
+      .returning();
+    return row ? candidateFromRow(row) : null;
+  }
+
+  async recordVote(candidateId: string, value: VoteValue): Promise<DiscoveryCandidate | null> {
+    const [candidate] = await this.db
+      .select()
+      .from(discoveryCandidates)
+      .where(eq(discoveryCandidates.id, candidateId));
+    if (!candidate) return null;
+    // Copy the candidate's term vector into the vote so a later-pruned candidate
+    // still trains the model.
+    await this.db.insert(discoveryVotes).values({
+      candidateId,
+      value,
+      termVector: candidate.termVector,
+      processed: false,
+    });
+    // `up` is signal-only (stays active/visible); `down` dismisses it.
+    const status = value === "down" ? "dismissed" : "active";
+    const [row] = await this.db
+      .update(discoveryCandidates)
+      .set({ vote: value, status, updatedAt: new Date() })
+      .where(eq(discoveryCandidates.id, candidateId))
+      .returning();
+    return row ? candidateFromRow(row) : null;
+  }
+
+  async listUnprocessedVotes(): Promise<DiscoveryVote[]> {
+    const rows = await this.db
+      .select()
+      .from(discoveryVotes)
+      .where(eq(discoveryVotes.processed, false))
+      .orderBy(discoveryVotes.id);
+    return rows.map(voteFromRow);
+  }
+
+  async putDiscoveryProfile(
+    profile: DiscoveryProfile,
+    processedVoteIds: number[],
+  ): Promise<DiscoveryProfile> {
+    const now = new Date();
+    const lastVoteProcessedAt =
+      processedVoteIds.length > 0
+        ? now
+        : profile.lastVoteProcessedAt
+          ? new Date(profile.lastVoteProcessedAt)
+          : null;
+    const values = {
+      name: profile.name || "default",
+      vector: profile.vector,
+      idf: profile.idf,
+      docCount: profile.docCount,
+      seededAt: profile.seededAt ? new Date(profile.seededAt) : null,
+      updatedAt: now,
+      lastVoteProcessedAt,
+    };
+    await this.db
+      .insert(discoveryProfile)
+      .values(values)
+      .onConflictDoUpdate({
+        target: discoveryProfile.name,
+        set: {
+          vector: values.vector,
+          idf: values.idf,
+          docCount: values.docCount,
+          seededAt: values.seededAt,
+          updatedAt: values.updatedAt,
+          lastVoteProcessedAt: values.lastVoteProcessedAt,
+        },
+      });
+    if (processedVoteIds.length > 0) {
+      await this.db
+        .update(discoveryVotes)
+        .set({ processed: true })
+        .where(inArray(discoveryVotes.id, processedVoteIds));
+    }
+    return this.getDiscoveryProfile();
+  }
+
+  async getDiscoveryProfile(): Promise<DiscoveryProfile> {
+    const [row] = await this.db
+      .select()
+      .from(discoveryProfile)
+      .where(eq(discoveryProfile.name, "default"));
+    // Empty default profile until the first worker run persists one.
+    return row ? profileFromRow(row) : DiscoveryProfile.parse({});
+  }
+
+  async getDiscoverySettings(): Promise<DiscoveryConfig> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "discovery"));
+    // DiscoveryConfig fills every default (incl. an empty braveApiKey) so a
+    // never-configured install still parses.
+    return DiscoveryConfig.parse(row?.value ?? {});
+  }
+
+  async setDiscoverySettings(patch: UpdateDiscoverySettingsRequest): Promise<void> {
+    const next = await this.getDiscoverySettings();
+    if (patch.enabled !== undefined) next.enabled = patch.enabled;
+    if (patch.topics !== undefined) next.topics = patch.topics;
+    if (patch.seedUrls !== undefined) next.seedUrls = patch.seedUrls;
+    if (patch.fetchers !== undefined) next.fetchers = patch.fetchers;
+    if (patch.schedule !== undefined) next.schedule = patch.schedule;
+    if (patch.searxngUrl !== undefined) next.searxngUrl = patch.searxngUrl;
+    // Omitted = leave unchanged; null or "" = clear the stored key.
+    if (patch.braveApiKey !== undefined) next.braveApiKey = patch.braveApiKey ?? "";
+    if (patch.crawlDepth !== undefined) next.crawlDepth = patch.crawlDepth;
+    if (patch.crawlTimeMs !== undefined) next.crawlTimeMs = patch.crawlTimeMs;
+    if (patch.rocchio !== undefined) next.rocchio = patch.rocchio;
+    if (patch.targetCount !== undefined) next.targetCount = patch.targetCount;
+    await this.db
+      .insert(appSettings)
+      .values({ key: "discovery", value: next, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: next, updatedAt: new Date() } });
+  }
+
+  async buildDiscoverySeed(): Promise<DiscoverySeed> {
+    // A bounded weighted corpus the worker tokenizes to build the initial
+    // profile. Signals are stripped of HTML (same regexp as searchContent) and
+    // each doc is truncated so one long article can't dominate.
+    const CAP = 300;
+    const TRUNC = 4096;
+    const clean = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, TRUNC);
+    const docs: DiscoverySeedDoc[] = [];
+
+    // Shortlisted articles (title + stripped body), the strongest interest signal.
+    const shortlist = (await this.db.execute(dsql`
+      select coalesce(d.title, '') as title,
+        regexp_replace(left(coalesce(c.html, ''), 200000), '<[^>]+>', ' ', 'g') as body
+      from documents d
+        left join document_content c on c.document_id = d.id
+      where d.deleted_at is null and d.location = 'shortlist'
+      limit ${CAP}
+    `)) as unknown as Array<{ title: string; body: string }>;
+    for (const r of shortlist) {
+      const text = clean(`${r.title} ${r.body}`);
+      if (text) docs.push({ text, weight: 3.0 });
+    }
+
+    // Highlighted passages — the user hand-picked these, so they're high signal.
+    const highlights = (await this.db.execute(dsql`
+      select text from rss_highlights limit ${CAP}
+    `)) as unknown as Array<{ text: string }>;
+    for (const r of highlights) {
+      const text = clean(r.text);
+      if (text) docs.push({ text, weight: 3.0 });
+    }
+
+    // Finished reads (title + excerpt) — a softer "I read this" signal.
+    const read = (await this.db.execute(dsql`
+      select coalesce(d.title, '') as title,
+        coalesce(d.metadata->'card'->>'excerpt', '') as excerpt
+      from documents d
+      where d.deleted_at is null
+        and (d.metadata->'card'->>'readState' = 'finished'
+             or d.read_progress >= ${FINISHED_THRESHOLD})
+      limit ${CAP}
+    `)) as unknown as Array<{ title: string; excerpt: string }>;
+    for (const r of read) {
+      const text = clean(`${r.title} ${r.excerpt}`);
+      if (text) docs.push({ text, weight: 1.5 });
+    }
+
+    // Tags, weighted by log(usage) so a heavily-used tag counts more (but not
+    // linearly — one prolific tag shouldn't swamp the vocabulary).
+    const tags: DiscoverySeedTag[] = (await this.listTags()).map((t) => ({
+      name: t.name,
+      weight: 2.0 * Math.log(1 + t.count),
+    }));
+
+    return DiscoverySeed.parse({ docs: docs.slice(0, CAP), tags });
+  }
+
+  async createRun(input: CreateRunRequest): Promise<DiscoveryRun> {
+    const [row] = await this.db
+      .insert(discoveryRuns)
+      .values({ id: input.id, trigger: input.trigger, stage: input.stage, status: "running" })
+      .returning();
+    return runFromRow(row!);
+  }
+
+  async updateRun(id: string, patch: UpdateRunRequest): Promise<DiscoveryRun | null> {
+    const [existing] = await this.db
+      .select()
+      .from(discoveryRuns)
+      .where(eq(discoveryRuns.id, id));
+    if (!existing) return null;
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (patch.stage !== undefined) set.stage = patch.stage;
+    if (patch.status !== undefined) set.status = patch.status;
+    if (patch.error !== undefined) set.error = patch.error;
+    // Shallow-merge stats so a partial progress update keeps prior counters.
+    if (patch.stats !== undefined) {
+      set.stats = { ...((existing.stats ?? {}) as Record<string, unknown>), ...patch.stats };
+    }
+    // A terminal status stamps the finish time.
+    if (patch.status !== undefined && patch.status !== "running") set.finishedAt = new Date();
+    const [row] = await this.db
+      .update(discoveryRuns)
+      .set(set)
+      .where(eq(discoveryRuns.id, id))
+      .returning();
+    return row ? runFromRow(row) : null;
+  }
+
+  async listRuns(limit: number): Promise<DiscoveryRun[]> {
+    const rows = await this.db
+      .select()
+      .from(discoveryRuns)
+      .orderBy(desc(discoveryRuns.startedAt))
+      .limit(limit);
+    return rows.map(runFromRow);
+  }
+
+  async getLatestRun(): Promise<DiscoveryRun | null> {
+    const [row] = await this.db
+      .select()
+      .from(discoveryRuns)
+      .orderBy(desc(discoveryRuns.startedAt))
+      .limit(1);
+    return row ? runFromRow(row) : null;
+  }
 }
 
 /** Fallback voice (ElevenLabs "Rachel") + model when the user hasn't chosen. */
@@ -957,6 +1292,65 @@ export function backendTruthSet(row: NewDocumentRow) {
     updatedAt: row.updatedAt,
     deletedAt: null,
   };
+}
+
+/** Map a candidate row to the contract type: metadata jsonb spreads back out to
+ *  author/siteName/imageUrl/publishedAt; the term vector stays server-side. */
+function candidateFromRow(row: DiscoveryCandidateRow): DiscoveryCandidate {
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  return DiscoveryCandidate.parse({
+    id: row.id,
+    url: row.url,
+    title: row.title,
+    excerpt: row.excerpt,
+    fetcher: row.fetcher,
+    score: row.score,
+    status: row.status,
+    vote: row.vote,
+    runId: row.runId,
+    author: str(meta.author),
+    siteName: str(meta.siteName),
+    imageUrl: str(meta.imageUrl),
+    publishedAt: str(meta.publishedAt),
+    firstSeenAt: row.firstSeenAt.toISOString(),
+  });
+}
+
+function voteFromRow(row: DiscoveryVoteRow): DiscoveryVote {
+  return DiscoveryVote.parse({
+    id: row.id,
+    candidateId: row.candidateId,
+    value: row.value,
+    termVector: row.termVector,
+    createdAt: row.createdAt.toISOString(),
+  });
+}
+
+function profileFromRow(row: DiscoveryProfileRow): DiscoveryProfile {
+  return DiscoveryProfile.parse({
+    name: row.name,
+    vector: row.vector,
+    idf: row.idf,
+    docCount: row.docCount,
+    seededAt: row.seededAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt?.toISOString() ?? null,
+    lastVoteProcessedAt: row.lastVoteProcessedAt?.toISOString() ?? null,
+  });
+}
+
+function runFromRow(row: DiscoveryRunRow): DiscoveryRun {
+  return DiscoveryRun.parse({
+    id: row.id,
+    status: row.status,
+    stage: row.stage,
+    trigger: row.trigger,
+    stats: row.stats ?? {},
+    error: row.error,
+    startedAt: row.startedAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+  });
 }
 
 function viewRowToView(row: typeof savedViews.$inferSelect): SavedView {

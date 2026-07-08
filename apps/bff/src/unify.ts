@@ -1,7 +1,16 @@
 import { FINISHED_THRESHOLD } from "@lectern/shared";
 import type {
   Card,
+  CandidateStatus,
+  CreateCandidateInput,
+  CreateRunRequest,
   CreateViewRequest,
+  DiscoveryCandidate,
+  DiscoveryConfig,
+  DiscoveryProfile,
+  DiscoveryRun,
+  DiscoverySeed,
+  DiscoveryVote,
   Highlight,
   Location,
   NewHighlight,
@@ -13,7 +22,10 @@ import type {
   SourceThemeSummary,
   Tag,
   TtsProvider,
+  UpdateDiscoverySettingsRequest,
+  UpdateRunRequest,
   UpdateViewRequest,
+  VoteValue,
 } from "@lectern/shared";
 import type { SourceThemeTokens } from "./source-theme";
 
@@ -375,12 +387,63 @@ export interface AssetStore {
 }
 
 /**
+ * Content-discovery store (BFF-owned; the BFF is the single writer of every
+ * discovery table). Backs the user-facing Discover/Activity views and the
+ * service-facing endpoints the discovery worker calls. Maps rows <-> the shared
+ * contract types (timestamps to ISO strings; candidate metadata jsonb <->
+ * author/siteName/imageUrl/publishedAt).
+ */
+export interface DiscoveryStore {
+  /** Candidates for the Discover view, most-relevant first, capped by `limit`. */
+  listCandidates(params: { status?: CandidateStatus; limit: number }): Promise<DiscoveryCandidate[]>;
+  /** Bulk-insert scored candidates, deduped by normalized URL (ON CONFLICT DO
+   *  NOTHING) and skipping any URL already saved as a document. */
+  insertCandidates(inputs: CreateCandidateInput[]): Promise<{ inserted: number; skipped: number }>;
+  /** A single candidate by id, or null if it doesn't exist. */
+  getCandidate(id: string): Promise<DiscoveryCandidate | null>;
+  /** Set a candidate's status (and optionally its vote); returns the updated row. */
+  setCandidateStatus(
+    id: string,
+    status: CandidateStatus,
+    vote?: VoteValue | null,
+  ): Promise<DiscoveryCandidate | null>;
+  /** Record an up/down vote: append a vote row copying the candidate's term
+   *  vector, then update the candidate (up keeps it active, down dismisses it). */
+  recordVote(candidateId: string, value: VoteValue): Promise<DiscoveryCandidate | null>;
+  /** Votes not yet folded into the profile (worker training input). */
+  listUnprocessedVotes(): Promise<DiscoveryVote[]>;
+  /** Persist the profile AND mark the given vote ids processed, atomically. */
+  putDiscoveryProfile(profile: DiscoveryProfile, processedVoteIds: number[]): Promise<DiscoveryProfile>;
+  /** The persisted profile, or an empty default profile if none exists yet. */
+  getDiscoveryProfile(): Promise<DiscoveryProfile>;
+  /** Raw stored settings, including the Brave key (worker config view). */
+  getDiscoverySettings(): Promise<DiscoveryConfig>;
+  /** Merge a settings patch (braveApiKey omitted = unchanged; null/"" = clear). */
+  setDiscoverySettings(patch: UpdateDiscoverySettingsRequest): Promise<void>;
+  /** Weighted seed corpus assembled from existing library signals. */
+  buildDiscoverySeed(): Promise<DiscoverySeed>;
+  /** Open a run record (status = running). */
+  createRun(input: CreateRunRequest): Promise<DiscoveryRun>;
+  /** Update a run's stage/status/stats/error (stats shallow-merged). */
+  updateRun(id: string, patch: UpdateRunRequest): Promise<DiscoveryRun | null>;
+  /** Recent runs, newest first, capped by `limit`. */
+  listRuns(limit: number): Promise<DiscoveryRun[]>;
+  /** The current/most-recent run, or null if none. */
+  getLatestRun(): Promise<DiscoveryRun | null>;
+}
+
+/**
  * The full glue store: the composite of every focused facet, implemented by
  * `DrizzleOverlayStore`. Held by `AppDeps.overlay`; prefer a narrower facet at
  * each consumer (see the per-interface docs above).
  */
 export interface OverlayStore
-  extends DocumentStore, ContentStore, OrganizationStore, HighlightStore, AssetStore {}
+  extends DocumentStore,
+    ContentStore,
+    OrganizationStore,
+    HighlightStore,
+    AssetStore,
+    DiscoveryStore {}
 
 /**
  * Applies BFF-owned glue-DB overlay state onto already-normalized backend cards.

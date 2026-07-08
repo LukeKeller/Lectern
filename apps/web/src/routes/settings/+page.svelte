@@ -5,7 +5,8 @@
 		SourceThemeSummary,
 		TtsProvider,
 		TtsUsage,
-		TtsVoice
+		TtsVoice,
+		UpdateDiscoverySettingsRequest
 	} from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { getApiUrl, getClient, getToken, setToken } from '$lib/config';
@@ -159,6 +160,116 @@
 	let podcastCopied = $state(false);
 	let podcastError = $state<string | undefined>(undefined);
 
+	// ---- Discover (content discovery) ----
+	// Candidates and runs are worker/BFF state, not library documents, so this
+	// talks to the client directly. Fields are held locally and saved as one patch;
+	// the Brave key is write-only (we only learn whether one is configured).
+	let discEnabled = $state(false);
+	let discTopics = $state('');
+	let discSeedUrls = $state('');
+	let discSearxng = $state(true);
+	let discBrave = $state(false);
+	let discCrawl = $state(false);
+	let discSearxngUrl = $state('');
+	let discBraveConfigured = $state(false);
+	let discBraveKey = $state('');
+	let discCrawlDepth = $state(1);
+	let discCrawlTimeMs = $state(30000);
+	let discSchedule = $state('0 */6 * * *');
+	let discRocchioA = $state(1);
+	let discRocchioB = $state(0.75);
+	let discRocchioC = $state(0.25);
+	let discTarget = $state(5);
+	let discBusy = $state(false);
+	let discMsg = $state<string | undefined>(undefined);
+	let discError = $state<string | undefined>(undefined);
+	let reseedBusy = $state(false);
+	let reseedMsg = $state<string | undefined>(undefined);
+	let reseedError = $state<string | undefined>(undefined);
+
+	async function loadDiscovery() {
+		try {
+			const s = await getClient().getDiscoverySettings();
+			discEnabled = s.enabled;
+			discTopics = s.topics.join(', ');
+			discSeedUrls = s.seedUrls.join('\n');
+			discSearxng = s.fetchers.searxng;
+			discBrave = s.fetchers.brave;
+			discCrawl = s.fetchers.crawl;
+			discSearxngUrl = s.searxngUrl;
+			discBraveConfigured = s.braveConfigured;
+			discCrawlDepth = s.crawlDepth;
+			discCrawlTimeMs = s.crawlTimeMs;
+			discSchedule = s.schedule;
+			discRocchioA = s.rocchio.a;
+			discRocchioB = s.rocchio.b;
+			discRocchioC = s.rocchio.c;
+			discTarget = s.targetCount;
+		} catch {
+			/* offline or discovery not configured: leave defaults */
+		}
+	}
+
+	async function saveDiscovery(event: SubmitEvent) {
+		event.preventDefault();
+		if (discBusy) return;
+		discBusy = true;
+		discMsg = undefined;
+		discError = undefined;
+		const patch: UpdateDiscoverySettingsRequest = {
+			enabled: discEnabled,
+			topics: discTopics
+				.split(/[\n,]/)
+				.map((t) => t.trim())
+				.filter(Boolean),
+			seedUrls: discSeedUrls
+				.split('\n')
+				.map((u) => u.trim())
+				.filter(Boolean),
+			fetchers: { searxng: discSearxng, brave: discBrave, crawl: discCrawl },
+			schedule: discSchedule.trim(),
+			searxngUrl: discSearxngUrl.trim(),
+			crawlDepth: discCrawlDepth,
+			crawlTimeMs: discCrawlTimeMs,
+			rocchio: { a: discRocchioA, b: discRocchioB, c: discRocchioC },
+			targetCount: discTarget
+		};
+		// Only send the Brave key when the user typed one; empty = leave unchanged.
+		if (discBraveKey.trim()) patch.braveApiKey = discBraveKey.trim();
+		try {
+			const s = await getClient().updateDiscoverySettings(patch);
+			discBraveConfigured = s.braveConfigured;
+			discBraveKey = '';
+			discMsg = 'Discovery settings saved.';
+		} catch (err) {
+			discError = err instanceof Error ? err.message : 'Could not save discovery settings.';
+		} finally {
+			discBusy = false;
+		}
+	}
+
+	async function reseedProfile() {
+		if (reseedBusy) return;
+		if (
+			!confirm(
+				'Rebuild the interest profile from your current library? This replaces the model the next run scores against.'
+			)
+		) {
+			return;
+		}
+		reseedBusy = true;
+		reseedMsg = undefined;
+		reseedError = undefined;
+		try {
+			await getClient().reseedDiscoveryProfile();
+			reseedMsg = 'Profile rebuilt from your library.';
+		} catch (err) {
+			reseedError = err instanceof Error ? err.message : 'Could not rebuild the profile.';
+		} finally {
+			reseedBusy = false;
+		}
+	}
+
 	// ---- Newsletter ignore list ----
 	let emailIgnore = $state<string[]>([]);
 	let emailKnown = $state<EmailSender[]>([]);
@@ -294,6 +405,7 @@
 		void loadPodcast();
 		void loadPush();
 		void loadEmailIgnore();
+		void loadDiscovery();
 	});
 
 	async function loadPush() {
@@ -810,19 +922,14 @@
 				</div>
 				<span class="fhint"
 					><strong>Accent</strong> wears each publication’s brand colour and a favicon masthead —
-					chrome only. <strong>Full</strong> re-skins the whole reading view after the publication:
-					its background, body font, headings, and links, all kept inside Lectern’s readability
-					guardrails. Your reading column’s width and text size stay yours either way. Takes priority
-					over Adaptive accent.</span
+					chrome only. <strong>Full</strong> re-skins the whole reading view after the publication: its
+					background, body font, headings, and links, all kept inside Lectern’s readability guardrails.
+					Your reading column’s width and text size stay yours either way. Takes priority over Adaptive
+					accent.</span
 				>
 			</div>
 			<div class="field">
-				<button
-					type="button"
-					class="disclose"
-					aria-expanded={sourcesOpen}
-					onclick={toggleSources}
-				>
+				<button type="button" class="disclose" aria-expanded={sourcesOpen} onclick={toggleSources}>
 					<span class="flabel">Cached sources</span>
 					<span class="disclose-icon" class:open={sourcesOpen} aria-hidden="true">▸</span>
 				</button>
@@ -901,9 +1008,7 @@
 											{/if}
 										</span>
 										<span class="source-fonts">
-											<span class="source-font" class:muted={!s.bodyFont}
-												>{s.bodyFont ?? '—'}</span
-											>
+											<span class="source-font" class:muted={!s.bodyFont}>{s.bodyFont ?? '—'}</span>
 											{#if s.displayFont && s.displayFont !== s.bodyFont}
 												<span class="source-font source-font-display" title="Display font"
 													>{s.displayFont}</span
@@ -1099,6 +1204,143 @@
 				</div>
 				{#if ttsVoicesNote}<p class="hint">{ttsVoicesNote}</p>{/if}
 			</label>
+		</div>
+	</section>
+
+	<section>
+		<h2>Discover</h2>
+		<p class="hint">
+			Lectern can find new web articles that match what you read and save, and surface them under
+			<a class="link" href={resolve('/discover')}>Discover</a>. Scoring runs on your server with
+			classic information retrieval — no LLM. Vote to train it; saving pulls an article into your
+			library.
+		</p>
+		<form class="stack disc-form" onsubmit={saveDiscovery}>
+			<label class="toggle">
+				<input type="checkbox" bind:checked={discEnabled} />
+				<span>
+					Enable discovery
+					<em>Let the scheduled worker fetch and score candidates for you.</em>
+				</span>
+			</label>
+
+			<label>
+				<span>Topics</span>
+				<textarea
+					rows="2"
+					bind:value={discTopics}
+					placeholder="e.g. distributed systems, typography, cycling"
+				></textarea>
+				<span class="fhint">Comma- or newline-separated interests that steer the search.</span>
+			</label>
+
+			<label>
+				<span>Seed URLs</span>
+				<textarea rows="3" bind:value={discSeedUrls} placeholder="https://example.com/blog"
+				></textarea>
+				<span class="fhint">One per line. Sites to crawl for candidates.</span>
+			</label>
+
+			<div class="field">
+				<span class="flabel">Fetchers</span>
+				<label class="toggle">
+					<input type="checkbox" bind:checked={discSearxng} />
+					<span>SearXNG <em>Meta-search via your SearXNG instance.</em></span>
+				</label>
+				<label class="toggle">
+					<input type="checkbox" bind:checked={discBrave} />
+					<span>Brave <em>Brave Search API (needs a key below).</em></span>
+				</label>
+				<label class="toggle">
+					<input type="checkbox" bind:checked={discCrawl} />
+					<span>Crawl <em>Follow links from your seed URLs.</em></span>
+				</label>
+			</div>
+
+			<label>
+				<span>SearXNG URL</span>
+				<input type="text" bind:value={discSearxngUrl} placeholder="https://searxng.example.com" />
+			</label>
+
+			<label>
+				<span>Brave API key</span>
+				<input
+					type="password"
+					bind:value={discBraveKey}
+					placeholder={discBraveConfigured ? '•••••••• (key configured)' : 'Brave Search API key'}
+					autocomplete="off"
+				/>
+				<span class="fhint">
+					{discBraveConfigured
+						? 'A key is configured. Type a new one to replace it; leave blank to keep it.'
+						: 'Write-only — stored on the server and never shown again.'}
+				</span>
+			</label>
+
+			<div class="disc-grid">
+				<label>
+					<span>Crawl depth</span>
+					<input type="number" min="0" max="3" bind:value={discCrawlDepth} />
+				</label>
+				<label>
+					<span>Time budget (ms)</span>
+					<input type="number" min="1" step="1000" bind:value={discCrawlTimeMs} />
+				</label>
+				<label>
+					<span>Target count</span>
+					<input type="number" min="1" max="20" bind:value={discTarget} />
+				</label>
+			</div>
+
+			<label>
+				<span>Schedule (cron)</span>
+				<input type="text" bind:value={discSchedule} placeholder="0 */6 * * *" />
+				<span class="fhint">How often the run fires. Default: every 6 hours.</span>
+			</label>
+
+			<div class="field">
+				<span class="flabel">Rocchio weights</span>
+				<span class="fhint">
+					profile′ = a·profile + b·mean(liked) − c·mean(disliked). Higher b/c react faster to votes.
+				</span>
+				<div class="disc-grid">
+					<label>
+						<span>a (profile)</span>
+						<input type="number" step="0.05" bind:value={discRocchioA} />
+					</label>
+					<label>
+						<span>b (liked)</span>
+						<input type="number" step="0.05" bind:value={discRocchioB} />
+					</label>
+					<label>
+						<span>c (disliked)</span>
+						<input type="number" step="0.05" bind:value={discRocchioC} />
+					</label>
+				</div>
+			</div>
+
+			<div class="row">
+				<button type="submit" class="btn" disabled={discBusy}>
+					{discBusy ? 'Saving…' : 'Save discovery settings'}
+				</button>
+				{#if discMsg}<span class="ok">{discMsg}</span>{/if}
+			</div>
+			{#if discError}<p class="err">{discError}</p>{/if}
+		</form>
+
+		<div class="field reseed">
+			<span class="flabel">Rebuild profile</span>
+			<span class="fhint">
+				Re-derive the interest model from your current library (shortlist, highlights, read items,
+				tags). Do this after a big change to what you've saved.
+			</span>
+			<div class="row">
+				<button type="button" class="btn ghost" disabled={reseedBusy} onclick={reseedProfile}>
+					{reseedBusy ? 'Rebuilding…' : 'Rebuild profile'}
+				</button>
+				{#if reseedMsg}<span class="ok">{reseedMsg}</span>{/if}
+			</div>
+			{#if reseedError}<p class="err">{reseedError}</p>{/if}
 		</div>
 	</section>
 
@@ -1302,17 +1544,26 @@
 		color: var(--text-muted);
 	}
 	input[type='text'],
-	input[type='password'] {
+	input[type='password'],
+	input[type='number'],
+	textarea {
 		padding: 0.5rem 0.65rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		font-size: var(--text-base);
 		background: var(--surface);
 		color: var(--text);
+		font-family: inherit;
 		transition: border-color var(--dur-fast) var(--ease);
 	}
+	textarea {
+		resize: vertical;
+		line-height: 1.4;
+	}
 	input[type='text']:focus,
-	input[type='password']:focus {
+	input[type='password']:focus,
+	input[type='number']:focus,
+	textarea:focus {
 		border-color: var(--accent);
 		outline: none;
 	}
@@ -1868,6 +2119,29 @@
 	.about .link:hover {
 		text-decoration: underline;
 	}
+	/* Discover: the form is wider than the default stack to fit the cron/URL fields,
+	   and the tuning numbers sit in a compact responsive grid. */
+	.disc-form {
+		max-width: 32rem;
+	}
+	.disc-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+		gap: 0.7rem;
+	}
+	.reseed {
+		margin-top: 1.4rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--border);
+		max-width: 32rem;
+	}
+	.link {
+		color: var(--accent);
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+
 	.usage {
 		display: flex;
 		flex-direction: column;
