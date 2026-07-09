@@ -11,6 +11,7 @@ import type {
   DiscoveryRun,
   DiscoverySeed,
   DiscoveryVote,
+  FollowSuggestion,
   Highlight,
   Location,
   NewHighlight,
@@ -369,9 +370,7 @@ export interface AssetStore {
   // --- per-source ("dress") theming (host-keyed token cache) ---
   /** Cached source theming tokens for a host plus the time they were fetched (for
    *  a TTL), or undefined when not yet fetched. */
-  getSourceTheme(
-    host: string,
-  ): Promise<{ tokens: SourceThemeTokens; fetchedAt: Date } | undefined>;
+  getSourceTheme(host: string): Promise<{ tokens: SourceThemeTokens; fetchedAt: Date } | undefined>;
   /** Persist a source's theming tokens (empty fields record "checked, none"). */
   putSourceTheme(host: string, theme: SourceThemeTokens): Promise<void>;
   /** Every cached source theme as a summary (host + tokens + fetch time). */
@@ -395,7 +394,10 @@ export interface AssetStore {
  */
 export interface DiscoveryStore {
   /** Candidates for the Discover view, most-relevant first, capped by `limit`. */
-  listCandidates(params: { status?: CandidateStatus; limit: number }): Promise<DiscoveryCandidate[]>;
+  listCandidates(params: {
+    status?: CandidateStatus;
+    limit: number;
+  }): Promise<DiscoveryCandidate[]>;
   /** Bulk-insert scored candidates, deduped by normalized URL (ON CONFLICT DO
    *  NOTHING) and skipping any URL already saved as a document. */
   insertCandidates(inputs: CreateCandidateInput[]): Promise<{ inserted: number; skipped: number }>;
@@ -416,7 +418,10 @@ export interface DiscoveryStore {
   /** Votes not yet folded into the profile (worker training input). */
   listUnprocessedVotes(): Promise<DiscoveryVote[]>;
   /** Persist the profile AND mark the given vote ids processed, atomically. */
-  putDiscoveryProfile(profile: DiscoveryProfile, processedVoteIds: number[]): Promise<DiscoveryProfile>;
+  putDiscoveryProfile(
+    profile: DiscoveryProfile,
+    processedVoteIds: number[],
+  ): Promise<DiscoveryProfile>;
   /** The persisted profile, or an empty default profile if none exists yet. */
   getDiscoveryProfile(): Promise<DiscoveryProfile>;
   /** Raw stored settings, including the Brave key (worker config view). */
@@ -433,6 +438,9 @@ export interface DiscoveryStore {
   listRuns(limit: number): Promise<DiscoveryRun[]>;
   /** The current/most-recent run, or null if none. */
   getLatestRun(): Promise<DiscoveryRun | null>;
+  /** Domains with at least `minSignals` DISTINCT saved/up-voted candidates —
+   *  auto-follow suggestions, sorted by signal count desc. */
+  suggestFollowDomains(minSignals: number): Promise<FollowSuggestion[]>;
 }
 
 /**
@@ -441,7 +449,8 @@ export interface DiscoveryStore {
  * each consumer (see the per-interface docs above).
  */
 export interface OverlayStore
-  extends DocumentStore,
+  extends
+    DocumentStore,
     ContentStore,
     OrganizationStore,
     HighlightStore,

@@ -18,6 +18,8 @@ import {
   DiscoveryRunsResponse,
   DiscoverySeed,
   DiscoverySettings,
+  DismissFollowRequest,
+  DismissFollowResponse,
   ExtractContentRequest,
   ExtractContentResponse,
   LatestRunResponse,
@@ -38,6 +40,9 @@ import {
   DocumentContentResponse,
   Feed,
   FeedsResponse,
+  FollowDomainRequest,
+  FollowDomainResponse,
+  FollowSuggestionsResponse,
   Highlight,
   HighlightsResponse,
   ImportOpmlRequest,
@@ -86,6 +91,7 @@ import type { AppDeps } from "./app";
 import type { DocumentRef } from "./unify";
 import { accentFromUrl } from "./palette";
 import { hostFromUrl, sourceThemeFromUrl } from "./source-theme";
+import { hostOf } from "./discovery-url";
 import { podcastFeedUrl, publicBaseUrl } from "./podcast";
 import { rewriteArticleImages } from "./images";
 import { parseId } from "./ids";
@@ -171,6 +177,10 @@ const TTS_PREVIEW_TEXT = "This is a preview of how this voice sounds reading you
 /** How long a cached source theme is served before it's re-fetched (30 days). A
  *  source's rebrand thus surfaces within a month without any manual refresh. */
 const SOURCE_THEME_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** How many distinct saved/up-voted candidates from a domain it takes before we
+ *  offer to auto-follow its feed (Milestone B). */
+const FOLLOW_THRESHOLD = 3;
 
 function coerceListQuery(raw: Record<string, unknown>): ListDocumentsQuery {
   return ListDocumentsQuery.parse({
@@ -919,6 +929,55 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/discovery/runs/latest", async () =>
     LatestRunResponse.parse({ run: await deps.overlay.getLatestRun() }),
   );
+
+  // ---- auto-follow suggestions (Milestone B) -----------------------------
+  // Domains the user keeps saving/up-voting candidates from but isn't yet
+  // following. Exclude any domain already followed (matched against each feed's
+  // site + feed URL host) and any the user has dismissed.
+  app.get("/discovery/follow-suggestions", async () => {
+    const suggestions = await deps.overlay.suggestFollowDomains(FOLLOW_THRESHOLD);
+    const { feeds } = await deps.rss.listFeeds();
+    const followed = new Set<string>();
+    for (const feed of feeds) {
+      if (feed.siteUrl) followed.add(hostOf(feed.siteUrl));
+      followed.add(hostOf(feed.feedUrl));
+    }
+    followed.delete("");
+    const dismissed = new Set((await deps.overlay.getDiscoverySettings()).followDismissed);
+    return FollowSuggestionsResponse.parse({
+      suggestions: suggestions.filter((s) => !followed.has(s.domain) && !dismissed.has(s.domain)),
+    });
+  });
+
+  // Follow a suggested domain: MiniFlux autodiscovers the feed from the site URL
+  // and subscribes. A subscribe failure (no discoverable feed) surfaces as an
+  // error via the central handler; we rethrow it as a clean 422 so the UI can
+  // explain "no feed found" instead of leaking a backend 4xx/5xx.
+  app.post<{ Body: unknown }>("/discovery/follow", async (req, reply) => {
+    const { domain } = FollowDomainRequest.parse(req.body);
+    let feed: Feed;
+    try {
+      feed = await deps.rss.subscribe({ feedUrl: `https://${domain}/` });
+    } catch (err) {
+      throw new HttpError(
+        422,
+        `no feed found for ${domain}: ${err instanceof Error ? err.message : "subscribe failed"}`,
+      );
+    }
+    reply.code(201);
+    return FollowDomainResponse.parse({ feed });
+  });
+
+  // Dismiss a follow suggestion so it's never offered again (deduped append to
+  // the discovery settings' followDismissed list).
+  app.post<{ Body: unknown }>("/discovery/follow/dismiss", async (req) => {
+    const { domain } = DismissFollowRequest.parse(req.body);
+    const current = (await deps.overlay.getDiscoverySettings()).followDismissed;
+    if (!current.includes(domain)) {
+      await deps.overlay.setDiscoverySettings({ followDismissed: [...current, domain] });
+    }
+    return DismissFollowResponse.parse({ dismissed: true });
+  });
 
   // ---- discovery (service-facing: called by the worker) ------------------
   // Full config INCLUDING the Brave key — only ever returned here, never to the SPA.

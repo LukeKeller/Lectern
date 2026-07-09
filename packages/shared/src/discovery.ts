@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Feed } from "./feeds";
 
 /**
  * Content-discovery contract. A separate `apps/discovery` service finds new
@@ -152,6 +153,8 @@ export const DiscoverySettings = z.object({
   fullTextCandidates: z.number().int().min(1).max(50).default(12),
   /** Hosts to never surface candidates from (domain-level mute). */
   mutedDomains: z.array(z.string()).default([]),
+  /** Domains the user has dismissed from the "follow this source" suggestions. */
+  followDismissed: z.array(z.string()).default([]),
 });
 export type DiscoverySettings = z.infer<typeof DiscoverySettings>;
 
@@ -172,6 +175,7 @@ export const UpdateDiscoverySettingsRequest = z.object({
   fullText: z.boolean().optional(),
   fullTextCandidates: z.number().int().min(1).max(50).optional(),
   mutedDomains: z.array(z.string()).optional(),
+  followDismissed: z.array(z.string()).optional(),
 });
 export type UpdateDiscoverySettingsRequest = z.infer<typeof UpdateDiscoverySettingsRequest>;
 
@@ -326,3 +330,35 @@ export const TriggerRunResponse = z.object({
   runId: z.string().nullable().default(null),
 });
 export type TriggerRunResponse = z.infer<typeof TriggerRunResponse>;
+
+// ---- Auto-follow suggestions (user-facing) ---------------------------------
+
+/** A domain the user keeps engaging with (saving/upvoting candidates from) that
+ * isn't yet a followed feed — a candidate to subscribe to. */
+export const FollowSuggestion = z.object({
+  domain: z.string(),
+  /** Combined positive signal: #saved + #upvoted candidates from this domain. */
+  signalCount: z.number().int().nonnegative(),
+  sampleTitles: z.array(z.string()).default([]),
+});
+export type FollowSuggestion = z.infer<typeof FollowSuggestion>;
+
+export const FollowSuggestionsResponse = z.object({
+  suggestions: z.array(FollowSuggestion),
+});
+export type FollowSuggestionsResponse = z.infer<typeof FollowSuggestionsResponse>;
+
+/** Follow a suggested domain: resolve its feed (MiniFlux autodiscovery from the
+ * site URL) and subscribe. */
+export const FollowDomainRequest = z.object({ domain: z.string() });
+export type FollowDomainRequest = z.infer<typeof FollowDomainRequest>;
+
+export const FollowDomainResponse = z.object({ feed: Feed });
+export type FollowDomainResponse = z.infer<typeof FollowDomainResponse>;
+
+/** Dismiss a follow suggestion so it stops being offered. */
+export const DismissFollowRequest = z.object({ domain: z.string() });
+export type DismissFollowRequest = z.infer<typeof DismissFollowRequest>;
+
+export const DismissFollowResponse = z.object({ dismissed: z.boolean() });
+export type DismissFollowResponse = z.infer<typeof DismissFollowResponse>;

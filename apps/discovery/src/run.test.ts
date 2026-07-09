@@ -33,6 +33,7 @@ const baseConfig: DiscoveryConfig = {
   fullText: false,
   fullTextCandidates: 12,
   mutedDomains: [],
+  followDismissed: [],
 };
 
 function emptyProfile(): DiscoveryProfile {

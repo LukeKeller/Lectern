@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.39.0',
+		date: '2026-07-09',
+		title: 'Discover can turn a source you love into a feed',
+		changes: [
+			{
+				kind: 'added',
+				text: 'When you keep saving and up-voting articles from the same site, Discover now offers to follow it — one tap subscribes to that site’s feed so its new posts land in your feeds automatically.'
+			},
+			{
+				kind: 'added',
+				text: 'Not interested? Dismiss a suggestion and it won’t be offered again. Suggestions never include sites you already follow.'
+			}
+		]
+	},
+	{
 		version: '0.38.0',
 		date: '2026-07-09',
 		title: 'Discover reads the whole article, favours fresh, and shows its work',

@@ -13,12 +13,23 @@
 	 * actions and a per-row Clear; the overflow menu swaps the library's bulk
 	 * actions for a single "Clear all".
 	 */
-	import type { DiscoveryCandidate, DiscoveryFetcher, SortDir, VoteValue } from '@lectern/shared';
+	import type {
+		DiscoveryCandidate,
+		DiscoveryFetcher,
+		FollowSuggestion,
+		SortDir,
+		VoteValue
+	} from '@lectern/shared';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
-	import { applyCandidateAction, candidateHost, candidateToCard } from '$lib/discover';
+	import {
+		applyCandidateAction,
+		candidateHost,
+		candidateToCard,
+		followSignalLabel
+	} from '$lib/discover';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import CardList from '$lib/components/CardList.svelte';
@@ -32,6 +43,15 @@
 	// Hosts the user has muted, held so a mute can append without a read-back race.
 	// Loaded alongside the candidates; kept in step optimistically when muting.
 	let mutedDomains = $state<string[]>([]);
+
+	// ---- Auto-follow suggestions ("Sources you keep saving") ----
+	// Domains the user repeatedly saves/upvotes but doesn't yet follow. Rendered as
+	// a subordinate hint strip above the candidate list; empty until loaded and any
+	// time the backend has nothing to offer, so the strip simply disappears. Each
+	// row's Follow/Dismiss mutation is optimistic (drop the row, roll back on
+	// error), guarded per-domain against double-clicks like the candidate actions.
+	let suggestions = $state<FollowSuggestion[]>([]);
+	const busyDomains = new SvelteSet<string>();
 
 	// Keyboard list selection, mirroring ListView. scrollNonce is bumped on every
 	// keyboard-driven move so CardList scrolls the focused row into view.
@@ -172,6 +192,7 @@
 		activeList.set(controller);
 		void load();
 		void loadMutedDomains();
+		void loadSuggestions();
 		return () => activeList.clear(controller);
 	});
 
@@ -300,6 +321,56 @@
 			error = 'Could not mute this source.';
 		} finally {
 			muting = false;
+		}
+	}
+
+	// Load the follow suggestions independently of the candidate batch: this is a
+	// non-critical hint bar, so a failure leaves it empty rather than surfacing an
+	// error (the candidate list owns the visible error slot).
+	async function loadSuggestions() {
+		try {
+			const res = await getClient().getFollowSuggestions();
+			suggestions = res.suggestions;
+		} catch {
+			/* offline or discovery not configured: leave the strip empty */
+		}
+	}
+
+	// Follow a suggested domain: subscribe to its feed and drop the row. Optimistic
+	// removal with rollback, reusing the Clear/Mute toast for confirmation; guarded
+	// per-domain so a double-click can't fire the subscription twice.
+	async function follow(domain: string) {
+		if (busyDomains.has(domain)) return;
+		const snapshot = suggestions;
+		suggestions = suggestions.filter((s) => s.domain !== domain);
+		busyDomains.add(domain);
+		try {
+			await getClient().followDomain(domain);
+			clearResult = `Following ${domain}`;
+			if (clearTimer) clearTimeout(clearTimer);
+			clearTimer = setTimeout(() => (clearResult = null), 5000);
+		} catch {
+			suggestions = snapshot; // rollback the optimistic drop
+			error = 'Could not follow this source.';
+		} finally {
+			busyDomains.delete(domain);
+		}
+	}
+
+	// Dismiss a suggestion so it stops being offered. Optimistic drop, rolled back
+	// on failure; no toast — a quiet removal is enough for a hint the user rejected.
+	async function dismissSuggestion(domain: string) {
+		if (busyDomains.has(domain)) return;
+		const snapshot = suggestions;
+		suggestions = suggestions.filter((s) => s.domain !== domain);
+		busyDomains.add(domain);
+		try {
+			await getClient().dismissFollow(domain);
+		} catch {
+			suggestions = snapshot; // rollback
+			error = 'Could not dismiss this suggestion.';
+		} finally {
+			busyDomains.delete(domain);
 		}
 	}
 
@@ -448,6 +519,49 @@
 
 	{#if error}
 		<p class="err">{error}</p>
+	{/if}
+
+	{#if suggestions.length}
+		<section class="follow-strip" aria-labelledby="follow-strip-title">
+			<h2 id="follow-strip-title" class="follow-strip-title">
+				<Icon name="rss" size={13} /> Sources you keep saving
+			</h2>
+			<ul class="follow-list">
+				{#each suggestions as s (s.domain)}
+					<li class="follow-item">
+						<div class="follow-meta">
+							<span class="follow-domain">{s.domain}</span>
+							<span class="follow-count">{followSignalLabel(s.signalCount)}</span>
+							{#if s.sampleTitles[0]}
+								<span class="follow-sample" title={s.sampleTitles[0]}>“{s.sampleTitles[0]}”</span>
+							{/if}
+						</div>
+						<div class="follow-actions">
+							<button
+								type="button"
+								class="follow-btn"
+								disabled={busyDomains.has(s.domain)}
+								onclick={() => follow(s.domain)}
+								aria-label={`Follow ${s.domain}`}
+								title={`Follow ${s.domain}`}
+							>
+								<Icon name="plus" size={14} /> Follow
+							</button>
+							<button
+								type="button"
+								class="follow-btn ghost"
+								disabled={busyDomains.has(s.domain)}
+								onclick={() => dismissSuggestion(s.domain)}
+								aria-label={`Dismiss the suggestion to follow ${s.domain}`}
+								title="Dismiss"
+							>
+								<Icon name="close" size={14} />
+							</button>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	{/if}
 
 	{#if loading}
@@ -788,6 +902,109 @@
 	}
 	.link:hover {
 		text-decoration: underline;
+	}
+
+	/* "Sources you keep saving": a calm, subordinate hint strip above the list.
+	   Quieter than a card — a soft-tinted panel that reads as an aside, not content. */
+	.follow-strip {
+		margin: 0 0 1.4rem;
+		padding: 0.75rem 0.9rem 0.85rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-alt);
+	}
+	.follow-strip-title {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0 0 0.6rem;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.follow-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.follow-item {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 0.75rem;
+	}
+	.follow-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.3rem 0.55rem;
+		min-width: 0;
+	}
+	.follow-domain {
+		font-weight: 600;
+		color: var(--text);
+		font-size: var(--text-sm);
+	}
+	.follow-count {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+	.follow-sample {
+		max-width: 22rem;
+		overflow: hidden;
+		font-size: var(--text-xs);
+		font-style: italic;
+		color: var(--text-muted);
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.follow-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		flex-shrink: 0;
+	}
+	.follow-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 1.9rem;
+		padding: 0 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.follow-btn:hover:not(:disabled) {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.follow-btn.ghost {
+		padding: 0 0.5rem;
+		color: var(--text-muted);
+	}
+	.follow-btn.ghost:hover:not(:disabled) {
+		border-color: var(--border-strong);
+		color: var(--text);
+		background: transparent;
+	}
+	.follow-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 
 	.undo-toast {

@@ -1037,6 +1037,28 @@ const handlers: Record<string, MockHandler> = {
     json: { inserted: (body as { candidates: unknown[] }).candidates.length, skipped: 0 },
   }),
   extractContent: () => ({ json: { result: null } }),
+  getFollowSuggestions: () => ({
+    json: {
+      suggestions: [
+        {
+          domain: "danluu.com",
+          signalCount: 4,
+          sampleTitles: ["The quiet death of the web we knew", "How web bloat impacts users"],
+        },
+      ],
+    },
+  }),
+  followDomain: ({ body }) => ({
+    json: {
+      feed: {
+        id: "feed_followed",
+        title: (body as { domain: string }).domain,
+        feedUrl: `https://${(body as { domain: string }).domain}/feed`,
+        folderId: null,
+      },
+    },
+  }),
+  dismissFollow: () => ({ json: { dismissed: true } }),
   createDiscoveryRun: ({ body }) => {
     const b = body as { id: string; trigger?: string; stage?: string };
     const now = new Date().toISOString();

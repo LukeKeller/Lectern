@@ -33,3 +33,19 @@ export function normalizeUrl(input: string): string {
     return raw.toLowerCase();
   }
 }
+
+/**
+ * The registrable-ish host of a URL for domain grouping: the lowercased hostname
+ * with a leading `www.` stripped (so `www.example.com` and `example.com` group
+ * together). Returns '' for anything that doesn't parse as a URL, so callers can
+ * cheaply skip non-hosts. Deliberately does NOT collapse other subdomains — a
+ * follow suggestion should point at the exact host the user engaged with.
+ */
+export function hostOf(input: string): string {
+  try {
+    const host = new URL(input.trim()).hostname.toLowerCase();
+    return host.startsWith("www.") ? host.slice(4) : host;
+  } catch {
+    return "";
+  }
+}

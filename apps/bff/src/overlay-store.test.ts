@@ -1,6 +1,11 @@
 import { Card } from "@lectern/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { backendTruthSet, cardFromRow, OVERLAY_COLUMNS } from "./overlay-store";
+import {
+  backendTruthSet,
+  cardFromRow,
+  groupFollowSuggestions,
+  OVERLAY_COLUMNS,
+} from "./overlay-store";
 import type { DocumentRow } from "./db/schema";
 
 /**
@@ -101,5 +106,43 @@ describe("backendTruthSet (index-never-clobbers-overlay invariant)", () => {
       updatedAt: row.updatedAt,
       deletedAt: null,
     });
+  });
+});
+
+describe("groupFollowSuggestions", () => {
+  it("groups saved/upvoted candidate rows by host and keeps those at threshold", () => {
+    // aeon.co has 3 distinct signals; example.com has 2. Threshold 3 keeps only aeon.
+    const rows = [
+      { url: "https://aeon.co/essays/one", title: "One" },
+      { url: "https://www.aeon.co/essays/two", title: "Two" }, // www. collapses onto aeon.co
+      { url: "https://aeon.co/essays/three", title: "Three" },
+      { url: "https://example.com/a", title: "A" },
+      { url: "https://example.com/b", title: "B" },
+    ];
+    const out = groupFollowSuggestions(rows, 3);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ domain: "aeon.co", signalCount: 3 });
+    expect(out[0]!.sampleTitles).toEqual(["One", "Two", "Three"]);
+  });
+
+  it("caps sample titles at 3, skips null/blank titles and unparseable urls, sorts desc", () => {
+    const rows = [
+      { url: "https://a.com/1", title: "t1" },
+      { url: "https://a.com/2", title: null },
+      { url: "https://a.com/3", title: "  " },
+      { url: "https://a.com/4", title: "t4" },
+      { url: "https://a.com/5", title: "t5" },
+      { url: "https://a.com/6", title: "t6" },
+      { url: "not-a-url", title: "skip" },
+      { url: "https://b.com/1", title: "b1" },
+      { url: "https://b.com/2", title: "b2" },
+      { url: "https://b.com/3", title: "b3" },
+      { url: "https://b.com/4", title: "b4" },
+    ];
+    const out = groupFollowSuggestions(rows, 3);
+    expect(out.map((s) => s.domain)).toEqual(["a.com", "b.com"]); // 6 vs 4, desc
+    const a = out.find((s) => s.domain === "a.com")!;
+    expect(a.signalCount).toBe(6);
+    expect(a.sampleTitles).toEqual(["t1", "t4", "t5"]); // 3 non-blank, capped
   });
 });

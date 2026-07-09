@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoveryCandidate } from '@lectern/shared';
-import { applyCandidateAction, candidateHost, candidateToCard } from './discover';
+import {
+	applyCandidateAction,
+	candidateHost,
+	candidateToCard,
+	followSignalLabel
+} from './discover';
 
 function makeCandidate(overrides: Partial<DiscoveryCandidate> = {}): DiscoveryCandidate {
 	return DiscoveryCandidate.parse({
@@ -131,5 +136,19 @@ describe('candidateToCard', () => {
 		const card = candidateToCard(makeCandidate({ imageUrl: null, publishedAt: null }));
 		expect(card.coverImage).toBe(null);
 		expect(card.publishedAt).toBe(null);
+	});
+});
+
+describe('followSignalLabel', () => {
+	it('uses the singular form for a single signal', () => {
+		expect(followSignalLabel(1)).toBe('1 save or upvote');
+	});
+
+	it('uses the plural form for multiple signals', () => {
+		expect(followSignalLabel(4)).toBe('4 saves & upvotes');
+	});
+
+	it('uses the plural form for zero signals', () => {
+		expect(followSignalLabel(0)).toBe('0 saves & upvotes');
 	});
 });

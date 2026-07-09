@@ -36,6 +36,7 @@ import {
 } from "@lectern/shared";
 import { createHash } from "node:crypto";
 import { normalizeUrl } from "./discovery-url";
+import { groupFollowSuggestions } from "./overlay-store";
 import { buildApp, type AppDeps } from "./app";
 import type { TtsRouter } from "./backends/tts-router";
 import { BackendHttpError } from "./errors";
@@ -784,7 +785,23 @@ class FakeOverlayStore implements OverlayStore {
     if (patch.crawlTimeMs !== undefined) next.crawlTimeMs = patch.crawlTimeMs;
     if (patch.rocchio !== undefined) next.rocchio = patch.rocchio;
     if (patch.targetCount !== undefined) next.targetCount = patch.targetCount;
+    if (patch.mutedDomains !== undefined) next.mutedDomains = patch.mutedDomains;
+    if (patch.followDismissed !== undefined) next.followDismissed = patch.followDismissed;
     this.discoverySettings = DiscoveryConfig.parse(next);
+  }
+
+  async suggestFollowDomains(minSignals: number) {
+    // Union saved + up-voted candidates by id, mirroring the Drizzle store.
+    const byId = new Map<string, { url: string; title: string | null }>();
+    for (const c of this.discoveryCandidates.values()) {
+      if (c.status === "saved") byId.set(c.id, { url: c.url, title: c.title });
+    }
+    for (const v of this.discoveryVotes) {
+      if (v.value !== "up") continue;
+      const c = this.discoveryCandidates.get(v.candidateId);
+      if (c && !byId.has(c.id)) byId.set(c.id, { url: c.url, title: c.title });
+    }
+    return groupFollowSuggestions([...byId.values()], minSignals);
   }
 
   async buildDiscoverySeed() {
@@ -2321,7 +2338,11 @@ describe("discovery", () => {
       headers: auth,
       payload: { candidates: inputs },
     });
-    const res = await a.inject({ method: "GET", url: "/api/v1/discovery/candidates", headers: auth });
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/candidates",
+      headers: auth,
+    });
     return res.json().candidates as DiscoveryCandidate[];
   }
 
@@ -2331,7 +2352,11 @@ describe("discovery", () => {
       candidateInput({ url: "https://a.test/low", score: 0.1 }),
       candidateInput({ url: "https://b.test/high", score: 0.9 }),
     ]);
-    const res = await a.inject({ method: "GET", url: "/api/v1/discovery/candidates", headers: auth });
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/candidates",
+      headers: auth,
+    });
     expect(res.statusCode).toBe(200);
     const candidates = res.json().candidates as DiscoveryCandidate[];
     expect(candidates).toHaveLength(2);
@@ -2344,7 +2369,7 @@ describe("discovery", () => {
       url: "/api/v1/discovery/candidates?status=active",
       headers: auth,
     });
-    expect((active.json().candidates as DiscoveryCandidate[])).toHaveLength(1);
+    expect(active.json().candidates as DiscoveryCandidate[]).toHaveLength(1);
     expect((active.json().candidates as DiscoveryCandidate[])[0]!.url).toBe("https://a.test/low");
     await a.close();
   });
@@ -2379,7 +2404,7 @@ describe("discovery", () => {
       url: "/api/v1/discovery/candidates?status=active",
       headers: auth,
     });
-    expect((active.json().candidates as DiscoveryCandidate[])).toHaveLength(0);
+    expect(active.json().candidates as DiscoveryCandidate[]).toHaveLength(0);
     await a.close();
   });
 
@@ -2503,7 +2528,11 @@ describe("discovery", () => {
     expect(JSON.stringify(get.json())).not.toContain("brv-secret");
 
     // The worker-only config endpoint DOES return the key.
-    const config = await a.inject({ method: "GET", url: "/api/v1/discovery/config", headers: auth });
+    const config = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/config",
+      headers: auth,
+    });
     expect(config.statusCode).toBe(200);
     expect(config.json().braveApiKey).toBe("brv-secret");
     expect(config.json()).not.toHaveProperty("braveConfigured");
@@ -2582,7 +2611,7 @@ describe("discovery", () => {
     });
     expect(latest.json().run.id).toBe("run-1");
     const list = await a.inject({ method: "GET", url: "/api/v1/discovery/runs", headers: auth });
-    expect((list.json().runs as DiscoveryRun[])).toHaveLength(1);
+    expect(list.json().runs as DiscoveryRun[]).toHaveLength(1);
     await a.close();
   });
 
@@ -2660,6 +2689,128 @@ describe("discovery", () => {
     const res = await a.inject({ method: "GET", url: "/api/v1/discovery/profile", headers: auth });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ name: "default", vector: {}, idf: {}, docCount: 0 });
+    await a.close();
+  });
+
+  // ---- auto-follow suggestions (Milestone B) ----
+  /** Seed candidates for a host, save some and up-vote others to build the
+   *  distinct positive-signal count follow suggestions are derived from. */
+  async function seedFollowSignals(
+    a: ReturnType<typeof app>,
+    host: string,
+    saved: number,
+    upvoted: number,
+  ): Promise<void> {
+    const inputs: CreateCandidateInput[] = [];
+    for (let i = 0; i < saved + upvoted; i++) {
+      inputs.push(candidateInput({ url: `https://${host}/post-${i}`, title: `${host} #${i}` }));
+    }
+    const cands = await seedCandidates(a, inputs);
+    // The seed returns candidates for THIS host (plus any earlier ones); pick ours.
+    const mine = cands.filter((c) => new URL(c.url).hostname === host);
+    for (let i = 0; i < saved; i++) {
+      await harness.deps.overlay.setCandidateStatus(mine[i]!.id, "saved");
+    }
+    for (let i = saved; i < saved + upvoted; i++) {
+      await harness.deps.overlay.recordVote(mine[i]!.id, "up");
+    }
+  }
+
+  it("suggests domains at/above the follow threshold, sorted by signal count", async () => {
+    const a = app();
+    await seedFollowSignals(a, "aeon.co", 2, 1); // 3 signals -> suggested
+    await seedFollowSignals(a, "quanta.org", 4, 0); // 4 signals -> suggested first
+    await seedFollowSignals(a, "rare.io", 1, 1); // 2 signals -> below threshold
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/follow-suggestions",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    const suggestions = res.json().suggestions as { domain: string; signalCount: number }[];
+    expect(suggestions.map((s) => s.domain)).toEqual(["quanta.org", "aeon.co"]);
+    expect(suggestions[0]!.signalCount).toBe(4);
+    await a.close();
+  });
+
+  it("excludes already-followed domains (matched on feed site + feed url host)", async () => {
+    const a = app();
+    await seedFollowSignals(a, "aeon.co", 3, 0);
+    await seedFollowSignals(a, "quanta.org", 3, 0);
+    // Follow aeon.co by site URL, quanta.org by feed URL — both must be excluded.
+    harness.deps.rss.feeds.push(
+      Feed.parse({
+        id: "1",
+        title: "Aeon",
+        feedUrl: "https://f.aeon.co/rss",
+        siteUrl: "https://www.aeon.co",
+      }),
+      Feed.parse({ id: "2", title: "Quanta", feedUrl: "https://quanta.org/feed" }),
+    );
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/follow-suggestions",
+      headers: auth,
+    });
+    expect(res.json().suggestions as unknown[]).toHaveLength(0);
+    await a.close();
+  });
+
+  it("excludes dismissed domains and dedupes the dismiss list", async () => {
+    const a = app();
+    await seedFollowSignals(a, "aeon.co", 3, 0);
+    const dismiss = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/follow/dismiss",
+      headers: auth,
+      payload: { domain: "aeon.co" },
+    });
+    expect(dismiss.json()).toEqual({ dismissed: true });
+    // A second dismiss is idempotent (no duplicate in followDismissed).
+    await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/follow/dismiss",
+      headers: auth,
+      payload: { domain: "aeon.co" },
+    });
+    expect((await harness.deps.overlay.getDiscoverySettings()).followDismissed).toEqual([
+      "aeon.co",
+    ]);
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/follow-suggestions",
+      headers: auth,
+    });
+    expect(res.json().suggestions as unknown[]).toHaveLength(0);
+    await a.close();
+  });
+
+  it("follows a domain via MiniFlux site-url autodiscovery", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/follow",
+      headers: auth,
+      payload: { domain: "aeon.co" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().feed.feedUrl).toBe("https://aeon.co/");
+    expect(harness.deps.rss.feeds).toHaveLength(1);
+    await a.close();
+  });
+
+  it("returns 422 when no feed can be discovered for the domain", async () => {
+    const a = app();
+    harness.deps.rss.subscribe = async () => {
+      throw new Error("no feed found");
+    };
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/follow",
+      headers: auth,
+      payload: { domain: "nofeed.example" },
+    });
+    expect(res.statusCode).toBe(422);
     await a.close();
   });
 });

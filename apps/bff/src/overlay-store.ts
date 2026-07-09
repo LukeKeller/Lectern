@@ -32,6 +32,7 @@ import type {
   CreateViewRequest,
   DiscoverySeedDoc,
   DiscoverySeedTag,
+  FollowSuggestion,
   Highlight,
   HighlightColor,
   Location,
@@ -74,7 +75,7 @@ import type {
   NewPodcastEpisodeRow,
   PodcastEpisodeRow,
 } from "./db/schema";
-import { normalizeUrl } from "./discovery-url";
+import { hostOf, normalizeUrl } from "./discovery-url";
 import { parseId } from "./ids";
 import type { SourceThemeTokens } from "./source-theme";
 import {
@@ -1124,6 +1125,7 @@ export class DrizzleOverlayStore implements OverlayStore {
     if (patch.fullText !== undefined) next.fullText = patch.fullText;
     if (patch.fullTextCandidates !== undefined) next.fullTextCandidates = patch.fullTextCandidates;
     if (patch.mutedDomains !== undefined) next.mutedDomains = patch.mutedDomains;
+    if (patch.followDismissed !== undefined) next.followDismissed = patch.followDismissed;
     await this.db
       .insert(appSettings)
       .values({ key: "discovery", value: next, updatedAt: new Date() })
@@ -1233,6 +1235,71 @@ export class DrizzleOverlayStore implements OverlayStore {
       .limit(1);
     return row ? runFromRow(row) : null;
   }
+
+  /**
+   * Domains the user keeps engaging with — a positive signal per DISTINCT
+   * candidate from a host that was either saved (`status = 'saved'`) or up-voted
+   * (`discovery_votes.value = 'up'` joined back to the candidate for its url). The
+   * two sets are unioned by candidate id (a saved-and-upvoted candidate counts
+   * once), grouped by host, and any host with at least `minSignals` distinct
+   * signals is returned with up to 3 sample titles, sorted by signal count desc.
+   * Single-user scale — a full scan of the small saved/upvoted candidate set is
+   * fine (mirrors insertCandidates' saved-URL scan).
+   */
+  async suggestFollowDomains(minSignals: number): Promise<FollowSuggestion[]> {
+    const saved = await this.db
+      .select({
+        id: discoveryCandidates.id,
+        url: discoveryCandidates.url,
+        title: discoveryCandidates.title,
+      })
+      .from(discoveryCandidates)
+      .where(eq(discoveryCandidates.status, "saved"));
+    const upvoted = await this.db
+      .select({
+        id: discoveryCandidates.id,
+        url: discoveryCandidates.url,
+        title: discoveryCandidates.title,
+      })
+      .from(discoveryCandidates)
+      .innerJoin(discoveryVotes, eq(discoveryVotes.candidateId, discoveryCandidates.id))
+      .where(eq(discoveryVotes.value, "up"));
+    // Union by candidate id so a candidate that is BOTH saved and up-voted (and a
+    // candidate with multiple up-votes) contributes a single signal.
+    const byId = new Map<string, { url: string; title: string | null }>();
+    for (const r of [...saved, ...upvoted]) {
+      if (!byId.has(r.id)) byId.set(r.id, { url: r.url, title: r.title });
+    }
+    return groupFollowSuggestions([...byId.values()], minSignals);
+  }
+}
+
+/**
+ * Pure grouping for follow suggestions: given the DISTINCT saved/up-voted
+ * candidate rows (already unioned by id upstream), group by `hostOf(url)`, count
+ * one signal per row, keep hosts at or above `minSignals`, attach up to 3 non-null
+ * sample titles, and sort by signal count descending (host asc as a stable tie-
+ * break). Rows whose url has no parseable host are skipped. Exported for unit
+ * tests so the grouping can be verified without a database.
+ */
+export function groupFollowSuggestions(
+  rows: { url: string; title: string | null }[],
+  minSignals: number,
+): FollowSuggestion[] {
+  const byHost = new Map<string, { count: number; titles: string[] }>();
+  for (const row of rows) {
+    const host = hostOf(row.url);
+    if (!host) continue;
+    const entry = byHost.get(host) ?? { count: 0, titles: [] };
+    entry.count += 1;
+    const title = row.title?.trim();
+    if (title && entry.titles.length < 3) entry.titles.push(title);
+    byHost.set(host, entry);
+  }
+  return [...byHost.entries()]
+    .filter(([, e]) => e.count >= minSignals)
+    .map(([domain, e]) => ({ domain, signalCount: e.count, sampleTitles: e.titles }))
+    .sort((a, b) => b.signalCount - a.signalCount || a.domain.localeCompare(b.domain));
 }
 
 /** Fallback voice (ElevenLabs "Rachel") + model when the user hasn't chosen. */

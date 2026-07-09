@@ -55,6 +55,16 @@ export function applyCandidateAction(
 }
 
 /**
+ * Human label for a follow suggestion's `signalCount` — the combined number of
+ * candidates from a domain the user saved or upvoted. Kept pure and DOM-free so
+ * the pluralisation is unit-testable. e.g. 1 -> "1 save or upvote",
+ * 4 -> "4 saves & upvotes".
+ */
+export function followSignalLabel(signalCount: number): string {
+	return signalCount === 1 ? '1 save or upvote' : `${signalCount} saves & upvotes`;
+}
+
+/**
  * Project a discovered candidate onto the unified `Card` shape so CardList can
  * render it with the exact same magazine-index treatment as feed/library items.
  * Candidates are NOT library documents, so the fields a real Card carries from a

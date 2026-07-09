@@ -59,8 +59,11 @@ import {
   DiscoveryRun,
   DiscoveryRunsResponse,
   DiscoverySeed,
+  DismissFollowResponse,
   ExtractContentResponse,
   DiscoverySettings,
+  FollowDomainResponse,
+  FollowSuggestionsResponse,
   LatestRunResponse,
   ListCandidatesQuery,
   PutDiscoveryProfileRequest,
@@ -449,6 +452,26 @@ export class LecternClient {
   /** Current/most-recent run (poll while running). */
   getLatestDiscoveryRun() {
     return this.request("GET", "/discovery/runs/latest", { schema: LatestRunResponse });
+  }
+  /** Domains the user keeps saving/upvoting that aren't yet followed feeds. */
+  getFollowSuggestions() {
+    return this.request("GET", "/discovery/follow-suggestions", {
+      schema: FollowSuggestionsResponse,
+    });
+  }
+  /** Subscribe to a suggested domain's feed (MiniFlux autodiscovery). */
+  followDomain(domain: string) {
+    return this.request("POST", "/discovery/follow", {
+      body: { domain },
+      schema: FollowDomainResponse,
+    });
+  }
+  /** Dismiss a follow suggestion so it stops being offered. */
+  dismissFollow(domain: string) {
+    return this.request("POST", "/discovery/follow/dismiss", {
+      body: { domain },
+      schema: DismissFollowResponse,
+    });
   }
 
   // ---- Discovery (service-facing: used by the discovery worker) ----

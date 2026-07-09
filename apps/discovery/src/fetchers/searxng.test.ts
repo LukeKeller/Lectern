@@ -19,6 +19,7 @@ const cfg: DiscoveryConfig = {
   fullText: true,
   fullTextCandidates: 12,
   mutedDomains: [],
+  followDismissed: [],
 };
 
 const ctx: FetchContext = { queries: ["rust"], seedUrls: [], limit: 50, timeBudgetMs: 30000, cfg };
