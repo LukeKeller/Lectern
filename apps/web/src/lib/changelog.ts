@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.37.3',
+		date: '2026-07-09',
+		title: 'Discover finds articles, not landing pages',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'The Discover crawler now only surfaces actual articles — it skips homepages, section indexes, and site utility pages (about, tags, support, social) and social-media profiles, which have no story to read.'
+			},
+			{
+				kind: 'improved',
+				text: 'The crawler is a good web citizen: it fetches and obeys each site’s robots.txt rules and identifies itself honestly.'
+			},
+			{
+				kind: 'improved',
+				text: 'Discover can dig deeper and run longer to find more, giving votes a wider pool of real articles to rank.'
+			}
+		]
+	},
+	{
 		version: '0.37.2',
 		date: '2026-07-08',
 		title: 'Better Discover results, shown like your feed',

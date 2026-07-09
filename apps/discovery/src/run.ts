@@ -47,8 +47,8 @@ export interface RunResult {
 
 /** How many top profile terms seed the keyword queries. */
 const QUERY_TERM_COUNT = 8;
-/** Soft per-fetcher candidate cap. */
-const FETCH_LIMIT = 50;
+/** Soft per-fetcher candidate cap (a wider pool for ranking; deeper crawls fill it). */
+const FETCH_LIMIT = 120;
 
 /** The heaviest `n` terms of a sparse vector, as bare strings. */
 function topTerms(vec: TermVector, n: number): string[] {
