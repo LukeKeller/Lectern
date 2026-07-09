@@ -1,4 +1,4 @@
-import type { DiscoverySeed, RocchioWeights, TermVector } from "@lectern/shared";
+import type { DiscoverySeed, RocchioWeights, TermVector } from "../discovery";
 import { termFrequencies, tokenize } from "./tokenize";
 import { computeIdf, tfidfVector } from "./tfidf";
 

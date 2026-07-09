@@ -28,11 +28,7 @@ describe("cosine", () => {
 describe("computeIdf", () => {
   it("weights rare terms above common ones", () => {
     // "common" appears in all 3 docs; "rare" in 1.
-    const { idf, docCount } = computeIdf([
-      { common: 1, rare: 1 },
-      { common: 1 },
-      { common: 1 },
-    ]);
+    const { idf, docCount } = computeIdf([{ common: 1, rare: 1 }, { common: 1 }, { common: 1 }]);
     expect(docCount).toBe(3);
     expect(idf.rare).toBeGreaterThan(idf.common!);
   });

@@ -60,6 +60,8 @@ import {
   PushPublicKeyResponse,
   PushSubscriptionRequest,
   PushUnsubscribeRequest,
+  RelatedDocumentsQuery,
+  RelatedDocumentsResponse,
   SetFeedNotificationRequest,
   SaveDocumentRequest,
   SavedView,
@@ -74,6 +76,7 @@ import {
   SyncPushRequest,
   SyncPushResponse,
   TagsResponse,
+  TagSuggestionsResponse,
   TtsPreviewRequest,
   TtsSettings,
   TtsUsage,
@@ -382,6 +385,32 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
       return DocumentContentResponse.parse({ id, html });
     },
   );
+
+  // "More like this": up to `limit` library docs most similar to this one by
+  // local TF-IDF cosine (no LLM). 404 when the source doc doesn't exist.
+  app.get<{ Params: { id: string }; Querystring: Record<string, unknown> }>(
+    "/documents/:id/related",
+    async (req) => {
+      const { id } = req.params;
+      requireParsed(id);
+      const { limit } = RelatedDocumentsQuery.parse({
+        limit: req.query.limit !== undefined ? Number(req.query.limit) : undefined,
+      });
+      const related = await deps.overlay.relatedDocuments(id, limit);
+      if (related === null) throw new NotFoundError(`document not found: ${id}`);
+      return RelatedDocumentsResponse.parse({ related });
+    },
+  );
+
+  // Auto-tag suggestions: cosine of this doc's vector to each tag centroid over
+  // the library, excluding tags it already has. 404 when the doc doesn't exist.
+  app.get<{ Params: { id: string } }>("/documents/:id/tag-suggestions", async (req) => {
+    const { id } = req.params;
+    requireParsed(id);
+    const suggestions = await deps.overlay.tagSuggestions(id);
+    if (suggestions === null) throw new NotFoundError(`document not found: ${id}`);
+    return TagSuggestionsResponse.parse({ suggestions });
+  });
 
   // Adaptive reader accent derived from the cover image (computed once, cached).
   // Returns `{ color: "#rrggbb" | null }`; null means no usable colour.

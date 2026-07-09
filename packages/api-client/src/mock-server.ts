@@ -720,6 +720,21 @@ const handlers: Record<string, MockHandler> = {
         : ARTICLE;
     return { json: { id: params.id, html: `<main>${html}</main>` } };
   },
+  getRelatedDocuments: ({ params }) => ({
+    json: {
+      related: sampleCards()
+        .filter((c) => c.id !== params.id && c.category !== "email")
+        .slice(0, 3),
+    },
+  }),
+  getTagSuggestions: () => ({
+    json: {
+      suggestions: [
+        { tag: "tech", score: 0.62 },
+        { tag: "longread", score: 0.41 },
+      ],
+    },
+  }),
   getDocumentAccent: () => ({ json: { color: null } }),
   // A realistic full re-skin sample so `pnpm dev` actually shows the source-theming
   // feature (accent + background + text/link colours + fonts + favicon + site name)

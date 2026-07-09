@@ -1,23 +1,47 @@
 <script lang="ts">
 	import { getSync } from '$lib/sync';
+	import { getClient } from '$lib/config';
 
 	let { id, tags }: { id: string; tags: string[] } = $props();
 
 	let draft = $state('');
+
+	// Server-suggested tags (tag-centroid similarity), fetched once per document.
+	// Keyed on the document id so a reader→reader hop re-fetches for the new doc.
+	let suggestions = $state<string[]>([]);
+	$effect(() => {
+		const current = id;
+		suggestions = [];
+		if (!current) return;
+		let cancelled = false;
+		void getClient()
+			.getTagSuggestions(current)
+			.then((r) => {
+				if (!cancelled) suggestions = r.suggestions.map((s) => s.tag);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Only surface suggestions the document doesn't already carry; once a chip's
+	// tag is applied it drops out of the row via this reactive filter.
+	const openSuggestions = $derived(suggestions.filter((tag) => !tags.includes(tag)));
 
 	function commit(next: string[]) {
 		const sync = getSync();
 		void sync.enqueue({ type: 'setTags', id, tags: next }).then(() => sync.flush());
 	}
 
+	function addTag(name: string) {
+		if (!name || tags.includes(name)) return;
+		commit([...tags, name]);
+	}
+
 	function add(event: SubmitEvent) {
 		event.preventDefault();
-		const name = draft.trim();
-		if (!name || tags.includes(name)) {
-			draft = '';
-			return;
-		}
-		commit([...tags, name]);
+		addTag(draft.trim());
 		draft = '';
 	}
 
@@ -37,6 +61,21 @@
 		<input bind:value={draft} type="text" placeholder="Add tag…" autocomplete="off" />
 	</form>
 </div>
+{#if openSuggestions.length}
+	<div class="tag-suggestions">
+		<span class="suggest-label">Suggested:</span>
+		{#each openSuggestions as tag (tag)}
+			<button
+				type="button"
+				class="suggest-chip"
+				aria-label={`Add tag: ${tag}`}
+				onclick={() => addTag(tag)}
+			>
+				{tag}
+			</button>
+		{/each}
+	</div>
+{/if}
 
 <style>
 	.tag-editor {
@@ -89,5 +128,43 @@
 	input:focus {
 		border-color: var(--accent);
 		outline: none;
+	}
+	.tag-suggestions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: 0.5rem;
+	}
+	.suggest-label {
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	/* Dashed outline (vs the filled applied tags) reads as "not yet applied". */
+	.suggest-chip {
+		font-size: var(--text-xs);
+		padding: 0.15rem 0.55rem;
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius-full);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease);
+	}
+	.suggest-chip:hover {
+		border-color: var(--accent);
+		border-style: solid;
+		background: var(--surface-alt);
+		color: var(--text);
+	}
+	.suggest-chip:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 </style>

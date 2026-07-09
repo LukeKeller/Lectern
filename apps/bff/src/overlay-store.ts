@@ -25,7 +25,15 @@ import {
   DiscoveryVote,
   FINISHED_THRESHOLD,
   PlayerState,
+  computeIdf,
+  cosine,
+  l2normalize,
+  termFrequencies,
+  tfidfVector,
+  tokenize,
+  surfaceForms,
 } from "@lectern/shared";
+import type { TagSuggestion, TermVector } from "@lectern/shared";
 import type {
   CandidateStatus,
   CreateRunRequest,
@@ -76,6 +84,7 @@ import type {
   PodcastEpisodeRow,
 } from "./db/schema";
 import { hostOf, normalizeUrl } from "./discovery-url";
+import { htmlToText } from "./html-text";
 import { parseId } from "./ids";
 import type { SourceThemeTokens } from "./source-theme";
 import {
@@ -412,9 +421,11 @@ export class DrizzleOverlayStore implements OverlayStore {
     // websearch_to_tsquery gives users quoted phrases / OR / -negation and never
     // throws on junk input (returns an empty query -> no rows). Rank blends a
     // weight-A title vector with the weight-B body. Snippets are tag-stripped and
-    // delimited with «» sentinels (rendered as text, never injected as HTML).
+    // delimited with «» sentinels (rendered as text, never injected as HTML). The
+    // title is selected alongside for the TF-IDF re-rank below; it is dropped
+    // before returning so the SearchResult shape is unchanged.
     const rows = (await this.db.execute(dsql`
-      select d.id as id,
+      select d.id as id, d.title as title,
         ts_headline('english', regexp_replace(left(c.html, 200000), '<[^>]+>', ' ', 'g'), query,
           'StartSel=«,StopSel=»,MaxFragments=2,MaxWords=18,MinWords=5,FragmentDelimiter= … ') as snippet,
         ts_rank(setweight(to_tsvector('english', coalesce(d.title, '')), 'A') || setweight(c.body_tsv, 'B'), query) as rank
@@ -424,8 +435,76 @@ export class DrizzleOverlayStore implements OverlayStore {
       where d.deleted_at is null and c.body_tsv @@ query
       order by rank desc, d.updated_at desc nulls last
       limit ${limit}
-    `)) as unknown as Array<{ id: string; snippet: string; rank: number }>;
-    return rows.map((r) => ({ id: r.id, snippet: r.snippet, rank: Number(r.rank) }));
+    `)) as unknown as Array<{ id: string; title: string | null; snippet: string; rank: number }>;
+    const hits = rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      snippet: r.snippet,
+      rank: Number(r.rank),
+    }));
+    // Additive, SET-preserving re-rank: keep exactly the FTS hits Postgres
+    // returned (never drop one), just reorder them by a blend of ts_rank and
+    // TF-IDF cosine to the query so the most on-topic keyword hits float up.
+    return rerankSearchHits(q, hits).map(({ id, snippet, rank }) => ({ id, snippet, rank }));
+  }
+
+  /**
+   * "More like this": library documents most similar to `id` by local TF-IDF
+   * cosine (no LLM). Uses the source doc's salient terms to pull an FTS candidate
+   * set (cheap keyword recall), then re-ranks those candidates by cosine of the
+   * full source vector vs each candidate's title+body vector. Returns null when
+   * the source doc doesn't exist; [] when it exists but nothing relates.
+   */
+  async relatedDocuments(id: string, limit: number): Promise<Card[] | null> {
+    const source = await this.getIndexedCard(id);
+    if (!source) return null;
+    const content = await this.getContent(id);
+    const body = content ? htmlToText(content.html) : "";
+    // Fall back to title-only terms when no body is captured yet (best-effort).
+    const sourceText = `${source.title ?? ""} ${body}`.trim();
+    const sourceTf = termFrequencies(tokenize(sourceText));
+    if (Object.keys(sourceTf).length === 0) return [];
+    // Query the FTS with the top salient SURFACE words (websearch_to_tsquery wants
+    // real words, not Porter stems), OR-joined so it recalls a broad candidate set.
+    const queryTerms = salientSurfaceTerms(sourceText, 10);
+    if (queryTerms.length === 0) return [];
+    const hits = await this.searchContent(queryTerms.join(" or "), 40);
+    const candidateIds = hits.map((h) => h.id).filter((cid) => cid !== id);
+    if (candidateIds.length === 0) return [];
+    // Load the candidate cards (what we return) and their bodies (for the vector)
+    // in two batched reads — single-user scale, so a small IN-list scan is fine.
+    const [cards, contentRows] = await Promise.all([
+      this.cardsByIds(candidateIds),
+      this.db
+        .select({ id: documentContent.documentId, html: documentContent.html })
+        .from(documentContent)
+        .where(inArray(documentContent.documentId, candidateIds)),
+    ]);
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    const htmlById = new Map(contentRows.map((r) => [r.id, r.html]));
+    const snippetById = new Map(hits.map((h) => [h.id, h.snippet]));
+    const candidates = candidateIds
+      .filter((cid) => cardById.has(cid))
+      .map((cid) => {
+        const card = cardById.get(cid)!;
+        const html = htmlById.get(cid);
+        // Prefer the captured body; fall back to the FTS snippet if uncaptured.
+        const bodyText = html ? htmlToText(html) : (snippetById.get(cid) ?? "");
+        const tf = termFrequencies(tokenize(`${card.title ?? ""} ${bodyText}`));
+        return { id: cid, tf };
+      });
+    const rankedIds = rankRelated(sourceTf, candidates, limit);
+    return rankedIds.map((rid) => cardById.get(rid)!).filter(Boolean);
+  }
+
+  /** Batch-load live (non-deleted) indexed cards by id (order not preserved). */
+  private async cardsByIds(ids: string[]): Promise<Card[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(and(inArray(documents.id, ids), isNull(documents.deletedAt)));
+    return this.cardsFromRows(rows);
   }
 
   async upsertOverlay(id: string, patch: OverlayPatch): Promise<void> {
@@ -465,6 +544,57 @@ export class DrizzleOverlayStore implements OverlayStore {
            order by count desc, t.name asc`,
     );
     return Array.from(rows, (r) => ({ name: String(r.name), count: Number(r.count) }));
+  }
+
+  /**
+   * Suggested tags for a document: cosine of its TF-IDF vector to each tag's
+   * centroid over the library (local IR, no LLM), top 3 above a small threshold,
+   * excluding tags the doc already carries. Null if the doc doesn't exist.
+   */
+  async tagSuggestions(id: string): Promise<TagSuggestion[] | null> {
+    const source = await this.getIndexedCard(id);
+    if (!source) return null;
+    const content = await this.getContent(id);
+    const text = `${source.title ?? ""} ${content ? htmlToText(content.html) : ""}`.trim();
+    const centroids = await this.getTagCentroids();
+    return suggestTagsFromCentroids(text, source.tags, centroids);
+  }
+
+  /**
+   * The per-tag TF-IDF centroids, cached module-wide with a short TTL (single
+   * user, so no key). Recomputed lazily when stale — a capped per-tag scan.
+   */
+  private async getTagCentroids(): Promise<TagCentroids> {
+    const now = Date.now();
+    if (tagCentroidCache && now - tagCentroidCache.builtAt < TAG_CENTROID_TTL_MS) {
+      return tagCentroidCache;
+    }
+    const samples = await this.sampleTagCorpus(40);
+    tagCentroidCache = { ...buildTagCentroids(samples), builtAt: now };
+    return tagCentroidCache;
+  }
+
+  /**
+   * For each tag, sample up to `perTag` docs carrying it and load their
+   * title+body text. Single-user scale — one capped query per tag is fine
+   * (mirrors the other "single-user scale" scans in this store).
+   */
+  private async sampleTagCorpus(perTag: number): Promise<{ tag: string; texts: string[] }[]> {
+    const tags = await this.listTags();
+    const out: { tag: string; texts: string[] }[] = [];
+    for (const t of tags) {
+      const rows = await this.db
+        .select({ title: documents.title, html: documentContent.html })
+        .from(documents)
+        .leftJoin(documentContent, eq(documentContent.documentId, documents.id))
+        .where(and(isNull(documents.deletedAt), arrayContains(documents.tags, [t.name])))
+        .limit(perTag);
+      const texts = rows
+        .map((r) => `${r.title ?? ""} ${r.html ? htmlToText(r.html) : ""}`.trim())
+        .filter((s) => s.length > 0);
+      out.push({ tag: t.name, texts });
+    }
+    return out;
   }
 
   async listViews(): Promise<SavedView[]> {
@@ -1300,6 +1430,147 @@ export function groupFollowSuggestions(
     .filter(([, e]) => e.count >= minSignals)
     .map(([domain, e]) => ({ domain, signalCount: e.count, sampleTitles: e.titles }))
     .sort((a, b) => b.signalCount - a.signalCount || a.domain.localeCompare(b.domain));
+}
+
+// ---- local-IR helpers (pure; unit-tested without a DB) --------------------
+
+/**
+ * The top `k` most frequent salient terms of `text`, returned as SURFACE words
+ * (the readable form the reader saw) rather than Porter stems, because
+ * `websearch_to_tsquery` wants real words. Ties break alphabetically for
+ * determinism. Powers the "more like this" FTS candidate query.
+ */
+export function salientSurfaceTerms(text: string, k: number): string[] {
+  const tf = termFrequencies(tokenize(text));
+  const surfaces = surfaceForms(text);
+  return Object.entries(tf)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, k)
+    .map(([stem]) => surfaces[stem] ?? stem);
+}
+
+/**
+ * Re-rank FTS candidates by TF-IDF cosine to `sourceTf`: computes an IDF over the
+ * source + candidate corpus, scores each candidate by cosine, and returns the top
+ * `limit` candidate ids (score desc, id asc as a stable tie-break). Zero-overlap
+ * candidates keep a real (possibly 0) score; the caller already guaranteed a
+ * keyword match, so the FTS recall is the safety net. Pure — exported for tests.
+ */
+export function rankRelated(
+  sourceTf: TermVector,
+  candidates: { id: string; tf: TermVector }[],
+  limit: number,
+): string[] {
+  if (candidates.length === 0) return [];
+  const { idf } = computeIdf([sourceTf, ...candidates.map((c) => c.tf)]);
+  const sv = tfidfVector(sourceTf, idf);
+  return candidates
+    .map((c) => ({ id: c.id, score: cosine(sv, tfidfVector(c.tf, idf)) }))
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .slice(0, limit)
+    .map((s) => s.id);
+}
+
+/** An FTS hit enriched with the doc title for the cosine re-rank (title is not
+ *  part of the public SearchResult; the store drops it after ranking). */
+export interface RankableHit {
+  id: string;
+  title: string | null;
+  snippet: string;
+  rank: number;
+}
+
+/**
+ * SET-preserving re-rank of the FTS hit list: reorder the top `window` hits by a
+ * blend of the normalized `ts_rank` and the TF-IDF cosine of the query vs each
+ * hit's title+snippet vector, leaving any beyond the window in place. The blend
+ * is `rank/maxRank + cosine` — both in [0,1], summed with equal weight, so a
+ * strong keyword hit keeps its footing and cosine only lifts genuinely on-topic
+ * hits / breaks ties (original ts_rank order is the stable tie-break). No hit is
+ * ever dropped, and a query that tokenizes to nothing returns the input untouched
+ * — the change is purely additive ordering, never a change to the result set.
+ */
+export function rerankSearchHits(query: string, hits: RankableHit[], window = 50): RankableHit[] {
+  const qtf = termFrequencies(tokenize(query));
+  if (Object.keys(qtf).length === 0 || hits.length <= 1) return hits;
+  const head = hits.slice(0, window).map((h) => ({
+    h,
+    tf: termFrequencies(tokenize(`${h.title ?? ""} ${h.snippet}`)),
+  }));
+  const tail = hits.slice(window);
+  const { idf } = computeIdf([qtf, ...head.map((e) => e.tf)]);
+  const qv = tfidfVector(qtf, idf);
+  const maxRank = Math.max(0, ...head.map((e) => e.h.rank));
+  const scored = head.map((e, i) => {
+    const cos = cosine(qv, tfidfVector(e.tf, idf));
+    const normRank = maxRank > 0 ? e.h.rank / maxRank : 0;
+    return { h: e.h, i, score: normRank + cos };
+  });
+  scored.sort((a, b) => b.score - a.score || a.i - b.i);
+  return [...scored.map((s) => s.h), ...tail];
+}
+
+/** Per-tag TF-IDF centroids plus the IDF they were built with. */
+export interface TagCentroids {
+  idf: TermVector;
+  centroids: { tag: string; vec: TermVector }[];
+}
+
+type CachedTagCentroids = TagCentroids & { builtAt: number };
+/** Module-wide centroid cache (single user, so keyed by nothing) + its TTL. */
+let tagCentroidCache: CachedTagCentroids | null = null;
+const TAG_CENTROID_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Build per-tag TF-IDF centroids from sampled tag corpora. The IDF is computed
+ * over every sampled doc across all tags; each tag's centroid is the L2-normalized
+ * average of its docs' TF-IDF vectors. Tags with no usable sample are dropped.
+ * Pure — exported for tests.
+ */
+export function buildTagCentroids(samples: { tag: string; texts: string[] }[]): TagCentroids {
+  const perTag = samples.map((s) => ({
+    tag: s.tag,
+    tfs: s.texts
+      .map((t) => termFrequencies(tokenize(t)))
+      .filter((tf) => Object.keys(tf).length > 0),
+  }));
+  const { idf } = computeIdf(perTag.flatMap((p) => p.tfs));
+  const centroids = perTag
+    .filter((p) => p.tfs.length > 0)
+    .map((p) => {
+      const sum: TermVector = {};
+      for (const tf of p.tfs) {
+        for (const [term, w] of Object.entries(tfidfVector(tf, idf))) {
+          sum[term] = (sum[term] ?? 0) + w;
+        }
+      }
+      return { tag: p.tag, vec: l2normalize(sum) };
+    });
+  return { idf, centroids };
+}
+
+/**
+ * Cosine of a document's TF-IDF vector (built with the centroids' IDF) to each
+ * tag centroid; the top `topN` above `threshold`, excluding `existingTags`,
+ * sorted by score desc (tag asc as a stable tie-break). Pure — exported for tests.
+ */
+export function suggestTagsFromCentroids(
+  docText: string,
+  existingTags: string[],
+  centroids: TagCentroids,
+  opts: { topN?: number; threshold?: number } = {},
+): TagSuggestion[] {
+  const { topN = 3, threshold = 0.05 } = opts;
+  const tf = termFrequencies(tokenize(docText));
+  if (Object.keys(tf).length === 0) return [];
+  const dv = tfidfVector(tf, centroids.idf);
+  const have = new Set(existingTags);
+  return centroids.centroids
+    .filter((c) => !have.has(c.tag))
+    .map((c) => ({ tag: c.tag, score: cosine(dv, c.vec) }))
+    .filter((s) => s.score >= threshold)
+    .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
+    .slice(0, topN);
 }
 
 /** Fallback voice (ElevenLabs "Rachel") + model when the user hasn't chosen. */

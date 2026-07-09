@@ -28,6 +28,8 @@ import {
   SavedView,
   SaveDocumentRequest,
   SearchResponse,
+  RelatedDocumentsResponse,
+  TagSuggestionsResponse,
   SourceThemeResponse,
   SourceThemesResponse,
   SyncPullQuery,
@@ -246,6 +248,19 @@ export class LecternClient {
   /** Full-text search over owned article bodies (server-side; online only). */
   search(q: string, limit = 20) {
     return this.request("GET", "/search", { query: { q, limit }, schema: SearchResponse });
+  }
+  /** "More like this" — library documents related to the given one. */
+  getRelatedDocuments(id: string, limit = 3) {
+    return this.request("GET", `/documents/${id}/related`, {
+      query: { limit },
+      schema: RelatedDocumentsResponse,
+    });
+  }
+  /** Suggested tags for a document (tag-centroid similarity). */
+  getTagSuggestions(id: string) {
+    return this.request("GET", `/documents/${id}/tag-suggestions`, {
+      schema: TagSuggestionsResponse,
+    });
   }
   listHighlights(id: string) {
     return this.request("GET", `/documents/${id}/highlights`, { schema: HighlightsResponse });

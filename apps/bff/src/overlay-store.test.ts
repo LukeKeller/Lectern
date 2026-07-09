@@ -2,10 +2,17 @@ import { Card } from "@lectern/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   backendTruthSet,
+  buildTagCentroids,
   cardFromRow,
   groupFollowSuggestions,
   OVERLAY_COLUMNS,
+  rankRelated,
+  rerankSearchHits,
+  salientSurfaceTerms,
+  suggestTagsFromCentroids,
+  type RankableHit,
 } from "./overlay-store";
+import { termFrequencies, tokenize } from "@lectern/shared";
 import type { DocumentRow } from "./db/schema";
 
 /**
@@ -144,5 +151,136 @@ describe("groupFollowSuggestions", () => {
     const a = out.find((s) => s.domain === "a.com")!;
     expect(a.signalCount).toBe(6);
     expect(a.sampleTitles).toEqual(["t1", "t4", "t5"]); // 3 non-blank, capped
+  });
+});
+
+const tf = (text: string) => termFrequencies(tokenize(text));
+
+describe("salientSurfaceTerms", () => {
+  it("returns the top-k most frequent terms as readable surface words, not stems", () => {
+    // "connections"/"connection" both stem to "connect"; the surface form of the
+    // FIRST occurrence ("connections") is kept so an FTS query uses a real word.
+    const text = "Connections connection connection intelligence intelligence systems";
+    const terms = salientSurfaceTerms(text, 2);
+    expect(terms).toEqual(["connections", "intelligence"]);
+  });
+
+  it("is deterministic on ties (alphabetical) and caps at k", () => {
+    const terms = salientSurfaceTerms("alpha beta gamma", 2);
+    expect(terms).toEqual(["alpha", "beta"]); // all freq 1 -> alpha order
+  });
+
+  it("returns [] for text with no salient tokens", () => {
+    expect(salientSurfaceTerms("the a of to", 5)).toEqual([]);
+  });
+});
+
+describe("rankRelated", () => {
+  it("orders candidates by TF-IDF cosine to the source, closest first", () => {
+    const source = tf("machine learning neural networks deep learning");
+    const candidates = [
+      { id: "far", tf: tf("cooking recipes kitchen food") },
+      { id: "near", tf: tf("deep learning neural networks training") },
+      { id: "mid", tf: tf("learning statistics regression") },
+    ];
+    expect(rankRelated(source, candidates, 3)).toEqual(["near", "mid", "far"]);
+  });
+
+  it("respects the limit and breaks score ties by id asc", () => {
+    const source = tf("apple banana");
+    const candidates = [
+      { id: "b", tf: tf("apple banana") },
+      { id: "a", tf: tf("apple banana") },
+    ];
+    expect(rankRelated(source, candidates, 1)).toEqual(["a"]);
+  });
+
+  it("returns [] with no candidates", () => {
+    expect(rankRelated(tf("x y z"), [], 3)).toEqual([]);
+  });
+});
+
+describe("rerankSearchHits", () => {
+  const hit = (id: string, title: string, snippet: string, rank: number): RankableHit => ({
+    id,
+    title,
+    snippet,
+    rank,
+  });
+
+  it("never drops a hit and preserves the exact set (only reorders)", () => {
+    const hits = [
+      hit("a", "Gardening basics", "how to plant tomatoes", 0.9),
+      hit("b", "Machine learning", "neural networks and deep learning models", 0.8),
+    ];
+    const out = rerankSearchHits("deep learning models", hits);
+    expect(new Set(out.map((h) => h.id))).toEqual(new Set(["a", "b"]));
+    // The lower-ts_rank but on-topic hit is lifted above the off-topic top hit.
+    expect(out[0]!.id).toBe("b");
+  });
+
+  it("returns the input unchanged when the query tokenizes to nothing", () => {
+    const hits = [hit("a", "T", "s", 0.5), hit("b", "T2", "s2", 0.4)];
+    expect(rerankSearchHits("the of a", hits)).toBe(hits);
+  });
+
+  it("keeps original order when cosine is uninformative (stable tie-break)", () => {
+    const hits = [hit("a", "", "unrelated one", 0.9), hit("b", "", "unrelated two", 0.5)];
+    const out = rerankSearchHits("xyzzy quux", hits);
+    expect(out.map((h) => h.id)).toEqual(["a", "b"]);
+  });
+
+  it("leaves hits beyond the window in place", () => {
+    const hits = [
+      hit("a", "off topic", "nothing here", 0.9),
+      hit("b", "space rockets", "rockets to orbit", 0.8),
+      hit("c", "tail one", "tail", 0.7),
+    ];
+    const out = rerankSearchHits("rockets orbit", hits, 2);
+    // window=2: a,b reorder (b lifted); c stays appended last.
+    expect(out.map((h) => h.id)).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("buildTagCentroids + suggestTagsFromCentroids", () => {
+  const samples = [
+    {
+      tag: "tech",
+      texts: ["machine learning neural networks", "software engineering compilers systems"],
+    },
+    { tag: "cooking", texts: ["recipes baking bread", "kitchen knives cooking food"] },
+  ];
+
+  it("suggests the closest tag for an on-topic doc, above threshold", () => {
+    const centroids = buildTagCentroids(samples);
+    const out = suggestTagsFromCentroids(
+      "deep neural networks and machine learning systems",
+      [],
+      centroids,
+    );
+    expect(out[0]!.tag).toBe("tech");
+    expect(out[0]!.score).toBeGreaterThan(0.05);
+    expect(out.some((s) => s.tag === "cooking" && s.score > 0.05)).toBe(false);
+  });
+
+  it("excludes tags the doc already carries", () => {
+    const centroids = buildTagCentroids(samples);
+    const out = suggestTagsFromCentroids("machine learning neural networks", ["tech"], centroids);
+    expect(out.some((s) => s.tag === "tech")).toBe(false);
+  });
+
+  it("returns [] for an empty doc and drops tags with no usable sample", () => {
+    const centroids = buildTagCentroids([{ tag: "empty", texts: ["the a of"] }, ...samples]);
+    expect(centroids.centroids.some((c) => c.tag === "empty")).toBe(false);
+    expect(suggestTagsFromCentroids("", [], centroids)).toEqual([]);
+  });
+
+  it("honours topN and threshold", () => {
+    const centroids = buildTagCentroids(samples);
+    const out = suggestTagsFromCentroids("machine learning recipes", [], centroids, {
+      topN: 1,
+      threshold: 0,
+    });
+    expect(out).toHaveLength(1);
   });
 });

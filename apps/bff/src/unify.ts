@@ -22,6 +22,7 @@ import type {
   Source,
   SourceThemeSummary,
   Tag,
+  TagSuggestion,
   TtsProvider,
   UpdateDiscoverySettingsRequest,
   UpdateRunRequest,
@@ -290,11 +291,23 @@ export interface ContentStore {
   putContent(id: string, html: string): Promise<void>;
   /** Full-text search over owned bodies (live docs only), ranked, with snippets. */
   searchContent(q: string, limit: number): Promise<SearchResult[]>;
+  /**
+   * "More like this": up to `limit` library documents most similar (TF-IDF
+   * cosine, local IR) to the given one. Null if the source doc doesn't exist;
+   * an empty array is a valid "found, nothing related" answer.
+   */
+  relatedDocuments(id: string, limit: number): Promise<Card[] | null>;
 }
 
 /** Cross-source organization: aggregated tags + saved views. */
 export interface OrganizationStore {
   listTags(): Promise<Tag[]>;
+  /**
+   * Suggested tags for a document: cosine of the doc's TF-IDF vector to each
+   * tag's centroid over the library (local IR, no LLM), excluding tags it
+   * already has. Null if the doc doesn't exist; empty array is a valid answer.
+   */
+  tagSuggestions(id: string): Promise<TagSuggestion[] | null>;
   listViews(): Promise<SavedView[]>;
   createView(input: CreateViewRequest): Promise<SavedView>;
   updateView(id: string, patch: UpdateViewRequest): Promise<SavedView | null>;

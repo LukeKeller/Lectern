@@ -1,4 +1,4 @@
-import type { TermVector } from "@lectern/shared";
+import type { TermVector } from "../discovery";
 
 /**
  * Classic TF-IDF vector-space scoring (no LLM). Documents are sparse
@@ -63,8 +63,7 @@ export function l2normalize(vec: TermVector): TermVector {
 export function cosine(a: TermVector, b: TermVector): number {
   const an = l2normalize(a);
   const bn = l2normalize(b);
-  const [small, large] =
-    Object.keys(an).length <= Object.keys(bn).length ? [an, bn] : [bn, an];
+  const [small, large] = Object.keys(an).length <= Object.keys(bn).length ? [an, bn] : [bn, an];
   let dot = 0;
   for (const [term, v] of Object.entries(small)) {
     const other = large[term];

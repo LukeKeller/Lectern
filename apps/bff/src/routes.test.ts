@@ -27,6 +27,7 @@ import {
   type SourceThemeSummary,
   type SavedView,
   type Tag,
+  type TagSuggestion,
   type TermVector,
   type TtsProvider,
   type UpdateDiscoverySettingsRequest,
@@ -431,6 +432,21 @@ class FakeOverlayStore implements OverlayStore {
       if (at >= 0) hits.push({ id, snippet: text.slice(at, at + 60).trim(), rank: 1 });
     }
     return hits.slice(0, limit);
+  }
+  async relatedDocuments(id: string, limit: number): Promise<Card[] | null> {
+    if (!this.index.has(id) || this.deleted.has(id)) return null;
+    const out: Card[] = [];
+    for (const other of this.index.keys()) {
+      if (other === id || this.deleted.has(other)) continue;
+      const card = await this.getIndexedCard(other);
+      if (card) out.push(card);
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+  async tagSuggestions(id: string): Promise<TagSuggestion[] | null> {
+    if (!this.index.has(id) || this.deleted.has(id)) return null;
+    return [];
   }
 
   async getOverlays(ids: string[]): Promise<Record<string, Overlay>> {

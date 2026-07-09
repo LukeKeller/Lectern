@@ -302,8 +302,7 @@
 			// otherwise fall back to its light accent. (The contrast clamp in
 			// `accentStyle` still lifts whichever we pick against the theme background.)
 			const dark = isDarkTheme(effectiveReaderTheme);
-			const sourceAccent =
-				(dark && sourceThemeData.accentDark) || sourceThemeData.accent;
+			const sourceAccent = (dark && sourceThemeData.accentDark) || sourceThemeData.accent;
 			if (sourceAccent) return sourceAccent;
 		}
 		if (readerSettings.current.adaptiveAccent && accentColor) return accentColor;
@@ -356,9 +355,7 @@
 	});
 	// The full inline style for `.doc`: user typography (styleVars) → chrome accent
 	// (accentStyle) → re-skin overrides last so they win where they overlap (--accent).
-	const docStyle = $derived(
-		`${styleVars};${accentStyle}${reskinStyle ? `;${reskinStyle}` : ''}`
-	);
+	const docStyle = $derived(`${styleVars};${accentStyle}${reskinStyle ? `;${reskinStyle}` : ''}`);
 
 	// In `full` mode, load the source's Google fonts so the masthead (display) and
 	// re-skinned reading column (body) can actually wear them — a family name alone
@@ -903,6 +900,26 @@
 		void db.cards.get(nid).then((c) => {
 			if (!cancelled) nextCard = c;
 		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// End-of-article "Related": library documents the server's local-IR engine
+	// judges similar to this one. Keyed on the document id; the race guard drops a
+	// stale response when the reader hops to another article before it resolves.
+	let relatedCards = $state<Card[]>([]);
+	$effect(() => {
+		const current = card?.id;
+		relatedCards = [];
+		if (!current) return;
+		let cancelled = false;
+		void getClient()
+			.getRelatedDocuments(current, 3)
+			.then((r) => {
+				if (!cancelled) relatedCards = r.related;
+			})
+			.catch(() => {});
 		return () => {
 			cancelled = true;
 		};
@@ -1538,6 +1555,33 @@
 					{#if deleteError}
 						<p class="end-delete-error" role="alert">Couldn't delete — try again.</p>
 					{/if}
+				{/if}
+				{#if relatedCards.length}
+					<nav class="related" aria-label="Related reading">
+						<h2 class="next-kicker related-kicker">Related</h2>
+						<ul class="related-list">
+							{#each relatedCards as rel (rel.id)}
+								<li>
+									<!-- replaceState so a hop into related reading swaps this reader
+									     entry rather than stacking — Back returns to the list. -->
+									<a
+										class="related-card"
+										href={resolve('/read/[id]', { id: rel.id })}
+										data-sveltekit-replacestate
+									>
+										<span class="related-title">{rel.title}</span>
+										<span class="next-meta">
+											{rel.category === 'email'
+												? displayAuthor(rel.author ?? '') || 'Newsletter'
+												: (rel.siteName ?? new URL(rel.url).hostname)}
+											{#if rel.readingTimeMinutes}<span class="dot">·</span>{rel.readingTimeMinutes}
+												min read{/if}
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</nav>
 				{/if}
 				{#if nextCard}
 					<!-- replaceState: advancing to the next article swaps this reader entry
@@ -2319,6 +2363,49 @@
 	.next-meta {
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+	/* Related reading: calm, subordinate to Next up — a quiet kicker over a small
+	   stack of link cards borrowing the next-up vocabulary. */
+	.related {
+		width: 100%;
+		max-width: 26rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.related-kicker {
+		margin: 0;
+		text-align: center;
+	}
+	.related-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.related-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		padding: 0.7rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text);
+		text-decoration: none;
+		transition:
+			border-color var(--dur-fast) var(--ease),
+			background var(--dur-fast) var(--ease);
+	}
+	.related-card:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-alt);
+	}
+	.related-title {
+		font-family: var(--font-serif);
+		font-size: var(--text-sm);
+		line-height: 1.35;
 	}
 	.hl-toast {
 		position: fixed;

@@ -111,9 +111,6 @@ importers:
       node-cron:
         specifier: ^3.0.3
         version: 3.0.3
-      stemmer:
-        specifier: ^2.0.1
-        version: 2.0.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -240,6 +237,9 @@ importers:
 
   packages/shared:
     dependencies:
+      stemmer:
+        specifier: ^2.0.1
+        version: 2.0.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3

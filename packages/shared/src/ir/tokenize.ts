@@ -1,5 +1,5 @@
 import { stemmer } from "stemmer";
-import type { TermVector } from "@lectern/shared";
+import type { TermVector } from "../discovery";
 
 /**
  * Text -> normalized term tokens. The SAME tokenizer is used for the seed

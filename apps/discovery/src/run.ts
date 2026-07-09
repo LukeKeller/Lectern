@@ -24,7 +24,7 @@ import {
   tfidfVector,
   tokenize,
   updateProfile,
-} from "./engine";
+} from "@lectern/shared";
 import { Seen } from "./dedupe";
 import { isoOrUndefined } from "./fetchers/dates";
 import { allFetchers, type Fetcher, type FetchContext, type RawCandidate } from "./fetchers";

@@ -8,3 +8,4 @@ export * from "./adapters";
 export * from "./api";
 export * from "./maintenance";
 export * from "./discovery";
+export * from "./ir";

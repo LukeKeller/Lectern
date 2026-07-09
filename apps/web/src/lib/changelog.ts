@@ -26,6 +26,25 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.40.0',
+		date: '2026-07-09',
+		title: 'Your library gets the same local smarts as Discover',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Related reading: at the end of an article you’ll now see a few of your own saved pieces that are most similar to it — found locally, no AI.'
+			},
+			{
+				kind: 'added',
+				text: 'Tag suggestions: the tag editor now suggests tags for an article based on how you’ve tagged similar things, so one tap files it consistently.'
+			},
+			{
+				kind: 'improved',
+				text: 'Search results are re-ranked so the most on-topic articles rise to the top, without dropping any keyword matches.'
+			}
+		]
+	},
+	{
 		version: '0.39.0',
 		date: '2026-07-09',
 		title: 'Discover can turn a source you love into a feed',

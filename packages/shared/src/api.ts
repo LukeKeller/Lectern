@@ -102,6 +102,24 @@ export type UpdateDocumentRequest = z.infer<typeof UpdateDocumentRequest>;
 export const DocumentContentResponse = z.object({ id: z.string(), html: z.string() });
 export type DocumentContentResponse = z.infer<typeof DocumentContentResponse>;
 
+/** "More like this" — library documents related to a given one, by shared
+ * TF-IDF terms (local IR, no LLM). */
+export const RelatedDocumentsQuery = z.object({
+  limit: z.number().int().min(1).max(10).default(3),
+});
+export type RelatedDocumentsQuery = z.infer<typeof RelatedDocumentsQuery>;
+
+export const RelatedDocumentsResponse = z.object({ related: z.array(Card) });
+export type RelatedDocumentsResponse = z.infer<typeof RelatedDocumentsResponse>;
+
+/** A suggested tag for a document plus its similarity score to that tag's
+ * centroid over the library. */
+export const TagSuggestion = z.object({ tag: z.string(), score: z.number() });
+export type TagSuggestion = z.infer<typeof TagSuggestion>;
+
+export const TagSuggestionsResponse = z.object({ suggestions: z.array(TagSuggestion) });
+export type TagSuggestionsResponse = z.infer<typeof TagSuggestionsResponse>;
+
 /** The cover-derived reader accent: a hex colour, or null when there's none. */
 export const DocumentAccentResponse = z.object({ color: z.string().nullable() });
 export type DocumentAccentResponse = z.infer<typeof DocumentAccentResponse>;
@@ -454,6 +472,25 @@ export const endpoints: Endpoint[] = [
     summary: "Get article HTML",
     tags: ["documents"],
     response: DocumentContentResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/documents/:id/related",
+    operationId: "getRelatedDocuments",
+    summary: "Library documents related to this one (more like this)",
+    tags: ["documents"],
+    query: RelatedDocumentsQuery,
+    response: RelatedDocumentsResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/documents/:id/tag-suggestions",
+    operationId: "getTagSuggestions",
+    summary: "Suggested tags for this document (tag-centroid similarity)",
+    tags: ["documents"],
+    response: TagSuggestionsResponse,
     status: 200,
   },
   {
