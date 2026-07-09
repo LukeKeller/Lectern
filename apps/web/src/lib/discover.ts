@@ -14,10 +14,24 @@ import type { Card, DiscoveryCandidate } from '@lectern/shared';
  * - `clear`   — dismiss WITHOUT training the model (distinct from a down-vote):
  *   drop it from the list, casting no vote.
  * - `clearAll`— dismiss every candidate at once (empties the list), no votes.
+ * - `muteHost`— drop every candidate served from a given host at once (the user
+ *   muted the source); the host is added to `mutedDomains` server-side.
  */
 export type CandidateAction =
 	| { type: 'upvote' | 'downvote' | 'save' | 'clear'; id: string }
-	| { type: 'clearAll' };
+	| { type: 'clearAll' }
+	| { type: 'muteHost'; host: string };
+
+/** Normalized host of a candidate URL (drops a leading `www.`), or '' when the
+ * URL can't be parsed. Shared by the mute action and its reducer so the host a
+ * candidate is filtered on matches the one persisted to `mutedDomains`. */
+export function candidateHost(url: string): string {
+	try {
+		return new URL(url).hostname.replace(/^www\./, '');
+	} catch {
+		return '';
+	}
+}
 
 export function applyCandidateAction(
 	list: DiscoveryCandidate[],
@@ -29,6 +43,8 @@ export function applyCandidateAction(
 			return list.filter((c) => c.id !== action.id);
 		case 'clearAll':
 			return [];
+		case 'muteHost':
+			return list.filter((c) => candidateHost(c.url) !== action.host);
 		case 'upvote':
 			return list.map((c) => (c.id === action.id ? { ...c, vote: 'up' } : c));
 		case 'save':

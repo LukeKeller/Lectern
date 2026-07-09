@@ -15,6 +15,10 @@ const cfg: DiscoveryConfig = {
   rocchio: { a: 1, b: 0.75, c: 0.25 },
   targetCount: 5,
   braveApiKey: "",
+  freshnessHalfLifeDays: 14,
+  fullText: true,
+  fullTextCandidates: 12,
+  mutedDomains: [],
 };
 
 const ctx: FetchContext = { queries: ["rust"], seedUrls: [], limit: 50, timeBudgetMs: 30000, cfg };
@@ -44,8 +48,22 @@ describe("searxng fetcher", () => {
     const f = createSearxngFetcher({ fetch: fakeFetch as typeof fetch });
     const out = await f.fetch(ctx);
     expect(out).toEqual([
-      { url: "https://a.com/1", title: "One", excerpt: "first result", fetcher: "searxng", publishedAt: undefined, siteName: "duckduckgo" },
-      { url: "https://b.com/2", title: "Two", excerpt: "second result", fetcher: "searxng", publishedAt: "2026-01-01", siteName: undefined },
+      {
+        url: "https://a.com/1",
+        title: "One",
+        excerpt: "first result",
+        fetcher: "searxng",
+        publishedAt: undefined,
+        siteName: "duckduckgo",
+      },
+      {
+        url: "https://b.com/2",
+        title: "Two",
+        excerpt: "second result",
+        fetcher: "searxng",
+        publishedAt: "2026-01-01",
+        siteName: undefined,
+      },
     ]);
   });
 

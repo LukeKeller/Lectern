@@ -26,6 +26,33 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.38.0',
+		date: '2026-07-09',
+		title: 'Discover reads the whole article, favours fresh, and shows its work',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'Discover now reads the full text of each candidate — not just the search snippet — before ranking it, so recommendations match what an article is actually about. (You can turn this off, or tune how many articles it reads, in Settings → Discover.)'
+			},
+			{
+				kind: 'improved',
+				text: 'Fresh articles rank higher: results now fade with age on an adjustable “freshness half-life”, so a great piece from yesterday beats an equally-relevant one from years ago.'
+			},
+			{
+				kind: 'added',
+				text: 'Every recommendation shows why it was picked — small chips of the topics it shares with your interests, right under the byline.'
+			},
+			{
+				kind: 'added',
+				text: 'Mute a source you never want to see: one tap on a card hides that whole domain from future runs. Manage your muted domains in Settings → Discover.'
+			},
+			{
+				kind: 'improved',
+				text: 'The Activity page now reports how many articles had their full text read during a run.'
+			}
+		]
+	},
+	{
 		version: '0.37.4',
 		date: '2026-07-09',
 		title: 'Discover works like your other lists',

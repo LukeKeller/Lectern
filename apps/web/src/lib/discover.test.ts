@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoveryCandidate } from '@lectern/shared';
-import { applyCandidateAction, candidateToCard } from './discover';
+import { applyCandidateAction, candidateHost, candidateToCard } from './discover';
 
 function makeCandidate(overrides: Partial<DiscoveryCandidate> = {}): DiscoveryCandidate {
 	return DiscoveryCandidate.parse({
@@ -49,6 +49,21 @@ describe('applyCandidateAction', () => {
 		expect(applyCandidateAction(list, { type: 'clearAll' })).toEqual([]);
 	});
 
+	it('muteHost drops every candidate from the given host (www-insensitive)', () => {
+		const list = [
+			makeCandidate({ id: 'a', url: 'https://spam.example/1' }),
+			makeCandidate({ id: 'b', url: 'https://www.spam.example/2' }),
+			makeCandidate({ id: 'c', url: 'https://keep.example/3' })
+		];
+		const next = applyCandidateAction(list, { type: 'muteHost', host: 'spam.example' });
+		expect(next.map((c) => c.id)).toEqual(['c']);
+	});
+
+	it('muteHost is a no-op when no candidate matches the host', () => {
+		const list = [makeCandidate({ id: 'a', url: 'https://keep.example/1' })];
+		expect(applyCandidateAction(list, { type: 'muteHost', host: 'other.example' })).toHaveLength(1);
+	});
+
 	it('returns a new array without mutating the input', () => {
 		const list = [makeCandidate({ id: 'a' })];
 		const next = applyCandidateAction(list, { type: 'upvote', id: 'a' });
@@ -60,6 +75,17 @@ describe('applyCandidateAction', () => {
 		const list = [makeCandidate({ id: 'a' })];
 		expect(applyCandidateAction(list, { type: 'downvote', id: 'zzz' })).toHaveLength(1);
 		expect(applyCandidateAction(list, { type: 'upvote', id: 'zzz' })[0].vote).toBe(null);
+	});
+});
+
+describe('candidateHost', () => {
+	it('normalizes the host and strips a leading www.', () => {
+		expect(candidateHost('https://www.example.com/a/b?x=1')).toBe('example.com');
+		expect(candidateHost('https://sub.example.com/a')).toBe('sub.example.com');
+	});
+
+	it('returns an empty string for an unparseable URL', () => {
+		expect(candidateHost('not a url')).toBe('');
 	});
 });
 

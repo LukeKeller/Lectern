@@ -15,6 +15,10 @@ const cfg: DiscoveryConfig = {
   rocchio: { a: 1, b: 0.75, c: 0.25 },
   targetCount: 5,
   braveApiKey: "secret-key",
+  freshnessHalfLifeDays: 14,
+  fullText: true,
+  fullTextCandidates: 12,
+  mutedDomains: [],
 };
 
 const ctx: FetchContext = { queries: ["rust"], seedUrls: [], limit: 50, timeBudgetMs: 30000, cfg };

@@ -8,6 +8,7 @@ import type {
   DiscoveryRun,
   DiscoveryRunStats,
   DiscoverySeed,
+  ExtractContentResponse,
   PutDiscoveryProfileRequest,
   RunStatus,
   RunTrigger,
@@ -15,8 +16,17 @@ import type {
   UnprocessedVotesResponse,
   UpdateRunRequest,
 } from "@lectern/shared";
-import { buildSeedProfile, cosine, termFrequencies, tfidfVector, tokenize, updateProfile } from "./engine";
+import {
+  buildSeedProfile,
+  cosine,
+  surfaceForms,
+  termFrequencies,
+  tfidfVector,
+  tokenize,
+  updateProfile,
+} from "./engine";
 import { Seen } from "./dedupe";
+import { isoOrUndefined } from "./fetchers/dates";
 import { allFetchers, type Fetcher, type FetchContext, type RawCandidate } from "./fetchers";
 
 /**
@@ -32,6 +42,7 @@ export interface DiscoveryClient {
   createCandidates(body: CreateCandidatesRequest): Promise<CreateCandidatesResponse>;
   createDiscoveryRun(body: CreateRunRequest): Promise<DiscoveryRun>;
   updateDiscoveryRun(id: string, body: UpdateRunRequest): Promise<DiscoveryRun>;
+  extractContent(url: string): Promise<ExtractContentResponse["result"]>;
 }
 
 export interface RunOptions {
@@ -49,6 +60,27 @@ export interface RunResult {
 const QUERY_TERM_COUNT = 8;
 /** Soft per-fetcher candidate cap (a wider pool for ranking; deeper crawls fill it). */
 const FETCH_LIMIT = 120;
+/** Concurrent full-text extractions in flight (polite to the BFF/Readeck). */
+const EXTRACT_CONCURRENCY = 4;
+/** Per-URL full-text extraction budget; a slow page falls back to its snippet. */
+const EXTRACT_TIMEOUT_MS = 15_000;
+/** How many readable "why this?" terms to surface per candidate. */
+const WHY_TERM_COUNT = 5;
+
+/** A scored candidate carried through ranking (and possibly re-scored on full text). */
+interface Scored {
+  candidate: RawCandidate;
+  /** Term-frequency map persisted as the candidate's `termVector` (trains votes). */
+  tf: TermVector;
+  /** L2-normalized TF-IDF vector, used for the "why this?" overlap. */
+  vec: TermVector;
+  /** Raw cosine similarity to the profile (the STORED, UI-visible score). */
+  score: number;
+  /** cosine × recency — the value we actually rank/truncate by. */
+  finalScore: number;
+  /** The text scored (title + excerpt, or the full article once extracted). */
+  text: string;
+}
 
 /** The heaviest `n` terms of a sparse vector, as bare strings. */
 function topTerms(vec: TermVector, n: number): string[] {
@@ -56,6 +88,101 @@ function topTerms(vec: TermVector, n: number): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
     .map(([term]) => term);
+}
+
+/**
+ * Freshness multiplier: exponential decay `0.5 ** (ageDays / halfLifeDays)`,
+ * floored at 0.3 so an old-but-highly-relevant article still surfaces. Undated
+ * items get a neutral 0.6 — better than provably stale, worse than fresh.
+ */
+export function recency(
+  publishedAt: string | null | undefined,
+  halfLifeDays: number,
+  now: Date = new Date(),
+): number {
+  if (!publishedAt) return 0.6;
+  const t = Date.parse(publishedAt);
+  if (Number.isNaN(t)) return 0.6;
+  const ageDays = Math.max(0, (now.getTime() - t) / 86_400_000);
+  const decay = 0.5 ** (ageDays / halfLifeDays);
+  return Math.max(0.3, decay);
+}
+
+/**
+ * The readable "why this?" terms: the heaviest terms present in BOTH the
+ * candidate's TF-IDF vector and the interest profile, ranked by the product of
+ * their weights and mapped from Porter stems back to surface forms. Deduped,
+ * capped at `limit`.
+ */
+export function whyThisTerms(
+  candidateVec: TermVector,
+  profileVec: TermVector,
+  surface: Record<string, string>,
+  limit = WHY_TERM_COUNT,
+): string[] {
+  const scored: { stem: string; weight: number }[] = [];
+  for (const [stem, w] of Object.entries(candidateVec)) {
+    const p = profileVec[stem];
+    if (p === undefined) continue;
+    scored.push({ stem, weight: w * p });
+  }
+  scored.sort((a, b) => b.weight - a.weight);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const { stem } of scored) {
+    const word = surface[stem] ?? stem;
+    if (seen.has(word)) continue;
+    seen.add(word);
+    out.push(word);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** True when `host` is `domain` or a subdomain of it (case-insensitive). */
+export function hostMuted(host: string, muted: string[]): boolean {
+  const h = host.toLowerCase();
+  return muted.some((raw) => {
+    const dom = raw.trim().toLowerCase().replace(/^\.+/, "").replace(/\.+$/, "");
+    if (!dom) return false;
+    return h === dom || h.endsWith(`.${dom}`);
+  });
+}
+
+/** Run `fn` over `items` with at most `limit` in flight, preserving order. */
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await fn(items[i]!, i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** Resolve `p`, or null if it rejects or doesn't settle within `ms`. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    const t = timer as unknown as { unref?: () => void };
+    if (typeof t.unref === "function") t.unref();
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
 }
 
 /**
@@ -68,7 +195,14 @@ function topTerms(vec: TermVector, n: number): string[] {
 export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): Promise<RunResult> {
   const runId = `run:${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const trigger = opts.trigger;
-  const stats: DiscoveryRunStats = { fetched: 0, deduped: 0, scored: 0, inserted: 0, perFetcher: {} };
+  const stats: DiscoveryRunStats = {
+    fetched: 0,
+    deduped: 0,
+    scored: 0,
+    extracted: 0,
+    inserted: 0,
+    perFetcher: {},
+  };
 
   // 1. Announce the run.
   await client.createDiscoveryRun({ id: runId, trigger, stage: "loading profile" });
@@ -144,42 +278,103 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
     stats.fetched = raw.length;
     await client.updateDiscoveryRun(runId, { stats });
 
-    // 6. Dedupe by normalized URL.
+    // 6. Dedupe by normalized URL, then drop muted domains BEFORE any scoring.
     await client.updateDiscoveryRun(runId, { stage: "dedupe" });
     const seen = new Seen();
     const unique = raw.filter((c) => seen.add(c.url));
     stats.deduped = unique.length;
+    const muted = cfg.mutedDomains ?? [];
+    const kept =
+      muted.length === 0
+        ? unique
+        : unique.filter((c) => {
+            try {
+              return !hostMuted(new URL(c.url).host, muted);
+            } catch {
+              return true; // unparseable URL: leave it for the scorer to handle
+            }
+          });
     await client.updateDiscoveryRun(runId, { stats });
 
-    // 7. Score each survivor by TF-IDF cosine similarity to the profile.
+    // 7. Score every survivor by TF-IDF cosine to the profile, then rank by
+    // `cosine * recency` (topical relevance discounted by staleness). The STORED
+    // `score` stays the raw cosine — the UI badge shows pure relevance.
     await client.updateDiscoveryRun(runId, { stage: "scoring" });
-    const scored = unique.map((candidate) => {
+    const halfLife = cfg.freshnessHalfLifeDays;
+    const now = new Date();
+    let ranked: Scored[] = kept.map((candidate) => {
       const text = `${candidate.title ?? ""} ${candidate.excerpt ?? ""}`;
       const tf = termFrequencies(tokenize(text));
       const vec = tfidfVector(tf, profile.idf);
       const score = cosine(vec, profile.vector);
-      return { candidate, tf, score };
+      const finalScore = score * recency(candidate.publishedAt, halfLife, now);
+      return { candidate, tf, vec, score, finalScore, text };
     });
-    scored.sort((a, b) => b.score - a.score);
-    const top = scored.slice(0, cfg.targetCount);
-    stats.scored = scored.length;
+    ranked.sort((a, b) => b.finalScore - a.finalScore);
+    stats.scored = ranked.length;
     await client.updateDiscoveryRun(runId, { stats });
 
-    const candidates: CreateCandidateInput[] = top.map((s) => ({
-      url: s.candidate.url,
-      title: s.candidate.title ?? null,
-      excerpt: s.candidate.excerpt ?? null,
-      fetcher: s.candidate.fetcher,
-      score: s.score,
-      // Persist the candidate's TF map so a later vote can train the profile
-      // without re-fetching the page.
-      termVector: s.tf,
-      runId,
-      author: s.candidate.author ?? null,
-      siteName: s.candidate.siteName ?? null,
-      imageUrl: s.candidate.imageUrl ?? null,
-      publishedAt: s.candidate.publishedAt ?? null,
-    }));
+    // 7b. Full-text pass: re-rank the pre-ranked shortlist on the extracted
+    // article body (a much stronger signal than a search snippet). Only the
+    // shortlist is extracted — never every candidate. Extraction failures fall
+    // back to the snippet-based result, so this can only improve the ranking.
+    if (cfg.fullText && ranked.length > 0) {
+      await client.updateDiscoveryRun(runId, { stage: "extracting full text" });
+      const shortlist = ranked.slice(0, cfg.fullTextCandidates);
+      const extracted = await mapPool(shortlist, EXTRACT_CONCURRENCY, (item) =>
+        withTimeout(client.extractContent(item.candidate.url), EXTRACT_TIMEOUT_MS),
+      );
+      let extractedCount = 0;
+      const rescored = shortlist.map((item, i) => {
+        const ex = extracted[i];
+        if (!ex || !ex.text) return item; // fallback: keep the snippet result
+        extractedCount++;
+        const tf = termFrequencies(tokenize(ex.text));
+        const vec = tfidfVector(tf, profile.idf);
+        const score = cosine(vec, profile.vector);
+        // Merge any richer metadata the extractor recovered (candidate wins when
+        // it already has a value).
+        const candidate: RawCandidate = {
+          ...item.candidate,
+          title: item.candidate.title ?? ex.title ?? undefined,
+          excerpt: item.candidate.excerpt ?? ex.text.slice(0, 280),
+          siteName: item.candidate.siteName ?? ex.siteName ?? undefined,
+          author: item.candidate.author ?? ex.author ?? undefined,
+          imageUrl: item.candidate.imageUrl ?? ex.imageUrl ?? undefined,
+          publishedAt: item.candidate.publishedAt ?? isoOrUndefined(ex.publishedAt),
+        };
+        const finalScore = score * recency(candidate.publishedAt, halfLife, now);
+        // termVector = FULL-TEXT tf so a later vote trains on the real article.
+        return { candidate, tf, vec, score, finalScore, text: ex.text };
+      });
+      rescored.sort((a, b) => b.finalScore - a.finalScore);
+      ranked = rescored;
+      stats.extracted = extractedCount;
+      await client.updateDiscoveryRun(runId, { stats });
+    }
+
+    const top = ranked.slice(0, cfg.targetCount);
+    const candidates: CreateCandidateInput[] = top.map((s) => {
+      // Readable "why this?" terms from whatever text we scored on (full article
+      // when extracted, else title + excerpt).
+      const matchedTerms = whyThisTerms(s.vec, profile.vector, surfaceForms(s.text));
+      return {
+        url: s.candidate.url,
+        title: s.candidate.title ?? null,
+        excerpt: s.candidate.excerpt ?? null,
+        fetcher: s.candidate.fetcher,
+        score: s.score,
+        // Persist the candidate's TF map so a later vote can train the profile
+        // without re-fetching the page.
+        termVector: s.tf,
+        runId,
+        author: s.candidate.author ?? null,
+        siteName: s.candidate.siteName ?? null,
+        imageUrl: s.candidate.imageUrl ?? null,
+        publishedAt: s.candidate.publishedAt ?? null,
+        matchedTerms,
+      };
+    });
 
     // 8. Post the top candidates back to the BFF.
     await client.updateDiscoveryRun(runId, { stage: "inserting" });

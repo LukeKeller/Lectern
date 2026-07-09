@@ -24,6 +24,15 @@ import { EMAIL_DOMAIN_LABEL_PREFIX, EMAIL_LABEL } from "./email-inbox";
  * `Card`s (progress scaled 0..1) and bridges highlights via the annotations API.
  */
 
+/**
+ * Reserved Readeck label marking a bookmark as a TRANSIENT full-text extraction
+ * for content discovery (`POST /discovery/extract`). Such a bookmark exists for
+ * only a few seconds — the extract route saves the URL, pulls the article, and
+ * deletes it — so it must never be synced into the library index. `list()`
+ * excludes bookmarks carrying this label so the poll/reconcile jobs skip them.
+ */
+export const DISCOVER_LABEL = "lectern:discover";
+
 export interface ReadeckBookmark {
   id: string;
   url: string;
@@ -207,9 +216,15 @@ export class ReadeckBackend implements ReadLaterBackend {
 
     const res = await this.request(`/api/bookmarks?${query.toString()}`);
     const body = (await res.json()) as ReadeckBookmark[];
-    const items = body.map((b) => readeckBookmarkToCard(b));
+    // Exclude transient discovery-extract bookmarks (label `lectern:discover`):
+    // they live for only seconds and must NEVER become library documents. Drop
+    // them from the emitted cards but advance the offset cursor by the RAW page
+    // length (not the filtered count) so pagination stays correct.
+    const items = body
+      .filter((b) => !(b.labels ?? []).includes(DISCOVER_LABEL))
+      .map((b) => readeckBookmarkToCard(b));
     const total = Number(res.headers.get("total-count") ?? body.length + offset);
-    const nextOffset = offset + items.length;
+    const nextOffset = offset + body.length;
     return { items, nextCursor: nextOffset < total ? String(nextOffset) : null };
   }
 

@@ -62,10 +62,14 @@
 		return () => clearInterval(id);
 	});
 
-	const STAT_LABELS: { key: 'fetched' | 'deduped' | 'scored' | 'inserted'; label: string }[] = [
+	const STAT_LABELS: {
+		key: 'fetched' | 'deduped' | 'scored' | 'extracted' | 'inserted';
+		label: string;
+	}[] = [
 		{ key: 'fetched', label: 'Fetched' },
 		{ key: 'deduped', label: 'Deduped' },
 		{ key: 'scored', label: 'Scored' },
+		{ key: 'extracted', label: 'Extracted' },
 		{ key: 'inserted', label: 'Inserted' }
 	];
 

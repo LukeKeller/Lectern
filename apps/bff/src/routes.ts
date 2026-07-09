@@ -18,6 +18,8 @@ import {
   DiscoveryRunsResponse,
   DiscoverySeed,
   DiscoverySettings,
+  ExtractContentRequest,
+  ExtractContentResponse,
   LatestRunResponse,
   ListCandidatesQuery,
   ListRunsQuery,
@@ -98,6 +100,7 @@ import {
 } from "./push";
 import { MutationApplier } from "./mutations";
 import { pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
+import { DISCOVER_LABEL } from "./backends/readeck";
 
 class NotFoundError extends Error {}
 
@@ -907,7 +910,9 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/discovery/runs", async (req) => {
     const raw = req.query as Record<string, unknown>;
-    const q = ListRunsQuery.parse({ limit: raw.limit !== undefined ? Number(raw.limit) : undefined });
+    const q = ListRunsQuery.parse({
+      limit: raw.limit !== undefined ? Number(raw.limit) : undefined,
+    });
     return DiscoveryRunsResponse.parse({ runs: await deps.overlay.listRuns(q.limit) });
   });
 
@@ -942,6 +947,50 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post<{ Body: unknown }>("/discovery/candidates", async (req) => {
     const body = CreateCandidatesRequest.parse(req.body);
     return CreateCandidatesResponse.parse(await deps.overlay.insertCandidates(body.candidates));
+  });
+
+  // Transient full-text extraction for the worker's full-text re-rank. Save the
+  // URL to Readeck (reserved `lectern:discover` label so the poll never syncs it
+  // into the library), pull the extracted article, strip it to plain text, and
+  // ALWAYS delete the bookmark. Readeck creds never leave the BFF. Any failure
+  // yields `{ result: null }` (200) so the worker falls back to the search snippet.
+  app.post<{ Body: unknown }>("/discovery/extract", async (req) => {
+    const { url } = ExtractContentRequest.parse(req.body);
+    let id: string | null = null;
+    try {
+      // save() blocks until Readeck has loaded the article (bounded poll, ~24s).
+      id = await deps.readLater.save({ url, labels: [DISCOVER_LABEL] });
+      const [card, html] = await Promise.all([
+        deps.readLater.get(id),
+        deps.readLater.getContent(id),
+      ]);
+      const text = htmlToText(html);
+      if (!text) return ExtractContentResponse.parse({ result: null });
+      return ExtractContentResponse.parse({
+        result: {
+          url: card.url || url,
+          text,
+          title: card.title,
+          siteName: card.siteName,
+          author: card.author,
+          publishedAt: card.publishedAt,
+          imageUrl: card.coverImage,
+        },
+      });
+    } catch (err) {
+      app.log.warn({ err, url }, "discovery extract failed; returning null");
+      return ExtractContentResponse.parse({ result: null });
+    } finally {
+      // Best-effort cleanup: a delete failure must not surface (the bookmark is
+      // labelled `lectern:discover`, so the poll excludes it even if it lingers).
+      if (id) {
+        try {
+          await deps.readLater.delete(id);
+        } catch (delErr) {
+          app.log.warn({ err: delErr, id }, "discovery extract: delete failed");
+        }
+      }
+    }
   });
 
   app.post<{ Body: unknown }>("/discovery/runs", async (req, reply) => {

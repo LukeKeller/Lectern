@@ -594,6 +594,7 @@ let mockRun = {
     fetched: 40,
     deduped: 12,
     scored: 12,
+    extracted: 12,
     inserted: 2,
     perFetcher: { searxng: 40 } as Record<string, number>,
   },
@@ -1035,6 +1036,7 @@ const handlers: Record<string, MockHandler> = {
   createCandidates: ({ body }) => ({
     json: { inserted: (body as { candidates: unknown[] }).candidates.length, skipped: 0 },
   }),
+  extractContent: () => ({ json: { result: null } }),
   createDiscoveryRun: ({ body }) => {
     const b = body as { id: string; trigger?: string; stage?: string };
     const now = new Date().toISOString();
@@ -1043,7 +1045,7 @@ const handlers: Record<string, MockHandler> = {
       status: "running",
       stage: b.stage ?? "starting",
       trigger: (b.trigger as "cron" | "manual") ?? "manual",
-      stats: { fetched: 0, deduped: 0, scored: 0, inserted: 0, perFetcher: {} },
+      stats: { fetched: 0, deduped: 0, scored: 0, extracted: 0, inserted: 0, perFetcher: {} },
       error: null,
       startedAt: now,
       updatedAt: now,
@@ -1059,9 +1061,7 @@ const handlers: Record<string, MockHandler> = {
       ...(b.stage !== undefined ? { stage: b.stage as string } : {}),
       ...(b.status !== undefined ? { status: b.status as typeof mockRun.status } : {}),
       ...(b.error !== undefined ? { error: b.error as string | null } : {}),
-      ...(b.stats !== undefined
-        ? { stats: { ...mockRun.stats, ...(b.stats as object) } }
-        : {}),
+      ...(b.stats !== undefined ? { stats: { ...mockRun.stats, ...(b.stats as object) } } : {}),
       updatedAt: new Date().toISOString(),
       ...(b.status && b.status !== "running" ? { finishedAt: new Date().toISOString() } : {}),
     };

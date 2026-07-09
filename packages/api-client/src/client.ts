@@ -59,6 +59,7 @@ import {
   DiscoveryRun,
   DiscoveryRunsResponse,
   DiscoverySeed,
+  ExtractContentResponse,
   DiscoverySettings,
   LatestRunResponse,
   ListCandidatesQuery,
@@ -440,7 +441,10 @@ export class LecternClient {
   }
   /** Recent runs (history for the Activity page). */
   listDiscoveryRuns(limit = 20) {
-    return this.request("GET", "/discovery/runs", { query: { limit }, schema: DiscoveryRunsResponse });
+    return this.request("GET", "/discovery/runs", {
+      query: { limit },
+      schema: DiscoveryRunsResponse,
+    });
   }
   /** Current/most-recent run (poll while running). */
   getLatestDiscoveryRun() {
@@ -476,6 +480,19 @@ export class LecternClient {
   }
   updateDiscoveryRun(id: string, body: UpdateRunRequest) {
     return this.request("PATCH", `/discovery/runs/${id}`, { body, schema: DiscoveryRun });
+  }
+  /**
+   * Ask the BFF for a URL's readable full text (it saves the page to Readeck
+   * transiently, pulls the extracted article, and deletes the bookmark).
+   * Returns the extracted article, or null when extraction failed — the worker
+   * falls back to the search snippet.
+   */
+  async extractContent(url: string): Promise<ExtractContentResponse["result"]> {
+    const res = await this.request("POST", "/discovery/extract", {
+      body: { url },
+      schema: ExtractContentResponse,
+    });
+    return res.result;
   }
 
   /** Fetch a short spoken sample of a voice (binary; bypasses the JSON helper). */

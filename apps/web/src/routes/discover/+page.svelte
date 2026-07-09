@@ -18,7 +18,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getClient } from '$lib/config';
-	import { applyCandidateAction, candidateToCard } from '$lib/discover';
+	import { applyCandidateAction, candidateHost, candidateToCard } from '$lib/discover';
 	import { activeList, type ListController } from '$lib/list-controller.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import CardList from '$lib/components/CardList.svelte';
@@ -29,6 +29,9 @@
 	let error = $state<string | undefined>(undefined);
 	let triggering = $state(false);
 	const busyIds = new SvelteSet<string>();
+	// Hosts the user has muted, held so a mute can append without a read-back race.
+	// Loaded alongside the candidates; kept in step optimistically when muting.
+	let mutedDomains = $state<string[]>([]);
 
 	// Keyboard list selection, mirroring ListView. scrollNonce is bumped on every
 	// keyboard-driven move so CardList scrolls the focused row into view.
@@ -106,7 +109,8 @@
 					fetcher: c.fetcher,
 					vote: c.vote,
 					saved: c.status === 'saved',
-					busy: busyIds.has(c.id)
+					busy: busyIds.has(c.id),
+					terms: c.matchedTerms ?? []
 				}
 			])
 		)
@@ -167,8 +171,20 @@
 	onMount(() => {
 		activeList.set(controller);
 		void load();
+		void loadMutedDomains();
 		return () => activeList.clear(controller);
 	});
+
+	// The muted-domains list lives in discovery settings; load it so a mute can
+	// append to the current set rather than round-tripping a read first.
+	async function loadMutedDomains() {
+		try {
+			const s = await getClient().getDiscoverySettings();
+			mutedDomains = s.mutedDomains;
+		} catch {
+			/* offline or discovery not configured: leave empty, mute still works */
+		}
+	}
 
 	async function load() {
 		loading = true;
@@ -253,6 +269,37 @@
 			error = 'Could not clear the list.';
 		} finally {
 			clearingAll = false;
+		}
+	}
+
+	// Mute a candidate's source: append its host to the settings' mutedDomains and
+	// optimistically drop every currently-listed candidate from that host. Reuses
+	// the Clear toast for confirmation; rolls back both list and muted set on error.
+	let muting = $state(false);
+	async function mute(id: string) {
+		if (muting) return;
+		const target = candidates.find((c) => c.id === id);
+		if (!target) return;
+		const host = candidateHost(target.url);
+		if (!host) return;
+		const snapshot = candidates;
+		const snapshotMuted = mutedDomains;
+		const count = candidates.filter((c) => candidateHost(c.url) === host).length;
+		const nextMuted = mutedDomains.includes(host) ? mutedDomains : [...mutedDomains, host];
+		candidates = applyCandidateAction(candidates, { type: 'muteHost', host });
+		mutedDomains = nextMuted;
+		muting = true;
+		try {
+			await getClient().updateDiscoverySettings({ mutedDomains: nextMuted });
+			clearResult = `Muted ${host} · removed ${count} item${count === 1 ? '' : 's'}`;
+			if (clearTimer) clearTimeout(clearTimer);
+			clearTimer = setTimeout(() => (clearResult = null), 5000);
+		} catch {
+			candidates = snapshot; // rollback the optimistic drop
+			mutedDomains = snapshotMuted;
+			error = 'Could not mute this source.';
+		} finally {
+			muting = false;
 		}
 	}
 
@@ -425,7 +472,7 @@
 			emptyHint="No discoveries match your current filters. Try clearing the search or source filter."
 			emptyIcon="search"
 			onselect={(i) => (selectedIndex = i)}
-			discover={{ meta: discoverMeta, onvote: vote, onsave: save, onclear: clearOne }}
+			discover={{ meta: discoverMeta, onvote: vote, onsave: save, onclear: clearOne, onmute: mute }}
 		/>
 	{/if}
 

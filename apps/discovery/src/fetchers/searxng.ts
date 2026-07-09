@@ -1,4 +1,5 @@
 import http from "node:http";
+import { isoOrUndefined } from "./dates";
 import { DiscoveryHttpError, type Fetcher, type FetcherDeps, type RawCandidate } from "./types";
 
 /**
@@ -25,9 +26,7 @@ interface SearxngResponse {
   results?: SearxngResult[];
 }
 
-export type SearxngTarget =
-  | { mode: "http"; base: string }
-  | { mode: "unix"; socketPath: string };
+export type SearxngTarget = { mode: "http"; base: string } | { mode: "unix"; socketPath: string };
 
 /** Classify a `searxngUrl` setting into an HTTP base URL or a unix socket path. */
 export function parseSearxngTarget(searxngUrl: string): SearxngTarget {
@@ -42,7 +41,12 @@ export function parseSearxngTarget(searxngUrl: string): SearxngTarget {
 function getJsonOverSocket(socketPath: string, path: string): Promise<SearxngResponse> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { socketPath, path, method: "GET", headers: { accept: "application/json", host: "localhost" } },
+      {
+        socketPath,
+        path,
+        method: "GET",
+        headers: { accept: "application/json", host: "localhost" },
+      },
       (res) => {
         const status = res.statusCode ?? 0;
         let data = "";
@@ -101,7 +105,9 @@ export function createSearxngFetcher(deps: FetcherDeps = {}): Fetcher {
             title: r.title,
             excerpt: r.content,
             fetcher: "searxng",
-            publishedAt: r.publishedDate ?? undefined,
+            // Keep only parseable ISO dates; drop anything else so the scorer's
+            // freshness decay never chokes on a bad string.
+            publishedAt: isoOrUndefined(r.publishedDate),
             siteName: r.engine,
           });
         }

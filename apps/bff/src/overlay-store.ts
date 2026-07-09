@@ -911,10 +911,28 @@ export class DrizzleOverlayStore implements OverlayStore {
     inputs: CreateCandidateInput[],
   ): Promise<{ inserted: number; skipped: number }> {
     if (inputs.length === 0) return { inserted: 0, skipped: 0 };
+    // Defense-in-depth muted-domain filter: never surface a candidate from a host
+    // the user has muted (the worker also filters, but a stale worker config or a
+    // direct POST must not leak one through). Host matches a muted domain exactly
+    // or as a subdomain (`host === d` or `host` endsWith `.d`).
+    const muted = (await this.getDiscoverySettings()).mutedDomains
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+    const isMuted = (url: string): boolean => {
+      if (muted.length === 0) return false;
+      let host: string;
+      try {
+        host = new URL(url).hostname.toLowerCase();
+      } catch {
+        return false;
+      }
+      return muted.some((d) => host === d || host.endsWith("." + d));
+    };
     // Dedup within the batch by normalized URL (first wins); the DB unique index
     // dedups against prior runs (ON CONFLICT DO NOTHING below).
     const byNorm = new Map<string, NewDiscoveryCandidateRow>();
     for (const input of inputs) {
+      if (isMuted(input.url)) continue;
       const urlNormalized = normalizeUrl(input.url);
       if (byNorm.has(urlNormalized)) continue;
       byNorm.set(urlNormalized, {
@@ -934,6 +952,7 @@ export class DrizzleOverlayStore implements OverlayStore {
           siteName: input.siteName ?? null,
           imageUrl: input.imageUrl ?? null,
           publishedAt: input.publishedAt ?? null,
+          matchedTerms: input.matchedTerms ?? [],
         },
       });
     }
@@ -1100,6 +1119,11 @@ export class DrizzleOverlayStore implements OverlayStore {
     if (patch.crawlTimeMs !== undefined) next.crawlTimeMs = patch.crawlTimeMs;
     if (patch.rocchio !== undefined) next.rocchio = patch.rocchio;
     if (patch.targetCount !== undefined) next.targetCount = patch.targetCount;
+    if (patch.freshnessHalfLifeDays !== undefined)
+      next.freshnessHalfLifeDays = patch.freshnessHalfLifeDays;
+    if (patch.fullText !== undefined) next.fullText = patch.fullText;
+    if (patch.fullTextCandidates !== undefined) next.fullTextCandidates = patch.fullTextCandidates;
+    if (patch.mutedDomains !== undefined) next.mutedDomains = patch.mutedDomains;
     await this.db
       .insert(appSettings)
       .values({ key: "discovery", value: next, updatedAt: new Date() })
@@ -1172,10 +1196,7 @@ export class DrizzleOverlayStore implements OverlayStore {
   }
 
   async updateRun(id: string, patch: UpdateRunRequest): Promise<DiscoveryRun | null> {
-    const [existing] = await this.db
-      .select()
-      .from(discoveryRuns)
-      .where(eq(discoveryRuns.id, id));
+    const [existing] = await this.db.select().from(discoveryRuns).where(eq(discoveryRuns.id, id));
     if (!existing) return null;
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.stage !== undefined) set.stage = patch.stage;
@@ -1312,6 +1333,9 @@ export function backendTruthSet(row: NewDocumentRow) {
 function candidateFromRow(row: DiscoveryCandidateRow): DiscoveryCandidate {
   const meta = (row.metadata ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const matchedTerms = Array.isArray(meta.matchedTerms)
+    ? meta.matchedTerms.filter((t): t is string => typeof t === "string")
+    : [];
   return DiscoveryCandidate.parse({
     id: row.id,
     url: row.url,
@@ -1326,6 +1350,7 @@ function candidateFromRow(row: DiscoveryCandidateRow): DiscoveryCandidate {
     siteName: str(meta.siteName),
     imageUrl: str(meta.imageUrl),
     publishedAt: str(meta.publishedAt),
+    matchedTerms,
     firstSeenAt: row.firstSeenAt.toISOString(),
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { termFrequencies, tokenize } from "./tokenize";
+import { surfaceForms, termFrequencies, tokenize } from "./tokenize";
 
 describe("tokenize", () => {
   it("is deterministic for the same input", () => {
@@ -36,7 +36,31 @@ describe("tokenize", () => {
   it("Porter-stems tokens (running -> run)", () => {
     expect(tokenize("running")).toEqual(["run"]);
     // Different surface forms collapse to a shared stem.
-    expect(tokenize("connection connections connective")).toEqual(["connect", "connect", "connect"]);
+    expect(tokenize("connection connections connective")).toEqual([
+      "connect",
+      "connect",
+      "connect",
+    ]);
+  });
+});
+
+describe("surfaceForms", () => {
+  it("maps each stem to the first surface word that produced it", () => {
+    const map = surfaceForms("Connection connections connective running");
+    expect(map.connect).toBe("connection"); // first occurrence wins
+    expect(map.run).toBe("running");
+  });
+
+  it("uses the same stopword/strip pipeline as tokenize so stems line up", () => {
+    const map = surfaceForms("The intelligent systems");
+    // stopword "the" dropped; stems match tokenize's output.
+    expect(map).not.toHaveProperty("the");
+    expect(Object.keys(map).sort()).toEqual(tokenize("intelligent systems").sort());
+    expect(map.intellig).toBe("intelligent");
+  });
+
+  it("returns an empty map for empty text", () => {
+    expect(surfaceForms("")).toEqual({});
   });
 });
 

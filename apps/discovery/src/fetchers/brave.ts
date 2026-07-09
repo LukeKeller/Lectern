@@ -1,3 +1,4 @@
+import { parseRelativeAge } from "./dates";
 import { DiscoveryHttpError, type Fetcher, type FetcherDeps, type RawCandidate } from "./types";
 
 /**
@@ -38,9 +39,14 @@ export function createBraveFetcher(deps: FetcherDeps = {}): Fetcher {
           },
         });
         if (!res.ok) {
-          throw new DiscoveryHttpError("brave", res.status, `brave GET "${query}" -> ${res.status}`);
+          throw new DiscoveryHttpError(
+            "brave",
+            res.status,
+            `brave GET "${query}" -> ${res.status}`,
+          );
         }
         const body = (await res.json()) as BraveResponse;
+        const now = new Date();
         for (const r of body.web?.results ?? []) {
           if (!r.url) continue;
           out.push({
@@ -50,7 +56,9 @@ export function createBraveFetcher(deps: FetcherDeps = {}): Fetcher {
             fetcher: "brave",
             siteName: r.profile?.name,
             imageUrl: r.thumbnail?.src,
-            publishedAt: r.age,
+            // Brave's `age` is a relative string ("3 days ago") or an absolute
+            // date — normalize both to ISO 8601 (or drop it if unparseable).
+            publishedAt: r.age ? parseRelativeAge(r.age, now) : undefined,
           });
         }
       }

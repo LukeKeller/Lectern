@@ -48,6 +48,9 @@ export const DiscoveryCandidate = z.object({
   siteName: z.string().nullable().default(null),
   imageUrl: z.string().nullable().default(null),
   publishedAt: z.string().nullable().default(null),
+  /** Readable ("why this?") terms driving the match — top overlap between the
+   * candidate and the interest profile, mapped back to surface forms. */
+  matchedTerms: z.array(z.string()).default([]),
   firstSeenAt: z.string(),
 });
 export type DiscoveryCandidate = z.infer<typeof DiscoveryCandidate>;
@@ -95,6 +98,7 @@ export const CreateCandidateInput = z.object({
   siteName: z.string().nullable().optional(),
   imageUrl: z.string().nullable().optional(),
   publishedAt: z.string().nullable().optional(),
+  matchedTerms: z.array(z.string()).optional(),
 });
 export type CreateCandidateInput = z.infer<typeof CreateCandidateInput>;
 
@@ -140,6 +144,14 @@ export const DiscoverySettings = z.object({
   crawlTimeMs: z.number().int().positive().default(30000),
   rocchio: RocchioWeights.default({ a: 1, b: 0.75, c: 0.25 }),
   targetCount: z.number().int().min(1).max(20).default(5),
+  /** Recency half-life in days for the freshness decay applied to scores. */
+  freshnessHalfLifeDays: z.number().int().positive().default(14),
+  /** Re-rank the pre-ranked shortlist on Readeck-extracted full text. */
+  fullText: z.boolean().default(true),
+  /** How many top snippet-scored candidates to extract full text for (the pre-rank K). */
+  fullTextCandidates: z.number().int().min(1).max(50).default(12),
+  /** Hosts to never surface candidates from (domain-level mute). */
+  mutedDomains: z.array(z.string()).default([]),
 });
 export type DiscoverySettings = z.infer<typeof DiscoverySettings>;
 
@@ -156,6 +168,10 @@ export const UpdateDiscoverySettingsRequest = z.object({
   crawlTimeMs: z.number().int().positive().optional(),
   rocchio: RocchioWeights.optional(),
   targetCount: z.number().int().min(1).max(20).optional(),
+  freshnessHalfLifeDays: z.number().int().positive().optional(),
+  fullText: z.boolean().optional(),
+  fullTextCandidates: z.number().int().min(1).max(50).optional(),
+  mutedDomains: z.array(z.string()).optional(),
 });
 export type UpdateDiscoverySettingsRequest = z.infer<typeof UpdateDiscoverySettingsRequest>;
 
@@ -216,6 +232,31 @@ export const DiscoverySeed = z.object({
 });
 export type DiscoverySeed = z.infer<typeof DiscoverySeed>;
 
+// ---- Full-text extraction (service-facing) ---------------------------------
+
+/** Ask the BFF to fetch a URL's readable full text. The BFF saves it to Readeck
+ * transiently (label `lectern:discover`), pulls the extracted article, and
+ * deletes the bookmark — Readeck creds never leave the BFF. */
+export const ExtractContentRequest = z.object({ url: z.url() });
+export type ExtractContentRequest = z.infer<typeof ExtractContentRequest>;
+
+/** The extracted article, or null if extraction failed (worker falls back to
+ * the search snippet). `text` is plain text (HTML stripped). */
+export const ExtractContentResponse = z.object({
+  result: z
+    .object({
+      url: z.string(),
+      text: z.string(),
+      title: z.string().nullable().default(null),
+      siteName: z.string().nullable().default(null),
+      author: z.string().nullable().default(null),
+      publishedAt: z.string().nullable().default(null),
+      imageUrl: z.string().nullable().default(null),
+    })
+    .nullable(),
+});
+export type ExtractContentResponse = z.infer<typeof ExtractContentResponse>;
+
 // ---- Runs (live progress) ---------------------------------------------------
 
 export const RunStatus = z.enum(["running", "succeeded", "failed"]);
@@ -228,6 +269,8 @@ export const DiscoveryRunStats = z.object({
   fetched: z.number().int().nonnegative().default(0),
   deduped: z.number().int().nonnegative().default(0),
   scored: z.number().int().nonnegative().default(0),
+  /** Candidates for which full text was extracted and re-scored. */
+  extracted: z.number().int().nonnegative().default(0),
   inserted: z.number().int().nonnegative().default(0),
   /** Per-fetcher raw candidate counts, e.g. { searxng: 40, brave: 0 }. */
   perFetcher: z.record(z.string(), z.number()).default({}),

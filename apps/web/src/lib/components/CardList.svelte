@@ -29,6 +29,8 @@
 		vote: VoteValue | null;
 		saved: boolean;
 		busy: boolean;
+		/** Readable "why this?" terms driving the match, rendered as pills. */
+		terms: string[];
 	}
 
 	/**
@@ -45,6 +47,8 @@
 		onsave: (id: string) => void;
 		/** Dismiss the candidate without casting a vote (distinct from a down-vote). */
 		onclear: (id: string) => void;
+		/** Mute the candidate's source: drop it and every sibling from the same host. */
+		onmute?: (id: string) => void;
 	}
 
 	let {
@@ -476,6 +480,16 @@
 										<span class="when">{kindLabel(card)} · {publishedStamp(card)}</span>
 									{/if}
 								</p>
+								{#if discover}
+									{@const dm = dmeta(card.id)}
+									{#if dm?.terms?.length}
+										<ul class="why" aria-label="Why this was surfaced">
+											{#each dm.terms as term (term)}
+												<li class="why-term">{term}</li>
+											{/each}
+										</ul>
+									{/if}
+								{/if}
 							</div>
 
 							<div class="trail">
@@ -524,6 +538,18 @@
 										>
 											<Icon name="close" size={16} />
 										</button>
+										{#if discover.onmute}
+											<button
+												type="button"
+												class="round mute"
+												title="Mute this source"
+												aria-label="Mute this source"
+												disabled={dm?.busy}
+												onclick={() => discover.onmute?.(card.id)}
+											>
+												<Icon name="ban" size={15} />
+											</button>
+										{/if}
 									</div>
 								{:else}
 									<div class="quick">
@@ -1095,6 +1121,41 @@
 		color: var(--ok);
 		background: color-mix(in srgb, var(--ok) 12%, transparent);
 		border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+	}
+
+	/* "Why this?" terms: quiet pills under the byline, sharing the `.source` tag
+	   look so they read as of a piece with the relevance/source cluster above. */
+	.why {
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin: 0.45rem 0 0;
+		padding: 0;
+	}
+	.why-term {
+		padding: 0.05rem 0.4rem;
+		border-radius: var(--radius-full);
+		font-size: var(--text-2xs);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		color: var(--text-muted);
+		background: var(--surface-alt);
+		border: 1px solid var(--border);
+	}
+	/* The mute action is subordinate to vote/save/clear: it recedes until hover. */
+	.discover-actions .round.mute {
+		opacity: 0.5;
+	}
+	.discover-actions .round.mute:hover:not(:disabled),
+	.card:hover .discover-actions .round.mute,
+	.card:focus-within .discover-actions .round.mute {
+		opacity: 1;
+	}
+	.discover-actions .round.mute:hover:not(:disabled) {
+		border-color: var(--error);
+		color: var(--error);
+		background: color-mix(in srgb, var(--error) 10%, transparent);
 	}
 	.swipe-hint {
 		display: none;

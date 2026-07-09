@@ -11,7 +11,8 @@ import type {
   UnprocessedVotesResponse,
   UpdateRunRequest,
 } from "@lectern/shared";
-import { runDiscovery, type DiscoveryClient } from "./run";
+import type { ExtractContentResponse } from "@lectern/shared";
+import { runDiscovery, recency, whyThisTerms, hostMuted, type DiscoveryClient } from "./run";
 import type { Fetcher, RawCandidate } from "./fetchers";
 
 const baseConfig: DiscoveryConfig = {
@@ -26,6 +27,12 @@ const baseConfig: DiscoveryConfig = {
   rocchio: { a: 1, b: 0.75, c: 0.25 },
   targetCount: 2,
   braveApiKey: "",
+  freshnessHalfLifeDays: 14,
+  // Default OFF so the base pipeline tests exercise the snippet-only path; the
+  // full-text pass has its own dedicated test.
+  fullText: false,
+  fullTextCandidates: 12,
+  mutedDomains: [],
 };
 
 function emptyProfile(): DiscoveryProfile {
@@ -59,17 +66,22 @@ class FakeClient implements DiscoveryClient {
   statuses: string[] = [];
   putProfiles: PutDiscoveryProfileRequest[] = [];
   created: CreateCandidatesRequest | null = null;
+  /** URL -> canned extraction result (null = extraction "failed"). */
+  extracts: Record<string, ExtractContentResponse["result"]>;
+  extractCalls: string[] = [];
 
   constructor(opts?: {
     config?: DiscoveryConfig;
     profile?: DiscoveryProfile;
     seed?: DiscoverySeed;
     votes?: UnprocessedVotesResponse["votes"];
+    extracts?: Record<string, ExtractContentResponse["result"]>;
   }) {
     this.config = opts?.config ?? baseConfig;
     this.profile = opts?.profile ?? emptyProfile();
     this.seed = opts?.seed ?? seed;
     this.votes = opts?.votes ?? [];
+    this.extracts = opts?.extracts ?? {};
   }
 
   private stubRun(id: string): DiscoveryRun {
@@ -79,7 +91,7 @@ class FakeClient implements DiscoveryClient {
       status: "running",
       stage: "",
       trigger: "manual",
-      stats: { fetched: 0, deduped: 0, scored: 0, inserted: 0, perFetcher: {} },
+      stats: { fetched: 0, deduped: 0, scored: 0, extracted: 0, inserted: 0, perFetcher: {} },
       error: null,
       startedAt: now,
       updatedAt: now,
@@ -117,6 +129,10 @@ class FakeClient implements DiscoveryClient {
     if (body.status) this.statuses.push(body.status);
     return this.stubRun(id);
   }
+  async extractContent(url: string): Promise<ExtractContentResponse["result"]> {
+    this.extractCalls.push(url);
+    return this.extracts[url] ?? null;
+  }
 }
 
 function fakeFetcher(name: "searxng" | "brave" | "crawl", results: RawCandidate[]): Fetcher {
@@ -141,9 +157,24 @@ describe("runDiscovery", () => {
   it("progresses through the expected stage sequence and posts scored candidates", async () => {
     const client = new FakeClient();
     const searxng = fakeFetcher("searxng", [
-      { url: "https://a.com/rust", title: "Rust memory safety", excerpt: "systems programming in rust", fetcher: "searxng" },
-      { url: "https://b.com/db", title: "Postgres indexes", excerpt: "databases and query planning", fetcher: "searxng" },
-      { url: "https://c.com/cooking", title: "Sourdough bread", excerpt: "baking recipes and dough", fetcher: "searxng" },
+      {
+        url: "https://a.com/rust",
+        title: "Rust memory safety",
+        excerpt: "systems programming in rust",
+        fetcher: "searxng",
+      },
+      {
+        url: "https://b.com/db",
+        title: "Postgres indexes",
+        excerpt: "databases and query planning",
+        fetcher: "searxng",
+      },
+      {
+        url: "https://c.com/cooking",
+        title: "Sourdough bread",
+        excerpt: "baking recipes and dough",
+        fetcher: "searxng",
+      },
     ]);
 
     const res = await runDiscovery(client, { trigger: "manual", fetchers: [searxng] });
@@ -179,7 +210,12 @@ describe("runDiscovery", () => {
   it("does not abort when a fetcher throws", async () => {
     const client = new FakeClient();
     const good = fakeFetcher("searxng", [
-      { url: "https://a.com/rust", title: "Rust safety", excerpt: "systems rust", fetcher: "searxng" },
+      {
+        url: "https://a.com/rust",
+        title: "Rust safety",
+        excerpt: "systems rust",
+        fetcher: "searxng",
+      },
     ]);
     const bad = throwingFetcher("brave");
 
@@ -203,8 +239,20 @@ describe("runDiscovery", () => {
     const client = new FakeClient({
       profile: { ...emptyProfile(), vector: { rust: 1 }, idf: { rust: 1 } },
       votes: [
-        { id: 1, candidateId: "c1", value: "up", termVector: { rust: 1, safety: 1 }, createdAt: "2026-01-01" },
-        { id: 2, candidateId: "c2", value: "down", termVector: { spam: 1 }, createdAt: "2026-01-01" },
+        {
+          id: 1,
+          candidateId: "c1",
+          value: "up",
+          termVector: { rust: 1, safety: 1 },
+          createdAt: "2026-01-01",
+        },
+        {
+          id: 2,
+          candidateId: "c2",
+          value: "down",
+          termVector: { spam: 1 },
+          createdAt: "2026-01-01",
+        },
       ],
     });
 
@@ -213,5 +261,156 @@ describe("runDiscovery", () => {
     // A profile PUT recorded the processed vote ids.
     const votePut = client.putProfiles.find((p) => p.processedVoteIds.length > 0);
     expect(votePut?.processedVoteIds).toEqual([1, 2]);
+  });
+
+  it("attaches readable why-this terms to inserted candidates", async () => {
+    const client = new FakeClient();
+    const searxng = fakeFetcher("searxng", [
+      {
+        url: "https://a.com/rust",
+        title: "Rust memory safety",
+        excerpt: "systems programming in rust",
+        fetcher: "searxng",
+      },
+      {
+        url: "https://b.com/db",
+        title: "Postgres indexes",
+        excerpt: "databases and query planning",
+        fetcher: "searxng",
+      },
+    ]);
+
+    await runDiscovery(client, { trigger: "manual", fetchers: [searxng] });
+
+    const rust = client.created?.candidates.find((c) => c.url === "https://a.com/rust");
+    // "rust" overlaps the profile and maps back to its readable surface form.
+    expect(rust?.matchedTerms).toContain("rust");
+  });
+
+  it("re-ranks the shortlist on extracted full text and counts extractions", async () => {
+    const client = new FakeClient({
+      config: { ...baseConfig, fullText: true, fullTextCandidates: 5, targetCount: 1 },
+      extracts: {
+        // The snippet looks off-topic, but the full body is squarely on-profile,
+        // so extraction promotes it to the top.
+        "https://a.com/sleeper": {
+          url: "https://a.com/sleeper",
+          text: "rust rust rust memory safety systems programming databases query",
+          title: "The sleeper",
+          siteName: "Sleeper Blog",
+          author: null,
+          publishedAt: null,
+          imageUrl: null,
+        },
+      },
+    });
+    const searxng = fakeFetcher("searxng", [
+      { url: "https://a.com/sleeper", excerpt: "a vague blurb", fetcher: "searxng" },
+      {
+        url: "https://b.com/db",
+        title: "Postgres indexes",
+        excerpt: "databases and query planning",
+        fetcher: "searxng",
+      },
+    ]);
+
+    await runDiscovery(client, { trigger: "manual", fetchers: [searxng] });
+
+    expect(client.stages).toContain("extracting full text");
+    // Both shortlisted URLs were offered to the extractor.
+    expect(client.extractCalls).toContain("https://a.com/sleeper");
+    // targetCount=1 and full text promoted the sleeper to the top.
+    expect(client.created?.candidates).toHaveLength(1);
+    expect(client.created?.candidates[0]?.url).toBe("https://a.com/sleeper");
+    // Its title was backfilled from the extract, and termVector is the full-text tf.
+    expect(client.created?.candidates[0]?.title).toBe("The sleeper");
+    expect(client.created?.candidates[0]?.termVector).toHaveProperty("rust");
+  });
+
+  it("drops candidates from muted domains before scoring", async () => {
+    const client = new FakeClient({
+      config: { ...baseConfig, mutedDomains: ["spam.com"] },
+    });
+    const searxng = fakeFetcher("searxng", [
+      {
+        url: "https://a.com/rust",
+        title: "Rust safety",
+        excerpt: "systems rust",
+        fetcher: "searxng",
+      },
+      {
+        url: "https://spam.com/rust",
+        title: "Rust safety",
+        excerpt: "systems rust",
+        fetcher: "searxng",
+      },
+      {
+        url: "https://sub.spam.com/rust",
+        title: "Rust safety",
+        excerpt: "systems rust",
+        fetcher: "searxng",
+      },
+    ]);
+
+    await runDiscovery(client, { trigger: "manual", fetchers: [searxng] });
+
+    const urls = client.created?.candidates.map((c) => c.url) ?? [];
+    expect(urls).toContain("https://a.com/rust");
+    expect(urls).not.toContain("https://spam.com/rust");
+    expect(urls).not.toContain("https://sub.spam.com/rust");
+  });
+});
+
+describe("recency", () => {
+  const now = new Date("2026-07-09T00:00:00Z");
+
+  it("returns ~1 for a just-published item", () => {
+    expect(recency(now.toISOString(), 14, now)).toBeCloseTo(1, 5);
+  });
+
+  it("halves at one half-life", () => {
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 86_400_000).toISOString();
+    expect(recency(twoWeeksAgo, 14, now)).toBeCloseTo(0.5, 5);
+  });
+
+  it("floors old items at 0.3", () => {
+    const ancient = new Date(now.getTime() - 365 * 86_400_000).toISOString();
+    expect(recency(ancient, 14, now)).toBe(0.3);
+  });
+
+  it("gives undated and unparseable items a neutral 0.6", () => {
+    expect(recency(null, 14, now)).toBe(0.6);
+    expect(recency(undefined, 14, now)).toBe(0.6);
+    expect(recency("not a date", 14, now)).toBe(0.6);
+  });
+});
+
+describe("whyThisTerms", () => {
+  it("ranks profile-overlapping terms by weight product and maps to surface forms", () => {
+    const candidate = { rust: 0.5, connect: 0.4, spam: 0.9 };
+    const profile = { rust: 0.8, connect: 0.3 }; // spam not in profile -> excluded
+    const surface = { rust: "rust", connect: "connection" };
+    const out = whyThisTerms(candidate, profile, surface, 5);
+    // rust (0.5*0.8=0.40) outranks connect (0.4*0.3=0.12); spam is dropped.
+    expect(out).toEqual(["rust", "connection"]);
+  });
+
+  it("dedupes surface forms and honors the limit", () => {
+    const candidate = { run: 0.5, runn: 0.4, jump: 0.2 };
+    const profile = { run: 1, runn: 1, jump: 1 };
+    const surface = { run: "running", runn: "running", jump: "jump" };
+    expect(whyThisTerms(candidate, profile, surface, 5)).toEqual(["running", "jump"]);
+    expect(whyThisTerms(candidate, profile, surface, 1)).toEqual(["running"]);
+  });
+});
+
+describe("hostMuted", () => {
+  it("matches exact host and subdomains, case-insensitively", () => {
+    expect(hostMuted("spam.com", ["spam.com"])).toBe(true);
+    expect(hostMuted("sub.spam.com", ["spam.com"])).toBe(true);
+    expect(hostMuted("SPAM.COM", ["spam.com"])).toBe(true);
+    expect(hostMuted("notspam.com", ["spam.com"])).toBe(false);
+    expect(hostMuted("spam.com.evil.com", ["spam.com"])).toBe(false);
+    expect(hostMuted("a.com", [])).toBe(false);
   });
 });

@@ -180,6 +180,11 @@
 	let discRocchioB = $state(0.75);
 	let discRocchioC = $state(0.25);
 	let discTarget = $state(5);
+	let discFreshness = $state(14);
+	let discFullText = $state(true);
+	let discFullTextCandidates = $state(12);
+	let discMutedDomains = $state<string[]>([]);
+	let discMutedInput = $state('');
 	let discBusy = $state(false);
 	let discMsg = $state<string | undefined>(undefined);
 	let discError = $state<string | undefined>(undefined);
@@ -205,6 +210,10 @@
 			discRocchioB = s.rocchio.b;
 			discRocchioC = s.rocchio.c;
 			discTarget = s.targetCount;
+			discFreshness = s.freshnessHalfLifeDays;
+			discFullText = s.fullText;
+			discFullTextCandidates = s.fullTextCandidates;
+			discMutedDomains = s.mutedDomains;
 		} catch {
 			/* offline or discovery not configured: leave defaults */
 		}
@@ -232,7 +241,11 @@
 			crawlDepth: discCrawlDepth,
 			crawlTimeMs: discCrawlTimeMs,
 			rocchio: { a: discRocchioA, b: discRocchioB, c: discRocchioC },
-			targetCount: discTarget
+			targetCount: discTarget,
+			freshnessHalfLifeDays: discFreshness,
+			fullText: discFullText,
+			fullTextCandidates: discFullTextCandidates,
+			mutedDomains: discMutedDomains
 		};
 		// Only send the Brave key when the user typed one; empty = leave unchanged.
 		if (discBraveKey.trim()) patch.braveApiKey = discBraveKey.trim();
@@ -246,6 +259,25 @@
 		} finally {
 			discBusy = false;
 		}
+	}
+
+	// Muted-domain chips are edited locally and saved with the rest of the form.
+	// Normalize the input to a bare host (drop scheme, `www.`, and any path).
+	function addMutedDomain() {
+		const host = discMutedInput
+			.trim()
+			.replace(/^https?:\/\//i, '')
+			.replace(/^www\./i, '')
+			.replace(/\/.*$/, '')
+			.toLowerCase();
+		if (!host) return;
+		if (!discMutedDomains.some((d) => d.toLowerCase() === host)) {
+			discMutedDomains = [...discMutedDomains, host];
+		}
+		discMutedInput = '';
+	}
+	function removeMutedDomain(host: string) {
+		discMutedDomains = discMutedDomains.filter((d) => d !== host);
 	}
 
 	async function reseedProfile() {
@@ -1319,6 +1351,74 @@
 				</div>
 			</div>
 
+			<div class="disc-grid">
+				<label>
+					<span>Freshness half-life (days)</span>
+					<input type="number" min="1" bind:value={discFreshness} />
+					<span class="fhint">Lower = prefer newer articles.</span>
+				</label>
+				<label class:dim={!discFullText}>
+					<span>Full-text candidates</span>
+					<input
+						type="number"
+						min="1"
+						max="50"
+						bind:value={discFullTextCandidates}
+						disabled={!discFullText}
+					/>
+					<span class="fhint">Top candidates to fetch full text for.</span>
+				</label>
+			</div>
+
+			<label class="toggle">
+				<input type="checkbox" bind:checked={discFullText} />
+				<span>
+					Read full article text
+					<em>Fetches each candidate's full text for sharper ranking. Slower runs.</em>
+				</span>
+			</label>
+
+			<div class="field">
+				<span class="flabel">Muted domains</span>
+				<span class="fhint">Sources to never surface candidates from.</span>
+				<div class="row">
+					<input
+						type="text"
+						bind:value={discMutedInput}
+						placeholder="example.com"
+						autocomplete="off"
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addMutedDomain();
+							}
+						}}
+					/>
+					<button
+						type="button"
+						class="btn"
+						disabled={!discMutedInput.trim()}
+						onclick={addMutedDomain}
+					>
+						Add
+					</button>
+				</div>
+				{#if discMutedDomains.length}
+					<ul class="chips">
+						{#each discMutedDomains as d (d)}
+							<li class="chip chip-tag">
+								<span>{d}</span>
+								<button
+									type="button"
+									aria-label={`Unmute ${d}`}
+									onclick={() => removeMutedDomain(d)}>×</button
+								>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+
 			<div class="row">
 				<button type="submit" class="btn" disabled={discBusy}>
 					{discBusy ? 'Saving…' : 'Save discovery settings'}
@@ -1720,6 +1820,11 @@
 	.fhint {
 		font-size: var(--text-xs);
 		color: var(--text-muted);
+	}
+	/* Dim a control that isn't meaningful in the current state (e.g. full-text
+	   candidates while full-text extraction is off). */
+	.dim {
+		opacity: 0.5;
 	}
 	.picker {
 		max-width: 18rem;
