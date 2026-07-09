@@ -978,6 +978,19 @@ export class DrizzleOverlayStore implements OverlayStore {
     return row ? candidateFromRow(row) : null;
   }
 
+  async clearCandidates(ids?: string[]): Promise<number> {
+    // Dismiss without recording a vote (no training). No ids = every active one.
+    const active = eq(discoveryCandidates.status, "active");
+    const where =
+      ids && ids.length > 0 ? and(active, inArray(discoveryCandidates.id, ids)) : active;
+    const rows = await this.db
+      .update(discoveryCandidates)
+      .set({ status: "dismissed", updatedAt: new Date() })
+      .where(where)
+      .returning({ id: discoveryCandidates.id });
+    return rows.length;
+  }
+
   async recordVote(candidateId: string, value: VoteValue): Promise<DiscoveryCandidate | null> {
     const [candidate] = await this.db
       .select()

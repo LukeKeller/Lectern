@@ -6,6 +6,8 @@ import {
   BulkMaintenanceResponse,
   Card,
   CreateCandidatesRequest,
+  ClearCandidatesRequest,
+  ClearCandidatesResponse,
   CreateCandidatesResponse,
   CreateRunRequest,
   DiscoveryCandidate,
@@ -861,6 +863,14 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     await deps.overlay.upsertIndex(card);
     const updated = await deps.overlay.setCandidateStatus(id, "saved");
     return DiscoveryCandidate.parse(updated ?? candidate);
+  });
+
+  // Clear candidates off the list without training the model (distinct from a
+  // down-vote, which records a negative signal). No `ids` = clear all active.
+  app.post<{ Body: unknown }>("/discovery/candidates/clear", async (req) => {
+    const { ids } = ClearCandidatesRequest.parse(req.body ?? {});
+    const cleared = await deps.overlay.clearCandidates(ids);
+    return ClearCandidatesResponse.parse({ cleared });
   });
 
   // Fire-and-forget trigger: kick the worker but don't await its run. A trigger

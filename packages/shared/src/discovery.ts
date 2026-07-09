@@ -68,6 +68,18 @@ export type ListCandidatesQuery = z.infer<typeof ListCandidatesQuery>;
 export const VoteRequest = z.object({ value: VoteValue });
 export type VoteRequest = z.infer<typeof VoteRequest>;
 
+/** Clear candidates off the list WITHOUT training the model (distinct from a
+ * down-vote). Omit `ids` to clear every currently-active candidate. */
+export const ClearCandidatesRequest = z.object({
+  ids: z.array(z.string()).optional(),
+});
+export type ClearCandidatesRequest = z.infer<typeof ClearCandidatesRequest>;
+
+export const ClearCandidatesResponse = z.object({
+  cleared: z.number().int().nonnegative(),
+});
+export type ClearCandidatesResponse = z.infer<typeof ClearCandidatesResponse>;
+
 /** One candidate the discovery worker wants to insert (deduped by normalized URL
  * server-side). `termVector` is persisted so a later vote can train the model
  * without re-fetching the page. */

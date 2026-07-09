@@ -739,6 +739,17 @@ class FakeOverlayStore implements OverlayStore {
     return updated;
   }
 
+  async clearCandidates(ids?: string[]) {
+    let cleared = 0;
+    for (const [id, c] of this.discoveryCandidates) {
+      if (c.status !== "active") continue;
+      if (ids && ids.length > 0 && !ids.includes(id)) continue;
+      this.discoveryCandidates.set(id, { ...c, status: "dismissed" as CandidateStatus });
+      cleared++;
+    }
+    return cleared;
+  }
+
   async listUnprocessedVotes() {
     return this.discoveryVotes.filter((v) => !this.processedVoteIds.has(v.id));
   }
@@ -2335,6 +2346,40 @@ describe("discovery", () => {
     });
     expect((active.json().candidates as DiscoveryCandidate[])).toHaveLength(1);
     expect((active.json().candidates as DiscoveryCandidate[])[0]!.url).toBe("https://a.test/low");
+    await a.close();
+  });
+
+  it("clears candidates without recording a vote (all active, or by id)", async () => {
+    const a = app();
+    const cands = await seedCandidates(a, [
+      candidateInput({ url: "https://a.test/1", score: 0.5 }),
+      candidateInput({ url: "https://b.test/2", score: 0.4 }),
+      candidateInput({ url: "https://c.test/3", score: 0.3 }),
+    ]);
+    // Clear just one by id.
+    const one = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates/clear",
+      headers: auth,
+      payload: { ids: [cands[0]!.id] },
+    });
+    expect(one.json()).toEqual({ cleared: 1 });
+    // No vote was recorded (clear != down-vote).
+    expect(await harness.deps.overlay.listUnprocessedVotes()).toHaveLength(0);
+    // Clear the rest (no ids = all active).
+    const rest = await a.inject({
+      method: "POST",
+      url: "/api/v1/discovery/candidates/clear",
+      headers: auth,
+      payload: {},
+    });
+    expect(rest.json()).toEqual({ cleared: 2 });
+    const active = await a.inject({
+      method: "GET",
+      url: "/api/v1/discovery/candidates?status=active",
+      headers: auth,
+    });
+    expect((active.json().candidates as DiscoveryCandidate[])).toHaveLength(0);
     await a.close();
   });
 

@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.37.4',
+		date: '2026-07-09',
+		title: 'Discover works like your other lists',
+		changes: [
+			{
+				kind: 'improved',
+				text: 'The Discover page now has the same tools as your feed and library lists — sort, search, and filter by source — with the up/down vote controls added on each card.'
+			},
+			{
+				kind: 'added',
+				text: 'Clear items you are not interested in: dismiss a single card with the ✕, or use “Clear all” to wipe the whole list. Clearing just removes items — unlike a down-vote, it does not train the recommendations.'
+			}
+		]
+	},
+	{
 		version: '0.37.3',
 		date: '2026-07-09',
 		title: 'Discover finds articles, not landing pages',

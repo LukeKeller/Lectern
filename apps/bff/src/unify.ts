@@ -410,6 +410,9 @@ export interface DiscoveryStore {
   /** Record an up/down vote: append a vote row copying the candidate's term
    *  vector, then update the candidate (up keeps it active, down dismisses it). */
   recordVote(candidateId: string, value: VoteValue): Promise<DiscoveryCandidate | null>;
+  /** Dismiss active candidates WITHOUT recording a vote (no training). No ids =
+   *  clear all active. Returns how many were cleared. */
+  clearCandidates(ids?: string[]): Promise<number>;
   /** Votes not yet folded into the profile (worker training input). */
   listUnprocessedVotes(): Promise<DiscoveryVote[]>;
   /** Persist the profile AND mark the given vote ids processed, atomically. */

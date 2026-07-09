@@ -43,6 +43,8 @@
 		meta: ReadonlyMap<string, DiscoverMeta>;
 		onvote: (id: string, value: VoteValue) => void;
 		onsave: (id: string) => void;
+		/** Dismiss the candidate without casting a vote (distinct from a down-vote). */
+		onclear: (id: string) => void;
 	}
 
 	let {
@@ -511,6 +513,16 @@
 											onclick={() => discover.onsave(card.id)}
 										>
 											<Icon name="bookmark" size={16} />
+										</button>
+										<button
+											type="button"
+											class="round"
+											title="Clear (dismiss without voting)"
+											aria-label="Clear"
+											disabled={dm?.busy}
+											onclick={() => discover.onclear(card.id)}
+										>
+											<Icon name="close" size={16} />
 										</button>
 									</div>
 								{:else}

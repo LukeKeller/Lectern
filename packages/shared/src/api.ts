@@ -20,6 +20,8 @@ import {
   SetFeedNotificationRequest,
 } from "./push";
 import {
+  ClearCandidatesRequest,
+  ClearCandidatesResponse,
   CreateCandidatesRequest,
   CreateCandidatesResponse,
   CreateRunRequest,
@@ -857,6 +859,16 @@ export const endpoints: Endpoint[] = [
     summary: "Save a candidate to Readeck (it becomes a library document)",
     tags: ["discovery"],
     response: DiscoveryCandidate,
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/discovery/candidates/clear",
+    operationId: "clearCandidates",
+    summary: "Clear candidates off the list without training (all active, or by id)",
+    tags: ["discovery"],
+    body: ClearCandidatesRequest,
+    response: ClearCandidatesResponse,
     status: 200,
   },
   {

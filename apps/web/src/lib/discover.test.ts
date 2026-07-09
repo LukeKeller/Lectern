@@ -35,6 +35,20 @@ describe('applyCandidateAction', () => {
 		expect(next[0].status).toBe('saved');
 	});
 
+	it('clear removes the candidate without casting a vote', () => {
+		const list = [makeCandidate({ id: 'a' }), makeCandidate({ id: 'b' })];
+		const next = applyCandidateAction(list, { type: 'clear', id: 'a' });
+		expect(next.map((c) => c.id)).toEqual(['b']);
+		// Distinct from a down-vote: the remaining candidate keeps its null vote and
+		// the dropped one was never marked, so no training signal is implied.
+		expect(next[0].vote).toBe(null);
+	});
+
+	it('clearAll empties the entire list', () => {
+		const list = [makeCandidate({ id: 'a' }), makeCandidate({ id: 'b' })];
+		expect(applyCandidateAction(list, { type: 'clearAll' })).toEqual([]);
+	});
+
 	it('returns a new array without mutating the input', () => {
 		const list = [makeCandidate({ id: 'a' })];
 		const next = applyCandidateAction(list, { type: 'upvote', id: 'a' });

@@ -48,6 +48,7 @@ import {
   UpdateTtsSettingsRequest,
   UpdateViewRequest,
   ViewsResponse,
+  ClearCandidatesResponse,
   CreateCandidatesRequest,
   CreateCandidatesResponse,
   CreateRunRequest,
@@ -413,6 +414,14 @@ export class LecternClient {
   saveCandidate(id: string) {
     return this.request("POST", `/discovery/candidates/${id}/save`, {
       schema: DiscoveryCandidate,
+    });
+  }
+  /** Clear candidates off the list without training the model. Omit `ids` to
+   * clear every active candidate; pass ids to clear just those. */
+  clearCandidates(ids?: string[]) {
+    return this.request("POST", "/discovery/candidates/clear", {
+      body: ids ? { ids } : {},
+      schema: ClearCandidatesResponse,
     });
   }
   /** Trigger a discovery run now (fire-and-forget to the worker). */

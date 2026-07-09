@@ -1003,6 +1003,17 @@ const handlers: Record<string, MockHandler> = {
     c.status = "saved";
     return { json: c };
   },
+  clearCandidates: ({ body }) => {
+    const ids = (body as { ids?: string[] }).ids;
+    let cleared = 0;
+    for (const c of mockCandidates) {
+      if (c.status !== "active") continue;
+      if (ids && !ids.includes(c.id)) continue;
+      c.status = "dismissed";
+      cleared++;
+    }
+    return { json: { cleared } };
+  },
   triggerDiscoveryRun: () => ({ status: 202, json: { triggered: true, runId: mockRun.id } }),
   getDiscoverySettings: () => ({ json: mockDiscoverySettings }),
   updateDiscoverySettings: ({ body }) => {

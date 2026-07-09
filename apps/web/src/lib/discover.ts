@@ -11,11 +11,13 @@ import type { Card, DiscoveryCandidate } from '@lectern/shared';
  * - `downvote`— records the signal and dismisses it: drop it from the list.
  * - `save`    — the candidate is being pulled into Readeck: flag it `saved` so
  *   the row can show a "Saved" badge (the caller drops it on refresh).
+ * - `clear`   — dismiss WITHOUT training the model (distinct from a down-vote):
+ *   drop it from the list, casting no vote.
+ * - `clearAll`— dismiss every candidate at once (empties the list), no votes.
  */
-export type CandidateAction = {
-	type: 'upvote' | 'downvote' | 'save';
-	id: string;
-};
+export type CandidateAction =
+	| { type: 'upvote' | 'downvote' | 'save' | 'clear'; id: string }
+	| { type: 'clearAll' };
 
 export function applyCandidateAction(
 	list: DiscoveryCandidate[],
@@ -23,7 +25,10 @@ export function applyCandidateAction(
 ): DiscoveryCandidate[] {
 	switch (action.type) {
 		case 'downvote':
+		case 'clear':
 			return list.filter((c) => c.id !== action.id);
+		case 'clearAll':
+			return [];
 		case 'upvote':
 			return list.map((c) => (c.id === action.id ? { ...c, vote: 'up' } : c));
 		case 'save':
