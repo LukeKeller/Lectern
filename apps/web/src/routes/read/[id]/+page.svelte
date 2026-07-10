@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Card } from '@lectern/shared';
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import DOMPurify from 'dompurify';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -859,19 +859,34 @@
 		goBack();
 	}
 
+	// `card` is a liveQuery that re-emits a NEW object whenever the row changes —
+	// including on every scroll, since reading progress is persisted back onto it.
+	// These memoized deriveds expose the card's IDENTITY-relevant fields: a $derived
+	// only notifies dependents when its value actually changes, so effects keyed on
+	// these don't re-run (and flicker) on a progress write that leaves id/category
+	// untouched. They stay coherent with `card` (they're computed from it).
+	const cardId = $derived(card?.id);
+	const cardCategory = $derived(card?.category);
+
 	// End-of-article "Next up": the document after this one in the reading queue
 	// (the snapshot of the list the reader came from), looked up in the local
 	// Dexie mirror. Undefined when last-in-queue or opened via a direct link.
-	const nextId = $derived(card ? readingQueue.nextAfter(card.id) : undefined);
+	const nextId = $derived(cardId ? readingQueue.nextAfter(cardId) : undefined);
 	let nextCard = $state<Card | undefined>(undefined);
 	let nextKicker = $state('Next up');
 	// True when the kicker already names the publication, so the meta line
 	// doesn't repeat it ("Next issue · Money Stuff" + "Money Stuff · 14 min").
 	let nextSameSender = $state(false);
 	$effect(() => {
-		const current = card;
+		// Depend only on identity (id + category), NOT the volatile `card` object, so
+		// a scroll-driven progress write doesn't re-run this and re-fetch "Next up".
+		// cardId/cardCategory are derived FROM card, so when they change `card` is
+		// already the matching row — safe to read it untracked.
+		void cardId;
+		const category = cardCategory;
+		const current = untrack(() => card);
 		let cancelled = false;
-		if (current?.category === 'email') {
+		if (category === 'email' && current) {
 			// Issue-to-issue flow: newest unread same-sender issue first, then the
 			// newest unread other newsletter. No fallback to the reading queue —
 			// when the email backlog is finished, the dead-end is the triage row.
@@ -910,7 +925,10 @@
 	// stale response when the reader hops to another article before it resolves.
 	let relatedCards = $state<Card[]>([]);
 	$effect(() => {
-		const current = card?.id;
+		// Key on the memoized id, not `card?.id`: reading the `card` signal directly
+		// re-runs this on every progress write (same id, new object), clearing then
+		// re-fetching related cards — the flicker between "Related" and "Next up".
+		const current = cardId;
 		relatedCards = [];
 		if (!current) return;
 		let cancelled = false;
