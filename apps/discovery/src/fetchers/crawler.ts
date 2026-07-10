@@ -142,32 +142,50 @@ export function parseRobots(text: string, ua: string): RobotsMatcher {
   };
 }
 
+/** How a host's robots.txt constrains us, for the run trace. */
+export type RobotsPosture = "allow-all" | "restricted" | "unreachable";
+
 /** Fetches + caches a per-origin robots matcher. Unreachable robots = allow all. */
 class RobotsCache {
-  private readonly cache = new Map<string, RobotsMatcher>();
+  private readonly cache = new Map<string, { matcher: RobotsMatcher; posture: RobotsPosture }>();
   constructor(private readonly doFetch: typeof fetch) {}
 
   async allowed(url: URL): Promise<boolean> {
-    const origin = url.origin;
-    let matcher = this.cache.get(origin);
-    if (!matcher) {
-      matcher = await this.load(origin);
-      this.cache.set(origin, matcher);
-    }
-    return matcher(url.pathname || "/");
+    const entry = await this.entry(url.origin);
+    return entry.matcher(url.pathname || "/");
   }
 
-  private async load(origin: string): Promise<RobotsMatcher> {
+  /** The cached posture for an origin (call after `allowed` has populated it). */
+  postureFor(origin: string): RobotsPosture {
+    return this.cache.get(origin)?.posture ?? "allow-all";
+  }
+
+  private async entry(origin: string): Promise<{ matcher: RobotsMatcher; posture: RobotsPosture }> {
+    let entry = this.cache.get(origin);
+    if (!entry) {
+      entry = await this.load(origin);
+      this.cache.set(origin, entry);
+    }
+    return entry;
+  }
+
+  private async load(origin: string): Promise<{ matcher: RobotsMatcher; posture: RobotsPosture }> {
     try {
       const res = await this.doFetch(`${origin}/robots.txt`, {
         headers: { "user-agent": `${CRAWLER_UA}/1.0` },
       });
       // 4xx (incl. 404 "no robots") or any non-2xx => no restrictions.
-      if (!res.ok) return () => true;
+      if (!res.ok) return { matcher: () => true, posture: "allow-all" };
       const text = await res.text();
-      return parseRobots(text, CRAWLER_UA);
+      // "restricted" is a forensic label: the file publishes at least one
+      // non-empty Disallow. (It may not apply to our UA, but it signals the host
+      // does gate crawlers.) An empty/absent file is "allow-all".
+      const posture: RobotsPosture = /(?:^|\n)\s*disallow\s*:\s*\S/i.test(text)
+        ? "restricted"
+        : "allow-all";
+      return { matcher: parseRobots(text, CRAWLER_UA), posture };
     } catch {
-      return () => true;
+      return { matcher: () => true, posture: "unreachable" };
     }
   }
 }
@@ -236,6 +254,7 @@ export function createCrawlerFetcher(deps: FetcherDeps = {}): Fetcher {
     name: "crawl",
     enabled: (cfg) => cfg.fetchers.crawl && cfg.seedUrls.length > 0,
     async fetch(ctx) {
+      const trace = ctx.crawlTrace;
       const deadline = Date.now() + Math.min(ctx.timeBudgetMs, ctx.cfg.crawlTimeMs);
       const maxDepth = ctx.cfg.crawlDepth;
       const robots = new RobotsCache(doFetch);
@@ -245,9 +264,18 @@ export function createCrawlerFetcher(deps: FetcherDeps = {}): Fetcher {
       // Seeds are enqueued verbatim (they're deliberately chosen link hubs); their
       // outbound links are what we actually harvest as articles.
       const queue: QueueItem[] = ctx.seedUrls.map((url) => ({ url, depth: 0 }));
+      trace?.seeds(ctx.seedUrls);
 
+      let stopReason: "drained" | "deadline" | "limit" = "drained";
       while (queue.length > 0) {
-        if (Date.now() >= deadline || out.length >= ctx.limit) break;
+        if (Date.now() >= deadline) {
+          stopReason = "deadline";
+          break;
+        }
+        if (out.length >= ctx.limit) {
+          stopReason = "limit";
+          break;
+        }
         const item = queue.shift();
         if (!item) break;
 
@@ -263,20 +291,37 @@ export function createCrawlerFetcher(deps: FetcherDeps = {}): Fetcher {
         }
         const host = target.host;
         const visits = hostVisits.get(host) ?? 0;
-        if (visits >= PER_HOST_CAP) continue;
+        if (visits >= PER_HOST_CAP) {
+          trace?.hostCapHit(host);
+          trace?.reject(item.url, "host-cap");
+          continue;
+        }
 
         // Politeness: obey robots.txt before fetching anything.
-        if (!(await robots.allowed(target))) continue;
+        if (!(await robots.allowed(target))) {
+          trace?.robotsBlocked(host);
+          trace?.reject(item.url, "robots");
+          continue;
+        }
         hostVisits.set(host, visits + 1);
+        trace?.visit(host, robots.postureFor(target.origin));
+        trace?.depth(item.depth);
 
         let html: string;
         try {
           const res = await doFetch(item.url, {
             headers: { accept: "text/html", "user-agent": `${CRAWLER_UA}/1.0` },
           });
-          if (!res.ok) continue;
+          if (!res.ok) {
+            trace?.skipped();
+            trace?.reject(item.url, "http-error");
+            continue;
+          }
           html = await res.text();
+          trace?.fetched();
         } catch {
+          trace?.skipped();
+          trace?.reject(item.url, "fetch-error");
           continue;
         }
 
@@ -289,14 +334,23 @@ export function createCrawlerFetcher(deps: FetcherDeps = {}): Fetcher {
             excerpt: extractMetaDescription(html),
             fetcher: "crawl",
           });
+          trace?.emitted();
+        } else {
+          trace?.reject(item.url, "non-content");
         }
 
         if (item.depth < maxDepth) {
+          let enqueued = 0;
           for (const link of extractLinks(html, item.url)) {
-            if (!seen.has(normalizeUrl(link))) queue.push({ url: link, depth: item.depth + 1 });
+            if (!seen.has(normalizeUrl(link))) {
+              queue.push({ url: link, depth: item.depth + 1 });
+              enqueued++;
+            }
           }
+          if (enqueued > 0) trace?.enqueued(enqueued);
         }
       }
+      trace?.stop(stopReason);
 
       return out.slice(0, ctx.limit);
     },

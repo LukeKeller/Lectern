@@ -67,6 +67,7 @@ import {
   FollowDomainResponse,
   FollowSuggestionsResponse,
   LatestRunResponse,
+  RunDetailResponse,
   ListCandidatesQuery,
   PutDiscoveryProfileRequest,
   TriggerRunResponse,
@@ -467,6 +468,12 @@ export class LecternClient {
   /** Current/most-recent run (poll while running). */
   getLatestDiscoveryRun() {
     return this.request("GET", "/discovery/runs/latest", { schema: LatestRunResponse });
+  }
+  /** One run WITH its full forensic trace (the run-detail view). */
+  getDiscoveryRun(id: string) {
+    return this.request("GET", `/discovery/runs/${encodeURIComponent(id)}`, {
+      schema: RunDetailResponse,
+    });
   }
   /** Domains the user keeps saving/upvoting that aren't yet followed feeds. */
   getFollowSuggestions() {

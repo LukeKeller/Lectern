@@ -267,6 +267,9 @@ export const discoveryRuns = pgTable("discovery_runs", {
   trigger: text("trigger").notNull().default("manual"), // cron | manual
   stats: jsonb("stats").$type<Record<string, unknown>>().notNull().default({}),
   error: text("error"),
+  // Deep forensic trace (queries, per-source raw results, crawler internals,
+  // per-candidate scoring funnel). Written once at run end; null for older runs.
+  trace: jsonb("trace").$type<Record<string, unknown>>(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
