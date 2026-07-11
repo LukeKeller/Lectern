@@ -1,3 +1,10 @@
+<script module lang="ts">
+	// Module-scoped so cached suggestions survive component remounts and same-doc
+	// reloads (see the fetch effect below). Keyed by document id. A plain instance
+	// `<script>` const would be rebuilt on every remount, defeating the purpose.
+	const suggestionCache = new Map<string, string[]>();
+</script>
+
 <script lang="ts">
 	import { getSync } from '$lib/sync';
 	import { getClient } from '$lib/config';
@@ -8,16 +15,27 @@
 
 	// Server-suggested tags (tag-centroid similarity), fetched once per document.
 	// Keyed on the document id so a reader→reader hop re-fetches for the new doc.
-	let suggestions = $state<string[]>([]);
+	// The cache is module-scoped so it outlives component remounts and same-doc
+	// reloads: seeding from it keeps the row at its settled height instead of
+	// collapsing to empty during the fetch, which was causing the section to flash
+	// in and out and jump the page on every reload.
+	// Seed the first render from cache (mount-time id only; the effect below keeps
+	// it in sync when id changes).
+	// svelte-ignore state_referenced_locally
+	let suggestions = $state<string[]>(suggestionCache.get(id) ?? []);
 	$effect(() => {
 		const current = id;
-		suggestions = [];
+		// Re-seed from cache (not []) so a re-run keeps the previous row visible
+		// until the fetch resolves. Only a genuinely uncached doc starts empty.
+		suggestions = suggestionCache.get(current) ?? [];
 		if (!current) return;
 		let cancelled = false;
 		void getClient()
 			.getTagSuggestions(current)
 			.then((r) => {
-				if (!cancelled) suggestions = r.suggestions.map((s) => s.tag);
+				const next = r.suggestions.map((s) => s.tag);
+				suggestionCache.set(current, next);
+				if (!cancelled) suggestions = next;
 			})
 			.catch(() => {});
 		return () => {

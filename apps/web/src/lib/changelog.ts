@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.40.1',
+		date: '2026-07-11',
+		title: 'Steadier tag suggestions',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'The “Suggested” tags under an article no longer flash in and out on reload — the row now holds its place instead of jumping the page up and down.'
+			}
+		]
+	},
+	{
 		version: '0.40.0',
 		date: '2026-07-09',
 		title: 'Your library gets the same local smarts as Discover',
