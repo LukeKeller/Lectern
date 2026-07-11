@@ -135,6 +135,9 @@
 				</span>
 				<span class="trigger">{latest.trigger === 'cron' ? 'Scheduled' : 'Manual'}</span>
 				<span class="when">{stamp(latest.startedAt)} · {duration(latest)}</span>
+				<a class="details" href={resolve('/discover/activity/[id]', { id: latest.id })}
+					>View details</a
+				>
 			</div>
 
 			<p class="stage">{latest.stage}</p>
@@ -167,15 +170,17 @@
 		{:else}
 			<ul class="history">
 				{#each runs as run (run.id)}
-					<li class="hrow">
-						<span class="status status-sm" data-status={run.status}>{statusLabel(run.status)}</span>
-						<span class="htrigger">{run.trigger === 'cron' ? 'Scheduled' : 'Manual'}</span>
-						<span class="hwhen">{stamp(run.startedAt)}</span>
-						<span class="hdur">{duration(run)}</span>
-						<span class="hinserted">+{run.stats.inserted}</span>
-						{#if run.status === 'failed' && run.error}
-							<span class="herror" title={run.error}>{run.error}</span>
-						{/if}
+					<li>
+						<a class="hrow" href={resolve('/discover/activity/[id]', { id: run.id })}>
+							<span class="status status-sm" data-status={run.status}>{statusLabel(run.status)}</span>
+							<span class="htrigger">{run.trigger === 'cron' ? 'Scheduled' : 'Manual'}</span>
+							<span class="hwhen">{stamp(run.startedAt)}</span>
+							<span class="hdur">{duration(run)}</span>
+							<span class="hinserted">+{run.stats.inserted}</span>
+							{#if run.status === 'failed' && run.error}
+								<span class="herror" title={run.error}>{run.error}</span>
+							{/if}
+						</a>
 					</li>
 				{/each}
 			</ul>
@@ -308,6 +313,13 @@
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
+	.details {
+		font-size: var(--text-sm);
+		color: var(--accent);
+	}
+	.details:hover {
+		text-decoration: underline;
+	}
 	.stage {
 		margin: 0.9rem 0 0;
 		font-size: var(--text-base);
@@ -387,8 +399,14 @@
 		padding: 0.65rem 0.3rem;
 		border-bottom: 1px solid var(--border);
 		font-size: var(--text-sm);
+		color: var(--text);
+		border-radius: var(--radius-sm);
+		transition: background var(--dur-fast) var(--ease);
 	}
-	.hrow:last-child {
+	.hrow:hover {
+		background: var(--surface-alt);
+	}
+	.history li:last-child .hrow {
 		border-bottom: 0;
 	}
 	.status-sm {

@@ -281,6 +281,129 @@ export const DiscoveryRunStats = z.object({
 });
 export type DiscoveryRunStats = z.infer<typeof DiscoveryRunStats>;
 
+// ---- Run trace (deep, post-hoc forensic detail) -----------------------------
+//
+// The `stats` counters answer "how many"; the trace answers "what exactly did
+// the crawler and searchers do". It is assembled by the worker as the pipeline
+// runs and persisted once at the end (or on failure). Every field defaults, so a
+// partial trace from a run that died mid-pipeline still parses. It is only ever
+// returned by the single-run detail endpoint — never the list/latest views,
+// which stay lean.
+
+/** A single raw result a search fetcher returned, before dedupe/scoring. */
+export const TraceResult = z.object({
+  url: z.string(),
+  title: z.string().nullable().default(null),
+});
+export type TraceResult = z.infer<typeof TraceResult>;
+
+/** What one searcher (searxng/brave) or the crawler did, at a glance. */
+export const FetcherTrace = z.object({
+  name: z.string(),
+  enabled: z.boolean().default(true),
+  ok: z.boolean().default(true),
+  error: z.string().nullable().default(null),
+  count: z.number().int().nonnegative().default(0),
+  durationMs: z.number().nonnegative().nullable().default(null),
+  /** The raw results this source returned (capped for storage). */
+  results: z.array(TraceResult).default([]),
+});
+export type FetcherTrace = z.infer<typeof FetcherTrace>;
+
+/** How the crawler treated one host it touched. */
+export const CrawlHostTrace = z.object({
+  host: z.string(),
+  /** Pages actually fetched from this host. */
+  visited: z.number().int().nonnegative().default(0),
+  /** robots.txt posture: no restrictions, some paths blocked, or unreachable. */
+  robots: z.enum(["allow-all", "restricted", "unreachable"]).default("allow-all"),
+  /** Paths this host's robots.txt disallowed us from fetching. */
+  robotsBlocked: z.number().int().nonnegative().default(0),
+  /** Whether the per-host visit cap was reached. */
+  capHit: z.boolean().default(false),
+});
+export type CrawlHostTrace = z.infer<typeof CrawlHostTrace>;
+
+/** Why the crawler declined a URL. */
+export const CrawlRejectReason = z.enum([
+  "robots", // disallowed by robots.txt
+  "non-content", // failed isContentUrl (homepage / section / nav / profile)
+  "http-error", // non-2xx response
+  "fetch-error", // network/parse failure
+  "host-cap", // per-host visit cap already reached
+]);
+export type CrawlRejectReason = z.infer<typeof CrawlRejectReason>;
+
+/** A URL the crawler declined to emit or follow, with the reason. */
+export const CrawlRejection = z.object({
+  url: z.string(),
+  reason: CrawlRejectReason,
+});
+export type CrawlRejection = z.infer<typeof CrawlRejection>;
+
+/** The crawler's forensic detail for a run. */
+export const CrawlTrace = z.object({
+  seeds: z.array(z.string()).default([]),
+  /** Which of the four bounds ended the walk. */
+  stopReason: z.enum(["drained", "deadline", "limit"]).default("drained"),
+  depthReached: z.number().int().nonnegative().default(0),
+  pagesFetched: z.number().int().nonnegative().default(0),
+  /** Pages skipped on a non-2xx / network error. */
+  pagesSkipped: z.number().int().nonnegative().default(0),
+  linksEnqueued: z.number().int().nonnegative().default(0),
+  /** Pages emitted as candidates. */
+  emitted: z.number().int().nonnegative().default(0),
+  hosts: z.array(CrawlHostTrace).default([]),
+  /** A capped sample of declined URLs. */
+  rejections: z.array(CrawlRejection).default([]),
+});
+export type CrawlTrace = z.infer<typeof CrawlTrace>;
+
+/** One candidate's journey through dedupe → scoring → extraction → selection. */
+export const CandidateTrace = z.object({
+  url: z.string(),
+  title: z.string().nullable().default(null),
+  fetcher: z.string(),
+  /** Raw TF-IDF cosine to the interest profile (the stored, UI-visible score). */
+  cosine: z.number().default(0),
+  /** Freshness multiplier applied on top of cosine. */
+  recency: z.number().default(1),
+  /** cosine × recency — the value the pipeline actually ranks by. */
+  finalScore: z.number().default(0),
+  /** 1-based rank after the final sort. */
+  rank: z.number().int().nonnegative().default(0),
+  /** Whether it made the top `targetCount` and was inserted. */
+  selected: z.boolean().default(false),
+  /** Full-text extraction outcome for the shortlist (else "skipped"). */
+  extracted: z.enum(["ok", "failed", "skipped"]).default("skipped"),
+  /** Cosine on title+excerpt, before any full-text re-rank. */
+  snippetCosine: z.number().nullable().default(null),
+  /** Cosine on the extracted article body, after re-rank (if extracted). */
+  fullTextCosine: z.number().nullable().default(null),
+  /** Readable "why this?" overlap terms (selected candidates only). */
+  matchedTerms: z.array(z.string()).default([]),
+});
+export type CandidateTrace = z.infer<typeof CandidateTrace>;
+
+/** The full forensic record of one discovery run. */
+export const RunTrace = z.object({
+  /** The exact queries issued to the searchers. */
+  queries: z.array(z.string()).default([]),
+  /** Top interest-profile terms (readable surface form + weight) driving the run. */
+  profileTerms: z.array(z.object({ term: z.string(), weight: z.number() })).default([]),
+  /** Per-source diagnostics (searxng, brave, crawl). */
+  fetchers: z.array(FetcherTrace).default([]),
+  /** Crawler internals, or null when the crawler was disabled. */
+  crawl: CrawlTrace.nullable().default(null),
+  /** Candidates dropped as duplicate URLs before scoring. */
+  dedupeDropped: z.number().int().nonnegative().default(0),
+  /** Hosts dropped because their domain is muted. */
+  mutedDropped: z.array(z.string()).default([]),
+  /** Every scored candidate's journey, ranked. */
+  candidates: z.array(CandidateTrace).default([]),
+});
+export type RunTrace = z.infer<typeof RunTrace>;
+
 /** One discovery run, updated live by the worker as it progresses. */
 export const DiscoveryRun = z.object({
   id: z.string(),
@@ -293,6 +416,8 @@ export const DiscoveryRun = z.object({
   startedAt: z.string(),
   updatedAt: z.string(),
   finishedAt: z.string().nullable().default(null),
+  /** Deep forensic detail. Only populated by the single-run detail endpoint. */
+  trace: RunTrace.nullable().default(null),
 });
 export type DiscoveryRun = z.infer<typeof DiscoveryRun>;
 
@@ -302,6 +427,10 @@ export type DiscoveryRunsResponse = z.infer<typeof DiscoveryRunsResponse>;
 /** `GET /discovery/runs/latest` — the current/most-recent run, or null if none. */
 export const LatestRunResponse = z.object({ run: DiscoveryRun.nullable() });
 export type LatestRunResponse = z.infer<typeof LatestRunResponse>;
+
+/** `GET /discovery/runs/:id` — one run WITH its full forensic `trace`, or null. */
+export const RunDetailResponse = z.object({ run: DiscoveryRun.nullable() });
+export type RunDetailResponse = z.infer<typeof RunDetailResponse>;
 
 export const ListRunsQuery = z.object({
   limit: z.number().int().min(1).max(100).default(20),
@@ -320,6 +449,8 @@ export const UpdateRunRequest = z.object({
   status: RunStatus.optional(),
   stats: DiscoveryRunStats.partial().optional(),
   error: z.string().nullable().optional(),
+  /** Full forensic trace, sent once at the terminal (or failure) update. */
+  trace: RunTrace.optional(),
 });
 export type UpdateRunRequest = z.infer<typeof UpdateRunRequest>;
 

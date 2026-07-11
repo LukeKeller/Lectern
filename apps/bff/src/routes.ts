@@ -26,6 +26,7 @@ import {
   ListCandidatesQuery,
   ListRunsQuery,
   PutDiscoveryProfileRequest,
+  RunDetailResponse,
   TriggerRunResponse,
   UnprocessedVotesResponse,
   UpdateDiscoverySettingsRequest,
@@ -957,6 +958,13 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/discovery/runs/latest", async () =>
     LatestRunResponse.parse({ run: await deps.overlay.getLatestRun() }),
+  );
+
+  // One run WITH its full forensic trace (the only endpoint that ships it).
+  // Fastify's radix router matches the static /latest route above ahead of this
+  // :id param route regardless of registration order, so they don't collide.
+  app.get<{ Params: { id: string } }>("/discovery/runs/:id", async (req) =>
+    RunDetailResponse.parse({ run: await deps.overlay.getRun(req.params.id) }),
   );
 
   // ---- auto-follow suggestions (Milestone B) -----------------------------

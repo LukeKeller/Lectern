@@ -26,13 +26,28 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
-		version: '0.40.1',
+		version: '0.41.1',
 		date: '2026-07-11',
 		title: 'Steadier tag suggestions',
 		changes: [
 			{
 				kind: 'fixed',
 				text: 'The “Suggested” tags under an article no longer flash in and out on reload — the row now holds its place instead of jumping the page up and down.'
+			}
+		]
+	},
+	{
+		version: '0.41.0',
+		date: '2026-07-10',
+		title: 'See exactly what Discover did',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Run details: open Discover → Activity and tap any run to see exactly what the crawler and searchers did — the queries used, each source’s results, the crawler’s robots.txt and per-host decisions, and how every candidate scored and ranked.'
+			},
+			{
+				kind: 'fixed',
+				text: 'The Related and Next up sections at the end of an article no longer flicker as you scroll.'
 			}
 		]
 	},

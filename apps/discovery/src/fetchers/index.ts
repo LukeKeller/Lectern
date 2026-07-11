@@ -17,6 +17,7 @@ export {
   type FetchContext,
   type RawCandidate,
   type FetcherDeps,
+  type CrawlTraceSink,
   DiscoveryHttpError,
 } from "./types";
 export { createSearxngFetcher, searxng } from "./searxng";

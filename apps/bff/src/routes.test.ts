@@ -865,6 +865,10 @@ class FakeOverlayStore implements OverlayStore {
   async getLatestRun() {
     return (await this.listRuns(1))[0] ?? null;
   }
+
+  async getRun(id: string) {
+    return this.discoveryRuns.get(id) ?? null;
+  }
 }
 
 class FakeTtsBackend {

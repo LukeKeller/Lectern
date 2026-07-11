@@ -1334,6 +1334,9 @@ export class DrizzleOverlayStore implements OverlayStore {
     if (patch.stage !== undefined) set.stage = patch.stage;
     if (patch.status !== undefined) set.status = patch.status;
     if (patch.error !== undefined) set.error = patch.error;
+    // The worker sends the (potentially large) forensic trace once, at the
+    // terminal/failure update. Persist it verbatim; only the detail endpoint reads it.
+    if (patch.trace !== undefined) set.trace = patch.trace;
     // Shallow-merge stats so a partial progress update keeps prior counters.
     if (patch.stats !== undefined) {
       set.stats = { ...((existing.stats ?? {}) as Record<string, unknown>), ...patch.stats };
@@ -1354,7 +1357,9 @@ export class DrizzleOverlayStore implements OverlayStore {
       .from(discoveryRuns)
       .orderBy(desc(discoveryRuns.startedAt))
       .limit(limit);
-    return rows.map(runFromRow);
+    // Wrap so Array.map's index arg isn't forwarded as `includeTrace` — lists
+    // never ship the trace.
+    return rows.map((row) => runFromRow(row));
   }
 
   async getLatestRun(): Promise<DiscoveryRun | null> {
@@ -1364,6 +1369,19 @@ export class DrizzleOverlayStore implements OverlayStore {
       .orderBy(desc(discoveryRuns.startedAt))
       .limit(1);
     return row ? runFromRow(row) : null;
+  }
+
+  /**
+   * A single run WITH its full forensic trace — for the detail endpoint only.
+   * The list/latest views deliberately omit the trace (it can be large), so this
+   * is the one path that hydrates it (`includeTrace`).
+   */
+  async getRun(id: string): Promise<DiscoveryRun | null> {
+    const [row] = await this.db
+      .select()
+      .from(discoveryRuns)
+      .where(eq(discoveryRuns.id, id));
+    return row ? runFromRow(row, true) : null;
   }
 
   /**
@@ -1715,7 +1733,9 @@ function profileFromRow(row: DiscoveryProfileRow): DiscoveryProfile {
   });
 }
 
-function runFromRow(row: DiscoveryRunRow): DiscoveryRun {
+// `includeTrace` is opt-in: list/latest views must NOT ship the (potentially
+// large) forensic trace — only the single-run detail endpoint hydrates it.
+function runFromRow(row: DiscoveryRunRow, includeTrace = false): DiscoveryRun {
   return DiscoveryRun.parse({
     id: row.id,
     status: row.status,
@@ -1726,6 +1746,7 @@ function runFromRow(row: DiscoveryRunRow): DiscoveryRun {
     startedAt: row.startedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     finishedAt: row.finishedAt?.toISOString() ?? null,
+    trace: includeTrace ? (row.trace ?? null) : null,
   });
 }
 

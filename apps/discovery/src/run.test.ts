@@ -67,6 +67,8 @@ class FakeClient implements DiscoveryClient {
   statuses: string[] = [];
   putProfiles: PutDiscoveryProfileRequest[] = [];
   created: CreateCandidatesRequest | null = null;
+  /** The forensic trace from the last update that carried one. */
+  lastTrace: UpdateRunRequest["trace"] | null = null;
   /** URL -> canned extraction result (null = extraction "failed"). */
   extracts: Record<string, ExtractContentResponse["result"]>;
   extractCalls: string[] = [];
@@ -97,6 +99,7 @@ class FakeClient implements DiscoveryClient {
       startedAt: now,
       updatedAt: now,
       finishedAt: null,
+      trace: null,
     };
   }
 
@@ -128,6 +131,7 @@ class FakeClient implements DiscoveryClient {
   async updateDiscoveryRun(id: string, body: UpdateRunRequest): Promise<DiscoveryRun> {
     if (body.stage) this.stages.push(body.stage);
     if (body.status) this.statuses.push(body.status);
+    if (body.trace) this.lastTrace = body.trace;
     return this.stubRun(id);
   }
   async extractContent(url: string): Promise<ExtractContentResponse["result"]> {
@@ -359,6 +363,70 @@ describe("runDiscovery", () => {
     expect(urls).toContain("https://a.com/rust");
     expect(urls).not.toContain("https://spam.com/rust");
     expect(urls).not.toContain("https://sub.spam.com/rust");
+  });
+
+  it("captures a forensic trace: queries, per-source detail, crawl internals, scoring funnel", async () => {
+    const client = new FakeClient({ config: { ...baseConfig, mutedDomains: ["spam.com"] } });
+    const searxng = fakeFetcher("searxng", [
+      { url: "https://a.com/rust", title: "Rust safety", excerpt: "systems rust", fetcher: "searxng" },
+      { url: "https://a.com/rust", title: "Rust safety dup", excerpt: "dup", fetcher: "searxng" },
+      { url: "https://spam.com/x", title: "Spam", excerpt: "muted", fetcher: "searxng" },
+      { url: "https://c.com/cooking", title: "Sourdough", excerpt: "baking dough", fetcher: "searxng" },
+    ]);
+    const brave = throwingFetcher("brave");
+    // A stand-in crawler that reports through the sink exactly as the real one does.
+    const crawl: Fetcher = {
+      name: "crawl",
+      enabled: () => true,
+      fetch: async (ctx) => {
+        ctx.crawlTrace?.seeds(["https://blog.example/hub"]);
+        ctx.crawlTrace?.visit("blog.example", "restricted");
+        ctx.crawlTrace?.depth(1);
+        ctx.crawlTrace?.fetched();
+        ctx.crawlTrace?.emitted();
+        ctx.crawlTrace?.reject("https://blog.example/about", "non-content");
+        ctx.crawlTrace?.robotsBlocked("blog.example");
+        ctx.crawlTrace?.stop("deadline");
+        return [
+          { url: "https://blog.example/post-1", title: "Rust async runtime", excerpt: "rust systems", fetcher: "crawl" },
+        ];
+      },
+    };
+
+    await runDiscovery(client, { trigger: "manual", fetchers: [searxng, brave, crawl] });
+
+    const trace = client.lastTrace;
+    expect(trace).toBeTruthy();
+    if (!trace) throw new Error("no trace");
+
+    // Queries + profile terms recorded.
+    expect(trace.queries).toEqual(baseConfig.topics);
+    expect(trace.profileTerms.length).toBeGreaterThan(0);
+
+    // Per-source detail: searxng ok with results, brave errored, crawl ok.
+    const byName = Object.fromEntries(trace.fetchers.map((f) => [f.name, f]));
+    expect(byName.searxng?.ok).toBe(true);
+    expect(byName.searxng?.results.length).toBeGreaterThan(0);
+    expect(byName.brave?.ok).toBe(false);
+    expect(byName.brave?.error).toContain("boom");
+    expect(byName.crawl?.count).toBe(1);
+
+    // Crawl internals threaded through the sink.
+    expect(trace.crawl?.stopReason).toBe("deadline");
+    expect(trace.crawl?.seeds).toEqual(["https://blog.example/hub"]);
+    const host = trace.crawl?.hosts.find((h) => h.host === "blog.example");
+    expect(host?.robots).toBe("restricted");
+    expect(host?.robotsBlocked).toBe(1);
+    expect(trace.crawl?.rejections.some((r) => r.reason === "non-content")).toBe(true);
+
+    // Scoring funnel: dedupe + mute counted, candidates ranked, top ones selected.
+    expect(trace.dedupeDropped).toBe(1); // the duplicate a.com/rust
+    expect(trace.mutedDropped).toContain("spam.com");
+    expect(trace.candidates.length).toBeGreaterThan(0);
+    expect(trace.candidates[0]?.rank).toBe(1);
+    expect(trace.candidates.some((c) => c.selected)).toBe(true);
+    // A selected candidate carries its readable why-this terms.
+    expect(trace.candidates.find((c) => c.selected)?.matchedTerms.length).toBeGreaterThan(0);
   });
 });
 

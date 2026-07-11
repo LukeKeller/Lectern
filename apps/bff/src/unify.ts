@@ -451,6 +451,8 @@ export interface DiscoveryStore {
   listRuns(limit: number): Promise<DiscoveryRun[]>;
   /** The current/most-recent run, or null if none. */
   getLatestRun(): Promise<DiscoveryRun | null>;
+  /** One run by id WITH its full forensic trace (detail endpoint only). */
+  getRun(id: string): Promise<DiscoveryRun | null>;
   /** Domains with at least `minSignals` DISTINCT saved/up-voted candidates —
    *  auto-follow suggestions, sorted by signal count desc. */
   suggestFollowDomains(minSignals: number): Promise<FollowSuggestion[]>;

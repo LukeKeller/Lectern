@@ -1,4 +1,9 @@
 import type {
+  CandidateTrace,
+  CrawlHostTrace,
+  CrawlRejectReason,
+  CrawlRejection,
+  CrawlTrace,
   CreateCandidateInput,
   CreateCandidatesRequest,
   CreateCandidatesResponse,
@@ -9,8 +14,10 @@ import type {
   DiscoveryRunStats,
   DiscoverySeed,
   ExtractContentResponse,
+  FetcherTrace,
   PutDiscoveryProfileRequest,
   RunStatus,
+  RunTrace,
   RunTrigger,
   TermVector,
   UnprocessedVotesResponse,
@@ -25,9 +32,15 @@ import {
   tokenize,
   updateProfile,
 } from "@lectern/shared";
-import { Seen } from "./dedupe";
+import { normalizeUrl, Seen } from "./dedupe";
 import { isoOrUndefined } from "./fetchers/dates";
-import { allFetchers, type Fetcher, type FetchContext, type RawCandidate } from "./fetchers";
+import {
+  allFetchers,
+  type CrawlTraceSink,
+  type Fetcher,
+  type FetchContext,
+  type RawCandidate,
+} from "./fetchers";
 
 /**
  * The subset of the Lectern API the discovery worker uses. `LecternClient`
@@ -66,6 +79,12 @@ const EXTRACT_CONCURRENCY = 4;
 const EXTRACT_TIMEOUT_MS = 15_000;
 /** How many readable "why this?" terms to surface per candidate. */
 const WHY_TERM_COUNT = 5;
+/** How many raw results per source to keep in the trace (storage bound). */
+const TRACE_RESULT_CAP = 50;
+/** How many crawler rejections / muted hosts to keep in the trace. */
+const TRACE_REJECT_CAP = 300;
+/** How many top interest-profile terms to record in the trace. */
+const TRACE_PROFILE_TERMS = 20;
 
 /** A scored candidate carried through ranking (and possibly re-scored on full text). */
 interface Scored {
@@ -76,10 +95,78 @@ interface Scored {
   vec: TermVector;
   /** Raw cosine similarity to the profile (the STORED, UI-visible score). */
   score: number;
+  /** Freshness multiplier applied to `score` (captured for the trace). */
+  recency: number;
   /** cosine × recency — the value we actually rank/truncate by. */
   finalScore: number;
   /** The text scored (title + excerpt, or the full article once extracted). */
   text: string;
+}
+
+/**
+ * Accumulates the crawler's forensic detail (via the `CrawlTraceSink` it's
+ * handed on the FetchContext) into a `CrawlTrace`. Host stats collapse into one
+ * row per host; rejections and depth are capped/maxed so a long crawl can't
+ * bloat the run record.
+ */
+function createCrawlAccumulator(): { sink: CrawlTraceSink; build(): CrawlTrace } {
+  const hosts = new Map<string, CrawlHostTrace>();
+  const rejections: CrawlRejection[] = [];
+  const t: Omit<CrawlTrace, "hosts" | "rejections"> = {
+    seeds: [],
+    stopReason: "drained",
+    depthReached: 0,
+    pagesFetched: 0,
+    pagesSkipped: 0,
+    linksEnqueued: 0,
+    emitted: 0,
+  };
+  const host = (h: string): CrawlHostTrace => {
+    let e = hosts.get(h);
+    if (!e) {
+      e = { host: h, visited: 0, robots: "allow-all", robotsBlocked: 0, capHit: false };
+      hosts.set(h, e);
+    }
+    return e;
+  };
+  const sink: CrawlTraceSink = {
+    seeds: (urls) => {
+      t.seeds = urls;
+    },
+    visit: (h, posture) => {
+      const e = host(h);
+      e.visited++;
+      e.robots = posture;
+    },
+    robotsBlocked: (h) => {
+      host(h).robotsBlocked++;
+    },
+    hostCapHit: (h) => {
+      host(h).capHit = true;
+    },
+    reject: (url, reason: CrawlRejectReason) => {
+      if (rejections.length < TRACE_REJECT_CAP) rejections.push({ url, reason });
+    },
+    enqueued: (n) => {
+      t.linksEnqueued += n;
+    },
+    fetched: () => {
+      t.pagesFetched++;
+    },
+    skipped: () => {
+      t.pagesSkipped++;
+    },
+    emitted: () => {
+      t.emitted++;
+    },
+    depth: (d) => {
+      if (d > t.depthReached) t.depthReached = d;
+    },
+    stop: (r) => {
+      t.stopReason = r;
+    },
+  };
+  return { sink, build: () => ({ ...t, hosts: [...hosts.values()], rejections }) };
 }
 
 /** The heaviest `n` terms of a sparse vector, as bare strings. */
@@ -204,6 +291,27 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
     perFetcher: {},
   };
 
+  // Forensic trace, accumulated as the pipeline runs and persisted once at the
+  // terminal (or failure) update. Held at function scope so the catch can save
+  // whatever detail a run gathered before it died. `buildTrace` snapshots it.
+  const crawlAcc = createCrawlAccumulator();
+  const fetcherTraces: FetcherTrace[] = [];
+  const candidateTrace = new Map<string, CandidateTrace>();
+  const mutedDropped: string[] = [];
+  let traceQueries: string[] = [];
+  let profileTerms: RunTrace["profileTerms"] = [];
+  let dedupeDropped = 0;
+  let crawlEnabled = false;
+  const buildTrace = (): RunTrace => ({
+    queries: traceQueries,
+    profileTerms,
+    fetchers: fetcherTraces,
+    crawl: crawlEnabled ? crawlAcc.build() : null,
+    dedupeDropped,
+    mutedDropped,
+    candidates: [...candidateTrace.values()].sort((a, b) => a.rank - b.rank),
+  });
+
   // 1. Announce the run.
   await client.createDiscoveryRun({ id: runId, trigger, stage: "loading profile" });
 
@@ -255,24 +363,66 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
     const queries = (
       cfg.topics.length > 0 ? cfg.topics : topTerms(profile.vector, QUERY_TERM_COUNT)
     ).filter((q) => q.trim().length > 0);
-    const fetchers = (opts.fetchers ?? allFetchers).filter((f) => f.enabled(cfg));
+    traceQueries = queries;
+    profileTerms = Object.entries(profile.vector)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TRACE_PROFILE_TERMS)
+      .map(([term, weight]) => ({ term, weight }));
+    const registry = opts.fetchers ?? allFetchers;
+    crawlEnabled = registry.some((f) => f.name === "crawl" && f.enabled(cfg));
     const ctx: FetchContext = {
       queries,
       seedUrls: cfg.seedUrls,
       limit: FETCH_LIMIT,
       timeBudgetMs: cfg.crawlTimeMs,
       cfg,
+      crawlTrace: crawlAcc.sink,
     };
     const raw: RawCandidate[] = [];
-    for (const fetcher of fetchers) {
+    // Iterate the whole registry so the trace records disabled sources too; only
+    // enabled ones actually fetch.
+    for (const fetcher of registry) {
+      if (!fetcher.enabled(cfg)) {
+        fetcherTraces.push({
+          name: fetcher.name,
+          enabled: false,
+          ok: true,
+          error: null,
+          count: 0,
+          durationMs: null,
+          results: [],
+        });
+        continue;
+      }
+      const startedAt = Date.now();
       try {
         const results = await fetcher.fetch(ctx);
         raw.push(...results);
         stats.perFetcher[fetcher.name] = results.length;
+        fetcherTraces.push({
+          name: fetcher.name,
+          enabled: true,
+          ok: true,
+          error: null,
+          count: results.length,
+          durationMs: Date.now() - startedAt,
+          results: results
+            .slice(0, TRACE_RESULT_CAP)
+            .map((r) => ({ url: r.url, title: r.title ?? null })),
+        });
       } catch (err) {
         // A failing fetcher must NOT fail the run: record 0 and continue.
         stats.perFetcher[fetcher.name] = 0;
         console.error(`[discovery] fetcher "${fetcher.name}" failed:`, err);
+        fetcherTraces.push({
+          name: fetcher.name,
+          enabled: true,
+          ok: false,
+          error: String(err),
+          count: 0,
+          durationMs: Date.now() - startedAt,
+          results: [],
+        });
       }
     }
     stats.fetched = raw.length;
@@ -283,13 +433,19 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
     const seen = new Seen();
     const unique = raw.filter((c) => seen.add(c.url));
     stats.deduped = unique.length;
+    dedupeDropped = raw.length - unique.length;
     const muted = cfg.mutedDomains ?? [];
     const kept =
       muted.length === 0
         ? unique
         : unique.filter((c) => {
             try {
-              return !hostMuted(new URL(c.url).host, muted);
+              const host = new URL(c.url).host;
+              if (hostMuted(host, muted)) {
+                if (mutedDropped.length < TRACE_REJECT_CAP) mutedDropped.push(host);
+                return false;
+              }
+              return true;
             } catch {
               return true; // unparseable URL: leave it for the scorer to handle
             }
@@ -307,11 +463,29 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
       const tf = termFrequencies(tokenize(text));
       const vec = tfidfVector(tf, profile.idf);
       const score = cosine(vec, profile.vector);
-      const finalScore = score * recency(candidate.publishedAt, halfLife, now);
-      return { candidate, tf, vec, score, finalScore, text };
+      const rec = recency(candidate.publishedAt, halfLife, now);
+      return { candidate, tf, vec, score, recency: rec, finalScore: score * rec, text };
     });
     ranked.sort((a, b) => b.finalScore - a.finalScore);
     stats.scored = ranked.length;
+    // Snapshot the funnel: one trace row per scored candidate, ranked. The
+    // full-text pass (7b) and selection (below) mutate these rows in place.
+    ranked.forEach((s, i) => {
+      candidateTrace.set(normalizeUrl(s.candidate.url), {
+        url: s.candidate.url,
+        title: s.candidate.title ?? null,
+        fetcher: s.candidate.fetcher,
+        cosine: s.score,
+        recency: s.recency,
+        finalScore: s.finalScore,
+        rank: i + 1,
+        selected: false,
+        extracted: "skipped",
+        snippetCosine: s.score,
+        fullTextCosine: null,
+        matchedTerms: [],
+      });
+    });
     await client.updateDiscoveryRun(runId, { stats });
 
     // 7b. Full-text pass: re-rank the pre-ranked shortlist on the extracted
@@ -327,7 +501,12 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
       let extractedCount = 0;
       const rescored = shortlist.map((item, i) => {
         const ex = extracted[i];
-        if (!ex || !ex.text) return item; // fallback: keep the snippet result
+        if (!ex || !ex.text) {
+          // fallback: keep the snippet result, but note the extraction failed.
+          const tr = candidateTrace.get(normalizeUrl(item.candidate.url));
+          if (tr) tr.extracted = "failed";
+          return item;
+        }
         extractedCount++;
         const tf = termFrequencies(tokenize(ex.text));
         const vec = tfidfVector(tf, profile.idf);
@@ -343,12 +522,29 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
           imageUrl: item.candidate.imageUrl ?? ex.imageUrl ?? undefined,
           publishedAt: item.candidate.publishedAt ?? isoOrUndefined(ex.publishedAt),
         };
-        const finalScore = score * recency(candidate.publishedAt, halfLife, now);
+        const rec = recency(candidate.publishedAt, halfLife, now);
+        const finalScore = score * rec;
+        // The full-text cosine replaces the snippet one as the STORED score;
+        // snippetCosine on the trace preserves what the snippet alone scored.
+        const tr = candidateTrace.get(normalizeUrl(item.candidate.url));
+        if (tr) {
+          tr.extracted = "ok";
+          tr.fullTextCosine = score;
+          tr.cosine = score;
+          tr.recency = rec;
+          tr.finalScore = finalScore;
+        }
         // termVector = FULL-TEXT tf so a later vote trains on the real article.
-        return { candidate, tf, vec, score, finalScore, text: ex.text };
+        return { candidate, tf, vec, score, recency: rec, finalScore, text: ex.text };
       });
       rescored.sort((a, b) => b.finalScore - a.finalScore);
       ranked = rescored;
+      // Re-number the shortlist's trace ranks to the post-extract order (1..K).
+      // Non-shortlist candidates keep their snapshot ranks, which are all > K.
+      rescored.forEach((s, i) => {
+        const tr = candidateTrace.get(normalizeUrl(s.candidate.url));
+        if (tr) tr.rank = i + 1;
+      });
       stats.extracted = extractedCount;
       await client.updateDiscoveryRun(runId, { stats });
     }
@@ -358,6 +554,12 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
       // Readable "why this?" terms from whatever text we scored on (full article
       // when extracted, else title + excerpt).
       const matchedTerms = whyThisTerms(s.vec, profile.vector, surfaceForms(s.text));
+      // Mark this candidate as selected/inserted in the trace, with its terms.
+      const tr = candidateTrace.get(normalizeUrl(s.candidate.url));
+      if (tr) {
+        tr.selected = true;
+        tr.matchedTerms = matchedTerms;
+      }
       return {
         url: s.candidate.url,
         title: s.candidate.title ?? null,
@@ -382,16 +584,22 @@ export async function runDiscovery(client: DiscoveryClient, opts: RunOptions): P
     stats.inserted = res.inserted;
     await client.updateDiscoveryRun(runId, { stats });
 
-    // 9. Done.
-    await client.updateDiscoveryRun(runId, { status: "succeeded", stage: "done" });
+    // 9. Done — persist the full forensic trace alongside the terminal status.
+    await client.updateDiscoveryRun(runId, {
+      status: "succeeded",
+      stage: "done",
+      trace: buildTrace(),
+    });
     return { runId, status: "succeeded" };
   } catch (err) {
     // Best-effort failure report; never rethrow (a cron tick must not crash).
+    // Save whatever trace the run gathered before it died.
     try {
       await client.updateDiscoveryRun(runId, {
         status: "failed",
         stage: "error",
         error: String(err),
+        trace: buildTrace(),
       });
     } catch {
       // ignore — the run record is unreachable

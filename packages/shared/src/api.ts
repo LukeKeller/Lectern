@@ -41,6 +41,7 @@ import {
   FollowDomainResponse,
   FollowSuggestionsResponse,
   LatestRunResponse,
+  RunDetailResponse,
   ListCandidatesQuery,
   ListRunsQuery,
   PutDiscoveryProfileRequest,
@@ -969,6 +970,15 @@ export const endpoints: Endpoint[] = [
     summary: "Get the current/most-recent run (polled live while running)",
     tags: ["discovery"],
     response: LatestRunResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/discovery/runs/:id",
+    operationId: "getDiscoveryRun",
+    summary: "Get one run with its full forensic trace (the run-detail view)",
+    tags: ["discovery"],
+    response: RunDetailResponse,
     status: 200,
   },
   {
