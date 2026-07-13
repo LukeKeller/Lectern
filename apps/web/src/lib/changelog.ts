@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.41.2',
+		date: '2026-07-13',
+		title: 'The end of an article holds still',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Related reading arrives a moment after the article does. If you were already at the end, it used to push the page down under you — now the view stays put.'
+			}
+		]
+	},
+	{
 		version: '0.41.1',
 		date: '2026-07-11',
 		title: 'Steadier tag suggestions',

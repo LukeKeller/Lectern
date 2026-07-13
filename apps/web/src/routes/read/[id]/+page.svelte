@@ -221,6 +221,10 @@
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let raf = 0;
 	let docEl = $state<HTMLElement | null>(null);
+	// A zero-height marker at the very bottom of the endmatter. Used to pin the
+	// reader's view when late-arriving endmatter content (Related) is inserted
+	// above it, so the ground doesn't shift under a reader sitting at the end.
+	let endSentinel = $state<HTMLElement | null>(null);
 	let focusIndex = $state(-1);
 	let barTop = $state(0);
 	let barH = $state(0);
@@ -934,8 +938,23 @@
 		let cancelled = false;
 		void getClient()
 			.getRelatedDocuments(current, 3)
-			.then((r) => {
-				if (!cancelled) relatedCards = r.related;
+			.then(async (r) => {
+				if (cancelled || !r.related.length) return;
+				// The Related block lands in the endmatter, above Next up. If the reader
+				// is already sitting at the end of the article, inserting it there would
+				// shove everything below it down under their eyes. Pin the sentinel at
+				// the foot of the endmatter across the insertion so the view holds still;
+				// when the reader is still up in the body (sentinel off-screen) there is
+				// nothing to correct and we leave the scroll untouched.
+				const before = endSentinel?.getBoundingClientRect();
+				const pin = !!before && before.top < window.innerHeight && before.bottom > 0;
+				relatedCards = r.related;
+				if (pin && endSentinel) {
+					await tick();
+					if (cancelled) return;
+					const delta = endSentinel.getBoundingClientRect().top - before.top;
+					if (delta) window.scrollBy(0, delta);
+				}
 			})
 			.catch(() => {});
 		return () => {
@@ -1622,6 +1641,7 @@
 						</span>
 					</a>
 				{/if}
+				<div bind:this={endSentinel} class="end-sentinel" aria-hidden="true"></div>
 			</footer>
 		{/if}
 	</div>
@@ -2340,6 +2360,12 @@
 		line-height: 1;
 		color: var(--text-muted);
 		user-select: none;
+	}
+	/* Zero-height marker at the foot of the endmatter; a scroll anchor only, so it
+	   must not add height (the parent's gap is suppressed for it). */
+	.end-sentinel {
+		height: 0;
+		margin-top: calc(-1 * 1.4rem);
 	}
 	.end-triage {
 		display: flex;
