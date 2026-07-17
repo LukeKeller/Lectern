@@ -49,10 +49,26 @@ export const KOKORO_VOICES: TtsVoice[] = [
 	{ id: 'bm_lewis', name: 'Lewis (UK, male)' }
 ];
 
+/**
+ * A curated subset of Piper's open-weight English voices with friendly labels.
+ * The self-hosted Piper service can list its installed voices (merged in on top
+ * via `voiceOptions`); this guarantees sensible options even before that loads.
+ */
+export const PIPER_VOICES: TtsVoice[] = [
+	{ id: 'en_US-lessac-medium', name: 'Lessac (US)' },
+	{ id: 'en_US-amy-medium', name: 'Amy (US, female)' },
+	{ id: 'en_US-ryan-high', name: 'Ryan (US, male)' },
+	{ id: 'en_US-hfc_female-medium', name: 'HFC Female (US)' },
+	{ id: 'en_US-hfc_male-medium', name: 'HFC Male (US)' },
+	{ id: 'en_GB-alba-medium', name: 'Alba (UK, female)' },
+	{ id: 'en_GB-northern_english_male-medium', name: 'Northern English (UK, male)' }
+];
+
 /** Default voice for each provider, used when switching providers. */
 export const DEFAULT_VOICE: Record<TtsProvider, string> = {
 	elevenlabs: '21m00Tcm4TlvDq8ikWAM', // Rachel
-	kokoro: 'af_heart'
+	kokoro: 'af_heart',
+	piper: 'en_US-lessac-medium'
 };
 
 /**
@@ -65,7 +81,12 @@ export function voiceOptions(
 	current: string,
 	provider: TtsProvider = 'elevenlabs'
 ): TtsVoice[] {
-	const out: TtsVoice[] = [...(provider === 'kokoro' ? KOKORO_VOICES : BUILTIN_VOICES)];
+	const builtin: Record<TtsProvider, TtsVoice[]> = {
+		elevenlabs: BUILTIN_VOICES,
+		kokoro: KOKORO_VOICES,
+		piper: PIPER_VOICES
+	};
+	const out: TtsVoice[] = [...(builtin[provider] ?? BUILTIN_VOICES)];
 	for (const v of account) if (!out.some((o) => o.id === v.id)) out.push(v);
 	if (current && !out.some((o) => o.id === current))
 		out.push({ id: current, name: 'Custom voice' });

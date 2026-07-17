@@ -126,7 +126,8 @@
 	// ---- Listen (text-to-speech) ----
 	const TTS_PROVIDERS: { value: TtsProvider; label: string }[] = [
 		{ value: 'elevenlabs', label: 'ElevenLabs — hosted, needs an API key' },
-		{ value: 'kokoro', label: 'Kokoro — free, self-hosted on your server' }
+		{ value: 'kokoro', label: 'Kokoro — free, self-hosted on your server' },
+		{ value: 'piper', label: 'Piper — free, self-hosted, lightweight' }
 	];
 	const TTS_MODELS = [
 		{ value: 'eleven_flash_v2_5', label: 'Flash v2.5 — fast, affordable (default)' },
@@ -544,12 +545,12 @@
 		ttsError = undefined;
 		ttsMsg = undefined;
 		accountVoices = [];
-		// Kokoro voice ids contain an underscore (e.g. af_heart); ElevenLabs ids
-		// don't. Swap to the provider's default voice when the current id is foreign.
-		const isKokoroVoice = ttsVoiceId.includes('_');
+		// Swap to the provider's default voice when the current id doesn't belong to
+		// the new provider's built-in set. (Can't sniff by shape — e.g. both Kokoro
+		// and Piper ids contain underscores — so check membership instead.)
 		const patch: { provider: TtsProvider; voiceId?: string } = { provider };
-		if (provider === 'kokoro' && !isKokoroVoice) patch.voiceId = DEFAULT_VOICE.kokoro;
-		if (provider === 'elevenlabs' && isKokoroVoice) patch.voiceId = DEFAULT_VOICE.elevenlabs;
+		const belongsToNewProvider = voiceOptions([], '', provider).some((v) => v.id === ttsVoiceId);
+		if (ttsVoiceId && !belongsToNewProvider) patch.voiceId = DEFAULT_VOICE[provider];
 		try {
 			const s = await getClient().updateTtsSettings(patch);
 			ttsConfigured = s.configured;
@@ -561,7 +562,7 @@
 	}
 
 	async function loadTtsUsage() {
-		// Usage/quota is an ElevenLabs concept; Kokoro is self-hosted with none.
+		// Usage/quota is an ElevenLabs concept; Kokoro and Piper are self-hosted with none.
 		if (ttsProvider !== 'elevenlabs' || !ttsConfigured) {
 			ttsUsage = undefined;
 			return;
@@ -625,19 +626,22 @@
 		ttsBusy = true;
 		ttsError = undefined;
 		ttsVoicesNote = undefined;
+		// Kokoro and Piper are self-hosted services; ElevenLabs lists account voices.
+		const selfHostedName =
+			ttsProvider === 'kokoro' ? 'Kokoro' : ttsProvider === 'piper' ? 'Piper' : undefined;
 		try {
 			accountVoices = (await getClient().listTtsVoices()).voices;
 			ttsVoicesNote = accountVoices.length
 				? undefined
-				: ttsProvider === 'kokoro'
-					? 'No voices returned — check that the Kokoro server is running and reachable. Built-in voices are available below.'
+				: selfHostedName
+					? `No voices returned — check that the ${selfHostedName} server is running and reachable. Built-in voices are available below.`
 					: 'No account voices returned — your key may lack the Voices permission. Built-in voices are available below.';
 		} catch (err) {
 			ttsError =
 				err instanceof Error
 					? err.message
-					: ttsProvider === 'kokoro'
-						? 'Could not load voices (is the Kokoro server running?).'
+					: selfHostedName
+						? `Could not load voices (is the ${selfHostedName} server running?).`
 						: 'Could not load voices (check the key).';
 		} finally {
 			ttsBusy = false;
@@ -1086,7 +1090,8 @@
 		<p class="hint">
 			Read articles aloud. Audio is synthesized only when you press Listen and cached so replays are
 			free. Choose a provider: <span class="mono">ElevenLabs</span> (hosted, highest quality, needs
-			an API key) or <span class="mono">Kokoro</span> (free, runs on your own server).
+			an API key), <span class="mono">Kokoro</span> (free, runs on your own server), or
+			<span class="mono">Piper</span> (free, lightweight, also self-hosted).
 		</p>
 		<label class="field">
 			<span class="flabel">Provider</span>
@@ -1133,12 +1138,20 @@
 					</button>
 				{/if}
 			</form>
-		{:else}
+		{:else if ttsProvider === 'kokoro'}
 			<p class="hint">
 				Kokoro runs as a separate service on your server (Lectern talks to it over HTTP). Set its
 				URL in the YunoHost admin → Lectern → Config panel (<span class="mono">KOKORO_BASE_URL</span
 				>, default <span class="mono">http://127.0.0.1:8880</span>). No API key or quota — synthesis
 				is free.
+			</p>
+		{:else}
+			<p class="hint">
+				Piper runs as a separate <span class="mono">piper.http_server</span> on your server (Lectern
+				talks to it over HTTP). Set its URL in the YunoHost admin → Lectern → Config panel (<span
+					class="mono">PIPER_BASE_URL</span
+				>). No API key or quota — synthesis is free. See
+				<span class="mono">docs/piper-tts.md</span> for setup and installing more voices.
 			</p>
 		{/if}
 		{#if ttsMsg}<p class="ok">{ttsMsg}</p>{/if}
@@ -1217,7 +1230,7 @@
 						{ttsPlayer.previewVoiceId === ttsVoiceId ? 'Playing…' : 'Preview'}
 					</button>
 					<button type="button" class="btn ghost" disabled={ttsBusy} onclick={loadVoices}>
-						{ttsProvider === 'kokoro' ? 'Load voices' : 'Load my voices'}
+						{ttsProvider === 'elevenlabs' ? 'Load my voices' : 'Load voices'}
 					</button>
 				</div>
 				<div class="row">
@@ -1225,7 +1238,9 @@
 						type="text"
 						placeholder={ttsProvider === 'kokoro'
 							? '…or type a Kokoro voice id (e.g. af_heart, or af_bella+af_sky)'
-							: '…or paste an ElevenLabs voice ID'}
+							: ttsProvider === 'piper'
+								? '…or type a Piper voice id (e.g. en_US-lessac-medium)'
+								: '…or paste an ElevenLabs voice ID'}
 						value=""
 						onchange={(e) => {
 							const v = e.currentTarget.value.trim();

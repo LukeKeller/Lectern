@@ -28,6 +28,13 @@ ynh_app_config_apply() {
     kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
     ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
 
+    # Text-to-speech: the panel field is auto-bound to the piper_base_url setting
+    # by _ynh_app_config_apply above; default it if the panel cleared it so the
+    # .env render below never sees an empty base URL.
+    piper_base_url="$(ynh_app_setting_get --key=piper_base_url)"
+    piper_base_url="${piper_base_url:-http://127.0.0.1:5000}"
+    ynh_app_setting_set --key=piper_base_url --value="$piper_base_url"
+
     ynh_config_add --template=".env" --destination="$install_dir/.env"
     chmod 400 "$install_dir/.env"
     chown "$app:$app" "$install_dir/.env"

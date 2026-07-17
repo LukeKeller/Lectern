@@ -40,6 +40,9 @@ const EnvSchema = z.object({
   /** Base URL of an optional self-hosted Kokoro-FastAPI service (OpenAI-compatible
    * `/v1/audio/*`). Used only when the TTS provider is set to "kokoro". */
   KOKORO_BASE_URL: z.string().default("http://127.0.0.1:8880"),
+  /** Base URL of an optional self-hosted Piper service (OHF-Voice piper1-gpl,
+   * `python3 -m piper.http_server`). Used only when the TTS provider is "piper". */
+  PIPER_BASE_URL: z.string().default("http://127.0.0.1:5000"),
   /** Set to "1" to start the pg-boss polling jobs. */
   LECTERN_ENABLE_JOBS: z.string().default(""),
   /** Set to "1" to enable the newsletter mailbox poll (requires IMAP_* + jobs). */

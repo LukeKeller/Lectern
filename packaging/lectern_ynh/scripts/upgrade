@@ -61,6 +61,12 @@ ynh_app_setting_set --key=enable_email --value="$enable_email"
 kokoro_base_url="${kokoro_base_url:-http://127.0.0.1:8880}"
 ynh_app_setting_set --key=kokoro_base_url --value="$kokoro_base_url"
 
+# Text-to-speech (optional). Backfill the Piper base URL with its default so
+# upgrades from installs that predate Piper support don't fail .env rendering on
+# an unset variable, and persist it so the value is durable across future upgrades.
+piper_base_url="${piper_base_url:-http://127.0.0.1:5000}"
+ynh_app_setting_set --key=piper_base_url --value="$piper_base_url"
+
 # Content discovery worker. Generate the BFF->worker shared secret on the first
 # upgrade that predates discovery support, then persist it (durable across upgrades).
 discovery_token="${discovery_token:-}"

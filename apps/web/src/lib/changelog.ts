@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.42.0',
+		date: '2026-07-17',
+		title: 'Piper joins the local voices',
+		changes: [
+			{
+				kind: 'added',
+				text: 'Piper is now an option under Listen — a free, lightweight text-to-speech engine you can run on your own server, right alongside Kokoro. Pick it in Settings → Listen, choose a voice, and press Listen. No API key, no quota.'
+			}
+		]
+	},
+	{
 		version: '0.41.2',
 		date: '2026-07-13',
 		title: 'The end of an article holds still',
