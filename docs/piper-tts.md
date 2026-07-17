@@ -113,6 +113,16 @@ ExecStart=/opt/piper/venv/bin/python3 -m piper.http_server \
 Restart=on-failure
 DynamicUser=yes
 StateDirectory=piper
+# On a small box, onnxruntime will otherwise grab every core and synthesis can
+# lock up the whole server. Hard-cap Piper to ~1 core-equivalent and deprioritise
+# it so nginx/the app/Postgres stay responsive. CPUQuota is a kernel-enforced
+# cgroup ceiling; CPUWeight/Nice yield under contention. Piper stays several times
+# faster than realtime even so. Raise CPUQuota (e.g. 150%) for more speed if you
+# have cores to spare.
+CPUQuota=100%
+CPUWeight=20
+Nice=10
+Environment=OMP_NUM_THREADS=1
 
 [Install]
 WantedBy=multi-user.target
