@@ -53,17 +53,30 @@ pip install "piper-tts[http]"
 The commands below use `python3 -m piper...`; if you used the venv above,
 substitute `/opt/piper/venv/bin/python3` for `python3`.
 
-## Download a voice
+## Download voices
 
-Each voice is an `.onnx` model plus an `.onnx.json` config, fetched from
-HuggingFace into a data directory. Download the default English voice:
+Each voice is an `.onnx` model plus an `.onnx.json` config (~60 MB per voice),
+fetched from HuggingFace into a data directory.
+
+> **Important:** a voice must be downloaded on the server to actually work. If
+> the app requests a voice Piper doesn't have, `piper.http_server` silently falls
+> back to the voice it was started with (`-m …`) — so every "missing" voice sounds
+> identical to the default. The in-app voice picker offers the set below, so
+> download all of them (or trim the picker in `apps/web/src/lib/tts-voices.ts` to
+> only what you install):
 
 ```bash
-python3 -m piper.download_voices en_US-lessac-medium --data-dir /opt/piper/voices
+for v in en_US-lessac-medium en_US-amy-medium en_US-ryan-high \
+         en_US-hfc_female-medium en_US-hfc_male-medium \
+         en_GB-alba-medium en_GB-northern_english_male-medium; do
+  python3 -m piper.download_voices "$v" --data-dir /opt/piper/voices
+done
 ```
 
-`en_US-lessac-medium` is a good, natural-sounding default. You can download
-additional voices the same way — pass a different voice name.
+`en_US-lessac-medium` is a good, natural-sounding default. `piper.http_server`
+lists whatever it finds in `--data-dir` at `/voices` and loads each on demand, so
+adding a voice is just another `download_voices` call — no restart needed. Browse
+the full catalogue with `python3 -m piper.download_voices` (no argument).
 
 ## Run the HTTP server
 
