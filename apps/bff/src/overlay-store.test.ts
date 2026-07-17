@@ -4,6 +4,7 @@ import {
   backendTruthSet,
   buildTagCentroids,
   cardFromRow,
+  DrizzleOverlayStore,
   groupFollowSuggestions,
   OVERLAY_COLUMNS,
   rankRelated,
@@ -61,6 +62,35 @@ const validCard = {
   savedAt: "2026-06-03T00:00:00Z",
   updatedAt: "2026-06-03T00:00:00Z",
 };
+
+describe("DrizzleOverlayStore.getTtsConfig", () => {
+  // Minimal chainable stub for `db.select(...).from(...).where(...)` → rows.
+  const store = (value: unknown) =>
+    new DrizzleOverlayStore({
+      select: () => ({
+        from: () => ({ where: async () => (value === undefined ? [] : [{ value }]) }),
+      }),
+    } as never);
+
+  it("preserves the piper provider on read (does not coerce to elevenlabs)", async () => {
+    const cfg = await store({
+      provider: "piper",
+      voiceId: "en_US-lessac-medium",
+      modelId: "",
+      apiKey: null,
+    }).getTtsConfig();
+    expect(cfg.provider).toBe("piper");
+    expect(cfg.voiceId).toBe("en_US-lessac-medium");
+  });
+
+  it("preserves kokoro", async () => {
+    expect((await store({ provider: "kokoro" }).getTtsConfig()).provider).toBe("kokoro");
+  });
+
+  it("falls back to elevenlabs for an unknown/legacy provider", async () => {
+    expect((await store({ provider: "bogus" }).getTtsConfig()).provider).toBe("elevenlabs");
+  });
+});
 
 describe("cardFromRow", () => {
   afterEach(() => vi.restoreAllMocks());

@@ -2096,6 +2096,23 @@ describe("text-to-speech", () => {
     await a.close();
   });
 
+  it("synthesizes with the Piper provider without an API key", async () => {
+    // Piper is self-hosted (no key), like Kokoro; selecting it makes TTS ready.
+    harness.deps.overlay.ttsConfig.provider = "piper";
+    harness.deps.overlay.ttsConfig.apiKey = null;
+    harness.deps.overlay.ttsConfig.voiceId = "en_US-lessac-medium";
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/miniflux:1/audio",
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(harness.tts.calls).toHaveLength(1);
+    expect(harness.tts.calls[0]!.voiceId).toBe("en_US-lessac-medium");
+    await a.close();
+  });
+
   it("PATCH switches the provider and reports it back as configured", async () => {
     const a = app();
     const res = await a.inject({
@@ -2107,6 +2124,24 @@ describe("text-to-speech", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ provider: "kokoro", configured: true, voiceId: "af_heart" });
     expect(harness.deps.overlay.ttsConfig.provider).toBe("kokoro");
+    await a.close();
+  });
+
+  it("PATCH to Piper persists and reports configured (no key needed)", async () => {
+    const a = app();
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/v1/settings/tts",
+      headers: auth,
+      payload: { provider: "piper", voiceId: "en_US-lessac-medium" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      provider: "piper",
+      configured: true,
+      voiceId: "en_US-lessac-medium",
+    });
+    expect(harness.deps.overlay.ttsConfig.provider).toBe("piper");
     await a.close();
   });
 

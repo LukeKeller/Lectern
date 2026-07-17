@@ -169,10 +169,11 @@ async function synthesizeDocument(
 }
 
 /** Whether the configured provider is ready to synthesize. ElevenLabs needs a
- * per-user API key; the self-hosted Kokoro service needs none (its URL is server
- * config), so it's considered ready whenever it's the selected provider. */
+ * per-user API key; the self-hosted engines (Kokoro, Piper) need none (their URL
+ * is server config), so they're ready whenever selected. Only ElevenLabs gates on
+ * a key. */
 function ttsReady(cfg: { provider: TtsProvider; apiKey: string | null }): boolean {
-  return cfg.provider === "kokoro" || !!cfg.apiKey;
+  return cfg.provider !== "elevenlabs" || !!cfg.apiKey;
 }
 
 /** Short sample read aloud when auditioning a voice (kept brief to bound cost). */

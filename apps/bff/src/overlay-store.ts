@@ -56,6 +56,9 @@ import type {
   UpdateViewRequest,
   VoteValue,
 } from "@lectern/shared";
+// TtsProvider is also used as a value (runtime enum parsing), so import the
+// schema itself in addition to the type above.
+import { TtsProvider as TtsProviderSchema } from "@lectern/shared";
 import type { Db } from "./db/client";
 import {
   appSettings,
@@ -720,7 +723,9 @@ export class DrizzleOverlayStore implements OverlayStore {
       .where(eq(appSettings.key, "tts"));
     const v = (row?.value ?? {}) as Record<string, unknown>;
     return {
-      provider: v.provider === "kokoro" ? "kokoro" : "elevenlabs",
+      // Preserve any provider the enum knows (elevenlabs/kokoro/piper); an
+      // unknown/legacy value falls back to the hosted default.
+      provider: TtsProviderSchema.catch("elevenlabs").parse(v.provider),
       apiKey: typeof v.apiKey === "string" && v.apiKey ? v.apiKey : null,
       voiceId: typeof v.voiceId === "string" && v.voiceId ? v.voiceId : DEFAULT_TTS.voiceId,
       modelId: typeof v.modelId === "string" && v.modelId ? v.modelId : DEFAULT_TTS.modelId,
