@@ -11,8 +11,9 @@ import type { SynthesizeOptions, TtsBackend } from "./elevenlabs";
  * --port 5000`). No API key, no quota — `opts.apiKey`/`opts.modelId` are ignored;
  * the service URL is server config (`PIPER_BASE_URL`), never the SPA.
  *
- * Piper's `/synthesize` returns WAV, but the rest of the pipeline (cache, podcast
- * feed) assumes mp3. So each chunk's WAV is transcoded to mp3 via `ffmpeg` before
+ * Piper's synth endpoint (`POST /`) returns WAV, but the rest of the pipeline
+ * (cache, podcast feed) assumes mp3. So each chunk's WAV is transcoded via `ffmpeg`
+ * before
  * the parts are joined. WAV files carry a 44-byte header and can't be naively
  * concatenated; mp3 frames join cleanly, so we transcode per chunk then concat
  * the mp3 parts (mirroring how the other backends concatenate mp3 responses).
@@ -88,7 +89,7 @@ export class PiperBackend implements TtsBackend {
     fetch?: typeof fetch;
     transcode?: (wav: Buffer) => Promise<Buffer>;
   }) {
-    // Trim a trailing slash so `${baseUrl}/synthesize` never doubles up.
+    // Trim a trailing slash so the request paths below never double up.
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
     this.doFetch = opts.fetch ?? fetch;
     this.transcode = opts.transcode ?? ffmpegTranscode;
@@ -106,7 +107,8 @@ export class PiperBackend implements TtsBackend {
   }
 
   private async synthChunk(text: string, opts: SynthesizeOptions): Promise<Buffer> {
-    const res = await this.doFetch(`${this.baseUrl}/synthesize`, {
+    // piper.http_server synthesizes on the root route (`POST /`), returning a WAV.
+    const res = await this.doFetch(`${this.baseUrl}/`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "audio/wav" },
       body: JSON.stringify({ text, voice: opts.voiceId }),

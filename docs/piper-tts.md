@@ -35,17 +35,19 @@ yourself.
 
 ## Install Piper
 
-Install into a virtualenv (recommended):
+Install into a virtualenv (recommended). Note the **`[http]` extra** — it pulls
+in Flask, which Piper's HTTP server needs; the bare `piper-tts` package does not
+include it and the server will fail to start with `No module named 'flask'`:
 
 ```bash
 python3 -m venv /opt/piper/venv
-/opt/piper/venv/bin/pip install piper-tts
+/opt/piper/venv/bin/pip install "piper-tts[http]"
 ```
 
 Or install it directly for the current user:
 
 ```bash
-pip install piper-tts
+pip install "piper-tts[http]"
 ```
 
 The commands below use `python3 -m piper...`; if you used the venv above,
@@ -131,12 +133,12 @@ List the available voices:
 curl http://127.0.0.1:5000/voices
 ```
 
-Synthesize a short clip:
+Synthesize a short clip (the server synthesizes on the **root** route, `POST /`):
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' \
   -d '{"text":"hello"}' \
-  -o test.wav http://127.0.0.1:5000/synthesize
+  -o test.wav http://127.0.0.1:5000/
 ```
 
 A JSON list of voices and a playable `test.wav` mean the service is running and

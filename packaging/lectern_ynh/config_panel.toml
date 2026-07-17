@@ -48,7 +48,7 @@ name = "Configuration"
         [main.tts.tts_help]
         type = "alert"
         style = "info"
-        ask = "Lectern can read articles aloud. ElevenLabs works with an API key set on the in-app Settings > Listen page (no server config needed). For a free self-hosted voice, run one of two local engines and put its URL below. Kokoro-FastAPI (Docker, ~2GB RAM) — recommended (CPU) container: docker run -d --name kokoro-tts --restart unless-stopped -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest (NVIDIA GPU: use ghcr.io/remsky/kokoro-fastapi-gpu:latest). Piper — a much lighter CPU-only engine, ideal for minimal VPS hardware: pip install piper-tts then run python3 -m piper.http_server -m en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5000 (requires ffmpeg on the server; see docs/piper-tts.md). Then pick 'Kokoro (self-hosted)' or 'Piper' as the provider on the in-app Settings > Listen page."
+        ask = "Lectern can read articles aloud. ElevenLabs works with an API key set on the in-app Settings > Listen page (no server config needed). For a free self-hosted voice, run one of two local engines and put its URL below. Kokoro-FastAPI (Docker, ~2GB RAM) — recommended (CPU) container: docker run -d --name kokoro-tts --restart unless-stopped -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest (NVIDIA GPU: use ghcr.io/remsky/kokoro-fastapi-gpu:latest). Piper — a much lighter CPU-only engine, ideal for minimal VPS hardware: pip install 'piper-tts[http]' then run python3 -m piper.http_server -m en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5000 (requires ffmpeg on the server; see docs/piper-tts.md). Then pick 'Kokoro (self-hosted)' or 'Piper' as the provider on the in-app Settings > Listen page."
 
         [main.tts.kokoro_base_url]
         ask = "Kokoro-FastAPI base URL"
@@ -61,5 +61,5 @@ name = "Configuration"
         ask = "Piper base URL"
         type = "url"
         default = "http://127.0.0.1:5000"
-        help = "Base URL of the self-hosted Piper HTTP service. Lectern POSTs to /synthesize and reads /voices, then transcodes Piper's WAV output to mp3 (ffmpeg must be installed on the server). The default matches the recommended run command (python3 -m piper.http_server ... --host 127.0.0.1 --port 5000), which binds the service to localhost on this server. See docs/piper-tts.md."
+        help = "Base URL of the self-hosted Piper HTTP service. Lectern POSTs text to the root route (POST /) and reads /voices, then transcodes Piper's WAV output to mp3 (ffmpeg must be installed on the server). The default matches the recommended run command (python3 -m piper.http_server ... --host 127.0.0.1 --port 5000), which binds the service to localhost on this server. See docs/piper-tts.md."
         optional = true

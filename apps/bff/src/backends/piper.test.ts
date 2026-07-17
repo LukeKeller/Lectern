@@ -7,7 +7,7 @@ import { PiperBackend } from "./piper";
 const fakeTranscode = async (wav: Buffer) => Buffer.from(`mp3:${wav.length};`);
 
 describe("PiperBackend", () => {
-  it("posts /synthesize per chunk and concatenates transcoded mp3 parts", async () => {
+  it("posts to the root synth route per chunk and concatenates transcoded mp3 parts", async () => {
     const seen: { url: string; body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (url: unknown, init?: { body?: string }) => {
       const body = JSON.parse(init!.body!) as Record<string, unknown>;
@@ -29,8 +29,8 @@ describe("PiperBackend", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // Each 1500-byte WAV is transcoded individually then concatenated.
     expect(out.toString()).toBe("mp3:1500;mp3:1500;");
-    // Trailing slash on baseUrl is trimmed; path + voice + text shape forwarded.
-    expect(seen[0]!.url).toBe("http://piper:5000/synthesize");
+    // Trailing slash on baseUrl is trimmed; posts to the root synth route.
+    expect(seen[0]!.url).toBe("http://piper:5000/");
     expect(seen[0]!.body).toMatchObject({
       voice: "en_US-lessac-medium",
       text: "a".repeat(1500),
