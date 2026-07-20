@@ -68,6 +68,9 @@ export type BulkMaintenanceResponse = z.infer<typeof BulkMaintenanceResponse>;
 export const ForceSyncResponse = z.object({
   miniflux: z.number().int().nonnegative(),
   readeck: z.number().int().nonnegative(),
+  /** Newsletters ingested from IMAP. Defaults to 0 so a server that predates the
+   *  manual newsletter trigger (or has IMAP unconfigured) still parses. */
+  email: z.number().int().nonnegative().default(0),
   tombstoned: z.number().int().nonnegative(),
 });
 export type ForceSyncResponse = z.infer<typeof ForceSyncResponse>;

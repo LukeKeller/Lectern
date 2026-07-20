@@ -33,6 +33,7 @@ import {
   SourceThemeResponse,
   SourceThemesResponse,
   SyncPullQuery,
+  SyncManifestResponse,
   SyncPullResponse,
   SyncPushRequest,
   SyncPushResponse,
@@ -289,6 +290,9 @@ export class LecternClient {
   }
   syncPull(query?: Partial<SyncPullQuery>) {
     return this.request("GET", "/sync", { query, schema: SyncPullResponse });
+  }
+  syncManifest() {
+    return this.request("GET", "/sync/manifest", { schema: SyncManifestResponse });
   }
   syncPush(body: SyncPushRequest) {
     return this.request("POST", "/sync", { body, schema: SyncPushResponse });

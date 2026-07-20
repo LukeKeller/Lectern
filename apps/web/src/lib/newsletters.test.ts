@@ -6,6 +6,7 @@ import {
 	issueDate,
 	nextIssue,
 	publicationKey,
+	publicationName,
 	senderName
 } from './newsletters';
 
@@ -72,7 +73,7 @@ describe('buildPublications', () => {
 		expect(pubs.map((p) => p.name)).toEqual(['Morning Brew', 'Stratechery']);
 	});
 
-	it('merges differing bylines that share a sender domain into one publication', () => {
+	it('merges differing bylines that share a vanity sender domain into one publication', () => {
 		// 404 Media mails under many names; the domain is the real publication.
 		const pubs = buildPublications([
 			issue({
@@ -92,25 +93,106 @@ describe('buildPublications', () => {
 			})
 		]);
 		expect(pubs).toHaveLength(1);
-		expect(pubs[0]?.key).toBe('404media.co');
+		expect(pubs[0]?.key).toBe('domain:404media.co');
 		expect(pubs[0]?.total).toBe(3);
 		// Display name = the most frequent byline (Joseph Cox appears twice).
 		expect(pubs[0]?.name).toBe('Joseph Cox');
 	});
 
-	it('keys on the display name when no sender domain is present (back-compat)', () => {
+	it('keys on the byline when no sender domain is present (back-compat)', () => {
 		const pubs = buildPublications([issue({ author: 'Money Stuff', senderDomain: null })]);
-		expect(pubs[0]?.key).toBe('Money Stuff');
+		expect(pubs[0]?.key).toBe('pub:money stuff');
 		expect(pubs[0]?.name).toBe('Money Stuff');
+	});
+
+	it('splits a hosting platform into its real publications', () => {
+		// The production bug: 57 issues from a dozen unrelated newsletters all
+		// arrived from ghost.io and rendered as ONE shelf with a combined total,
+		// unread count and cadence.
+		const pubs = buildPublications([
+			issue({ author: 'Jason from 404 Media', senderDomain: 'ghost.io' }),
+			issue({ author: 'Sam at 404 Media', senderDomain: 'mail.ghost.io' }),
+			issue({ author: 'Taylor Lorenz from User Mag', senderDomain: 'ghost.io' }),
+			issue({ author: 'The Cultural Tutor', senderDomain: 'ghost.io' })
+		]);
+		expect(pubs.map((p) => p.name).sort()).toEqual([
+			'404 Media',
+			'The Cultural Tutor',
+			'User Mag'
+		]);
+		expect(pubs.find((p) => p.name === '404 Media')?.total).toBe(2);
+	});
+
+	it('does not merge unrelated bylineless issues on a platform domain', () => {
+		// Nothing on the card identifies a publication, so each issue stands alone
+		// rather than joining a bogus shared shelf with a fabricated cadence.
+		const pubs = buildPublications([
+			issue({ author: null, senderDomain: 'substack.com' }),
+			issue({ author: null, senderDomain: 'substack.com' })
+		]);
+		expect(pubs).toHaveLength(2);
+		expect(pubs.every((p) => p.total === 1)).toBe(true);
 	});
 });
 
 describe('publicationKey', () => {
-	it('prefers the sender domain, falling back to the display name', () => {
-		expect(publicationKey(issue({ senderDomain: '404media.co' }))).toBe('404media.co');
-		expect(publicationKey(issue({ senderDomain: null, author: 'Garbage Day' }))).toBe(
-			'Garbage Day'
+	it('keys a vanity domain on the domain — every byline under it is one publication', () => {
+		expect(publicationKey(issue({ senderDomain: '404media.co' }))).toBe('domain:404media.co');
+		expect(publicationKey(issue({ senderDomain: 'wheresyoured.at', author: 'Ed Zitron' }))).toBe(
+			'domain:wheresyoured.at'
 		);
+	});
+
+	it('folds a mail-delivery subdomain into its publication domain', () => {
+		// Ed Zitron's issues arrive from ghost.wheresyoured.at; same publication.
+		expect(
+			publicationKey(issue({ senderDomain: 'ghost.wheresyoured.at', author: 'Ed Zitron' }))
+		).toBe('domain:wheresyoured.at');
+	});
+
+	it('ignores a platform domain and keys on the publication in the byline', () => {
+		const jason = publicationKey(issue({ author: 'Jason from 404 Media', senderDomain: 'ghost.io' }));
+		const sam = publicationKey(issue({ author: 'Sam at 404 Media', senderDomain: 'ghost.io' }));
+		expect(jason).toBe('pub:404 media');
+		expect(sam).toBe(jason);
+		expect(publicationKey(issue({ author: 'Money Stuff', senderDomain: 'substack.com' }))).toBe(
+			'pub:money stuff'
+		);
+	});
+
+	it('keeps unrelated publications on one platform apart', () => {
+		const a = publicationKey(issue({ author: 'The Cultural Tutor', senderDomain: 'ghost.io' }));
+		const b = publicationKey(issue({ author: 'The BeX Files', senderDomain: 'ghost.io' }));
+		expect(a).not.toBe(b);
+	});
+
+	it('falls back to the byline when the card carries no domain', () => {
+		expect(publicationKey(issue({ senderDomain: null, author: 'Garbage Day' }))).toBe(
+			'pub:garbage day'
+		);
+	});
+
+	it('gives a bylineless platform issue a key of its own', () => {
+		const one = issue({ author: null, senderDomain: 'ghost.io' });
+		const two = issue({ author: null, senderDomain: 'ghost.io' });
+		expect(publicationKey(one)).not.toBe(publicationKey(two));
+		expect(publicationKey(one)).toBe(`card:${one.id}`);
+	});
+});
+
+describe('publicationName', () => {
+	it('takes the publication out of a byline, keeping its casing', () => {
+		expect(publicationName(issue({ author: 'Sam at 404 Media' }))).toBe('404 Media');
+		expect(publicationName(issue({ author: 'Taylor Lorenz from User Mag' }))).toBe('User Mag');
+	});
+
+	it('leaves a bare publication name untouched', () => {
+		expect(publicationName(issue({ author: 'Letters of Note' }))).toBe('Letters of Note');
+		expect(publicationName(issue({ author: 'Money Stuff' }))).toBe('Money Stuff');
+	});
+
+	it('is empty when the card has no byline', () => {
+		expect(publicationName(issue({ author: null }))).toBe('');
 	});
 });
 

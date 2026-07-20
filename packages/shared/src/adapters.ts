@@ -75,6 +75,17 @@ export interface ReadLaterBackend {
   /** Save a URL (optionally with prefetched HTML). Returns the new source id. */
   save(input: { url: string; html?: string; labels?: string[] }): Promise<string>;
   /**
+   * `save`, with the extraction wait's outcome attached. `loaded: false` means the
+   * backend was still extracting when the bounded wait expired — the bookmark
+   * exists, its article may not be readable yet. Optional: backends that extract
+   * synchronously (or not at all) omit it, and callers fall back to `save`.
+   */
+  saveWithStatus?(input: {
+    url: string;
+    html?: string;
+    labels?: string[];
+  }): Promise<{ sourceId: string; loaded: boolean }>;
+  /**
    * Create a bookmark without waiting for extraction to finish (fire-and-forget).
    * Used by bulk import where polling each item would be prohibitively slow.
    * Returns the new source id.

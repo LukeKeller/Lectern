@@ -2,6 +2,7 @@ import {
 	FINISHED_THRESHOLD,
 	type Card,
 	type Mutation,
+	type SyncManifestResponse,
 	type SyncPullResponse,
 	type SyncPushRequest,
 	type SyncPushResponse
@@ -19,11 +20,21 @@ import { getClient } from './config';
  */
 
 const CURSOR_KEY = 'cursor';
+const RECONCILED_KEY = 'reconciledAt';
+
+/**
+ * How often the local mirror is checked against the server's authoritative id
+ * set. Deltas are additive, so drift (a hard-deleted row, a missed delta) is
+ * permanent until a reconcile notices it; six hours heals it within a day of
+ * normal use while costing one id-only request — a few KB — per window.
+ */
+export const RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 /** Minimal surface of the API client the engine depends on. */
 export interface SyncClient {
 	syncPull(query?: { since?: string; pageSize?: number }): Promise<SyncPullResponse>;
 	syncPush(body: SyncPushRequest): Promise<SyncPushResponse>;
+	syncManifest(): Promise<SyncManifestResponse>;
 }
 
 export interface SyncEngineOptions {
@@ -80,6 +91,71 @@ export function applyMutation(card: Card | undefined, mutation: Mutation): Card 
 		case 'delete':
 			return undefined;
 	}
+}
+
+/** The server's authoritative id set, as the reconcile planner consumes it. */
+export interface AuthoritativeSet {
+	ids: string[];
+	/** The server's own count of the set, used to prove nothing was truncated. */
+	count: number;
+}
+
+export interface ReconcilePlanInput {
+	/** Local card ids, snapshotted BEFORE the authoritative set was fetched. */
+	localIds: string[];
+	authoritative: AuthoritativeSet;
+	/** Ids referenced by queued outbox mutations — never pruned. */
+	pendingIds: string[];
+}
+
+/**
+ * Decide which local cards no longer exist server-side and may be dropped.
+ *
+ * Returns `null` — meaning "reconcile nothing" — whenever the authoritative set
+ * cannot be trusted. Deleting on the strength of an ABSENCE is only sound if the
+ * set is known-complete, so a truncated response must abort rather than empty
+ * the library. Completeness is proven by the server's own count matching the ids
+ * actually received; a body cut short fails this even if it somehow parsed.
+ *
+ * Two classes of local card are protected from pruning:
+ *
+ *  - **Cards with queued mutations** (`pendingIds`). The outbox holds work the
+ *    server has not seen. Deleting such a card would destroy the user's offline
+ *    edit and, worse, the card would be gone locally while the mutation still
+ *    referenced it. Note that a queued `delete` names its card too — but the
+ *    optimistic apply has already removed that card locally, so it is not in
+ *    `localIds` and there is nothing to protect.
+ *  - **Cards created since the snapshot.** Handled by the caller passing a
+ *    `localIds` snapshot taken before the fetch: a card saved while the manifest
+ *    was in flight is legitimately absent from it, and would otherwise be
+ *    deleted the instant it arrived. Diffing against the pre-fetch snapshot
+ *    makes that race unrepresentable rather than merely unlikely.
+ */
+export function planReconcile(input: ReconcilePlanInput): { removeIds: string[] } | null {
+	const { localIds, authoritative, pendingIds } = input;
+	if (authoritative.ids.length !== authoritative.count) return null;
+	const live = new Set(authoritative.ids);
+	const pending = new Set(pendingIds);
+	const removeIds = localIds.filter((id) => !live.has(id) && !pending.has(id));
+	return { removeIds };
+}
+
+/**
+ * Whether a reconcile is due. Unknown/unparseable markers count as due (a client
+ * that has never reconciled is exactly the one most likely to have drifted); a
+ * marker in the future is treated as due too, so a clock skew cannot wedge
+ * reconciles off indefinitely.
+ */
+export function isReconcileDue(
+	lastReconciledAt: string | undefined,
+	now: number,
+	intervalMs = RECONCILE_INTERVAL_MS
+): boolean {
+	if (!lastReconciledAt) return true;
+	const last = Date.parse(lastReconciledAt);
+	if (Number.isNaN(last)) return true;
+	if (last > now) return true;
+	return now - last >= intervalMs;
 }
 
 /** Exponential backoff (no jitter) so retries stay deterministic in tests. */
@@ -142,6 +218,90 @@ export class SyncEngine {
 			if (res.deletedIds.length) await this.db.cards.bulkDelete(res.deletedIds);
 			await this.db.meta.put({ key: CURSOR_KEY, value: res.cursor });
 		});
+	}
+
+	/** When the last successful reconcile finished, or `undefined` if never. */
+	async getReconciledAt(): Promise<string | undefined> {
+		const row = await this.db.meta.get(RECONCILED_KEY);
+		return row?.value;
+	}
+
+	/**
+	 * Compare the local mirror against the server's authoritative id set and drop
+	 * local cards the server no longer has. This is the only mechanism that can
+	 * heal a diverged mirror: `pull` is purely additive, and a hard-deleted row
+	 * (as opposed to a tombstoned one) is reported by no delta at all.
+	 *
+	 * Ordering matters and is deliberate:
+	 *  1. snapshot the local ids and the outbox FIRST, so a card saved or edited
+	 *     while the manifest is in flight can never be pruned by it;
+	 *  2. fetch the manifest — if it throws, nothing is deleted;
+	 *  3. plan purely, then apply. A set that fails its completeness check yields
+	 *     no deletions but still counts as a run only if it was trustworthy.
+	 *
+	 * Returns the number of cards removed, or `null` if the set was untrustworthy
+	 * (in which case the marker is NOT advanced, so the next check retries).
+	 */
+	async reconcile(): Promise<number | null> {
+		const [localIds, outbox] = await Promise.all([
+			this.db.cards.toCollection().primaryKeys(),
+			this.db.outbox.toArray()
+		]);
+		const manifest = await this.client.syncManifest();
+		const plan = planReconcile({
+			localIds,
+			authoritative: manifest,
+			pendingIds: outbox.map((e) => e.mutation.id)
+		});
+		if (!plan) return null;
+		await this.db.transaction('rw', this.db.cards, this.db.meta, async () => {
+			if (plan.removeIds.length) await this.db.cards.bulkDelete(plan.removeIds);
+			await this.db.meta.put({ key: RECONCILED_KEY, value: new Date().toISOString() });
+		});
+		return plan.removeIds.length;
+	}
+
+	/**
+	 * Run a reconcile only if one is due. Called on app start and on a timer, so
+	 * it must stay cheap when it decides to do nothing: the due check reads one
+	 * meta row and makes no request.
+	 */
+	async maybeReconcile(now = Date.now()): Promise<number | null> {
+		if (!isReconcileDue(await this.getReconciledAt(), now)) return null;
+		return this.reconcile();
+	}
+
+	/**
+	 * Drop the local mirror and re-pull it from scratch. The escape hatch for a
+	 * mirror that has drifted in a way a reconcile cannot express (corrupt rows,
+	 * a cursor from a since-rebuilt server).
+	 *
+	 * Refuses to run while the outbox holds unpushed work UNLESS that work can be
+	 * flushed first: clearing `cards` alongside a queued mutation would leave the
+	 * mutation referencing a card that no longer exists locally, and dropping the
+	 * outbox would silently destroy offline edits. Draining first is the only
+	 * option that loses nothing, and if the drain fails the rebuild aborts with
+	 * the mirror untouched.
+	 */
+	async rebuild(): Promise<number> {
+		if ((await this.db.outbox.count()) > 0) {
+			// `flush` throws if it cannot push, and no-ops if one is already in
+			// flight — so re-check rather than assume the queue drained.
+			await this.flush();
+			if ((await this.db.outbox.count()) > 0) {
+				throw new Error('Unsynced changes are still queued. Try again once they have synced.');
+			}
+		}
+		await this.db.transaction('rw', this.db.cards, this.db.meta, async () => {
+			await this.db.cards.clear();
+			await this.db.meta.delete(CURSOR_KEY);
+			await this.db.meta.delete(RECONCILED_KEY);
+		});
+		// No cursor now, so this pulls the full live set and re-anchors the cursor.
+		await this.pull();
+		// The mirror is freshly authoritative, so the reconcile clock starts now.
+		await this.db.meta.put({ key: RECONCILED_KEY, value: new Date().toISOString() });
+		return this.db.cards.count();
 	}
 
 	/** Queue a mutation and apply it optimistically to the local card. */

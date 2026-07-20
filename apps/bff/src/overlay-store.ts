@@ -193,6 +193,16 @@ export class DrizzleOverlayStore implements OverlayStore {
     };
   }
 
+  async liveDocumentIds(): Promise<string[]> {
+    // Ids straight off the index — no card reconstruction and no highlight-count
+    // join, so this stays a single cheap indexed scan however large the library.
+    const rows = await this.db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(isNull(documents.deletedAt));
+    return rows.map((r) => r.id);
+  }
+
   /** Reconstruct cards from index rows, batching the highlight-count lookup. */
   private async cardsFromRows(rows: DocumentRow[]): Promise<Card[]> {
     if (rows.length === 0) return [];
@@ -243,17 +253,41 @@ export class DrizzleOverlayStore implements OverlayStore {
     return !!row;
   }
 
-  async findByUrl(url: string): Promise<IndexedUrlMatch | null> {
+  async findByAnyUrl(urls: readonly string[]): Promise<IndexedUrlMatch | null> {
+    if (urls.length === 0) return null;
     // NOTE the deliberate absence of an `isNull(documents.deletedAt)` filter: a
     // tombstoned row still answers "yes, we've seen this URL". Filtering deleted
     // rows out would let a deleted newsletter be re-ingested on the next replay
     // and resurrect itself. See the interface docstring in unify.ts.
+    //
+    // `inArray` keeps this an index-friendly `url IN (...)`, so it still rides
+    // documents_url_idx (migration 0013) rather than degrading to a scan.
+    //
+    // The ORDER BY is not cosmetic. Duplicates under one URL exist in production
+    // (that is the bug this whole effort is fixing), and an unordered `limit 1`
+    // picks an arbitrary one — so a live document could be reported as
+    // `deleted: true` purely because a tombstoned sibling sorted first. `nulls
+    // first` on deleted_at makes a live row win deterministically whenever one
+    // exists; among tombstones the newest id breaks the tie.
     const [row] = await this.db
       .select({ id: documents.id, deletedAt: documents.deletedAt })
       .from(documents)
-      .where(eq(documents.url, url))
+      .where(inArray(documents.url, [...urls]))
+      .orderBy(dsql`${documents.deletedAt} asc nulls first`, desc(documents.id))
       .limit(1);
     return row ? { id: row.id, deleted: row.deletedAt !== null } : null;
+  }
+
+  /**
+   * Live (non-tombstoned) index rows for a source, with the backend id needed to
+   * verify each one individually. Used by the deletion reconcile, which must
+   * re-check a would-be deletion at the backend before tombstoning it.
+   */
+  async listLiveBySource(source: string): Promise<{ id: string; sourceId: string }[]> {
+    return this.db
+      .select({ id: documents.id, sourceId: documents.sourceId })
+      .from(documents)
+      .where(and(eq(documents.source, source), isNull(documents.deletedAt)));
   }
 
   async markIndexedRead(id: string, read: boolean): Promise<void> {
@@ -801,6 +835,37 @@ export class DrizzleOverlayStore implements OverlayStore {
       .insert(appSettings)
       .values({ key: "email-ignore", value, updatedAt: new Date() })
       .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+  }
+
+  // --- newsletter poison-message counters ---
+  /**
+   * How many times each still-failing newsletter UID has failed to save, keyed
+   * by UID. Persisted (rather than held in the poll's memory) so a restart —
+   * or the crash the bad message caused — cannot reset the count and let one
+   * unsaveable message block ingestion forever. Only actively-failing UIDs are
+   * stored; entries are dropped on success or on the final skip.
+   */
+  async getEmailFailures(): Promise<Record<string, number>> {
+    const [row] = await this.db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "email-failures"));
+    const v = (row?.value ?? {}) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const [uid, count] of Object.entries(v)) {
+      if (typeof count === "number" && Number.isFinite(count)) out[uid] = count;
+    }
+    return out;
+  }
+
+  async setEmailFailures(failures: Record<string, number>): Promise<void> {
+    await this.db
+      .insert(appSettings)
+      .values({ key: "email-failures", value: failures, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: failures, updatedAt: new Date() },
+      });
   }
 
   async getCachedAudio(contentHash: string): Promise<{ mime: string; bytes: Buffer } | null> {

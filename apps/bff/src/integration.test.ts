@@ -3,6 +3,7 @@ import { Card } from "@lectern/shared";
 import { describe, expect, it } from "vitest";
 import { MinifluxBackend } from "./backends/miniflux";
 import { ReadeckBackend } from "./backends/readeck";
+import { messageToSaveInput } from "./backends/email-inbox";
 
 /**
  * Live integration tests against the local dev stack (MiniFlux + Readeck).
@@ -118,5 +119,40 @@ describe.skipIf(!ready)("Readeck live adapter", () => {
     // restore original progress/anchor/labels
     await readeck.setReadingProgress(id, original.readingProgress, original.readAnchor);
     await readeck.setLabels(id, original.tags);
+  });
+
+  /**
+   * The one assertion that actually proves the newsletter date round trip: save a
+   * newsletter built by `buildReadeckHtml` and check the date comes back as the
+   * Card's `publishedAt`. This CANNOT be verified without a live Readeck — the
+   * unit tests only prove we emit the markup, not that Readeck's extractor
+   * consumes it — so it lives here, behind the same guard as the rest.
+   *
+   * If this fails, the meta tags in `buildReadeckHtml` are not what this Readeck
+   * version extracts, and the fallback in `withEmailPublishedAt` (jobs.ts) is
+   * carrying `publishedAt` alone — which the next `pollReadeck` will overwrite
+   * with null. That is the signal to change the emitted markup.
+   */
+  it("extracts a newsletter's send date into the card's publishedAt", async () => {
+    const sentAt = "2026-07-07T17:06:48.000Z";
+    const messageId = `<itest-${Date.now()}@lectern.test>`;
+    const input = messageToSaveInput({
+      uid: 1,
+      messageId,
+      subject: "Lectern integration test issue",
+      fromName: "Lectern Tests",
+      fromAddress: "tests@lectern.test",
+      html: "<html><body><p>Dated newsletter body.</p></body></html>",
+      date: sentAt,
+    });
+
+    const sourceId = await readeck.save(input);
+    try {
+      const card = await readeck.get(sourceId);
+      expect(card.publishedAt).not.toBeNull();
+      expect(new Date(card.publishedAt ?? 0).toISOString()).toBe(sentAt);
+    } finally {
+      await readeck.delete(sourceId);
+    }
   });
 });

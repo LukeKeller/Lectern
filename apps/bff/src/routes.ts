@@ -72,6 +72,7 @@ import {
   SourceThemesResponse,
   SubscribeFeedRequest,
   SynthesizeAudioRequest,
+  SyncManifestResponse,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushRequest,
@@ -109,7 +110,8 @@ import {
   upsertSubscription,
 } from "./push";
 import { MutationApplier } from "./mutations";
-import { pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
+import { pollEmail, pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
+import { BackendHttpError } from "./errors";
 import { DISCOVER_LABEL } from "./backends/readeck";
 
 class NotFoundError extends Error {}
@@ -848,6 +850,16 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     });
   });
 
+  // The authoritative id set, for client-side reconcile. Deltas alone cannot heal
+  // a diverged mirror: a row that was hard-deleted (rather than tombstoned) is
+  // reported by nothing, and any delta a client misses is never revisited, so a
+  // local card can linger forever. This endpoint is the ground truth a client
+  // diffs against. Ids only — no bodies, no highlight-count join.
+  app.get("/sync/manifest", async () => {
+    const ids = await deps.overlay.liveDocumentIds();
+    return SyncManifestResponse.parse({ ids, count: ids.length });
+  });
+
   app.post<{ Body: unknown }>("/sync", async (req) => {
     const body = SyncPushRequest.parse(req.body);
     let applied = 0;
@@ -863,14 +875,25 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     return SyncPushResponse.parse({ applied, conflicts });
   });
 
-  // On-demand sync: run both backend polls then the deletion reconcile NOW,
-  // instead of waiting for the 5-minute schedule. Polls are quick; await all so
-  // the response reflects the freshly-reconciled state. The jobs construct their
-  // own backend deps internally (safe standalone).
+  // On-demand sync: run every ingest poll then the deletion reconcile NOW,
+  // instead of waiting for the schedule. The jobs construct their own backend
+  // deps internally (safe standalone) and each takes the same database-wide
+  // advisory lock the scheduled run takes, so this can no longer race the
+  // scheduler — it was previously the user-triggered route into a concurrent
+  // reconcile. A job already in flight is skipped and reports 0 rather than
+  // running a second copy.
+  //
+  // `pollEmail` is included because it had no manual trigger at all: newsletters
+  // were the one source a user could not ask for on demand. It no-ops when IMAP
+  // is unconfigured.
   app.post("/sync/force", async () => {
-    const [miniflux, readeck] = await Promise.all([pollMiniflux(), pollReadeck()]);
+    const [miniflux, readeck, email] = await Promise.all([
+      pollMiniflux(),
+      pollReadeck(),
+      pollEmail(),
+    ]);
     const tombstoned = await reconcileDeletions();
-    return ForceSyncResponse.parse({ miniflux, readeck, tombstoned });
+    return ForceSyncResponse.parse({ miniflux, readeck, email, tombstoned });
   });
 
   // ---- discovery (user-facing: called by the SPA) ------------------------
@@ -1117,19 +1140,62 @@ function requireParsed(id: string) {
  * by every bulk-delete path (scope, age sweep, ignore-sender cleanup): one
  * batched `removed` PUT for MiniFlux, per-id Readeck deletes with modest
  * concurrency so a large set never opens hundreds of sockets.
+ *
+ * PARTIAL FAILURE KEEPS THE TWO SIDES CONSISTENT. Previously any throw in the
+ * Readeck loop propagated before `softDelete` ran, so every bookmark deleted up
+ * to that point was gone at the backend while its index row stayed live — a
+ * document that renders in the library and 404s the moment it is opened, with
+ * nothing to repair it. Now each target's outcome is tracked individually and we
+ * tombstone exactly the ones that are actually gone, then surface the failures.
+ * A 404 counts as success: the item is already absent, which is the state we
+ * were asking for.
  */
 async function deleteTargets(deps: AppDeps, targets: DocumentRef[]): Promise<void> {
   if (targets.length === 0) return;
-  const minifluxIds = targets.filter((t) => t.source === "miniflux").map((t) => t.sourceId);
+  const miniflux = targets.filter((t) => t.source === "miniflux");
   const readeck = targets.filter((t) => t.source === "readeck");
-  await deps.rss.setRemoved(minifluxIds);
+  const deleted: string[] = [];
+  const failures: string[] = [];
+
+  // MiniFlux is one batched call, so it succeeds or fails as a unit.
+  if (miniflux.length > 0) {
+    try {
+      await deps.rss.setRemoved(miniflux.map((t) => t.sourceId));
+      deleted.push(...miniflux.map((t) => t.id));
+    } catch (err) {
+      failures.push(`miniflux (${miniflux.length} items): ${errorText(err)}`);
+    }
+  }
+
   const concurrency = 5;
   for (let i = 0; i < readeck.length; i += concurrency) {
-    await Promise.all(
-      readeck.slice(i, i + concurrency).map((t) => deps.readLater.delete(t.sourceId)),
+    const batch = readeck.slice(i, i + concurrency);
+    const results = await Promise.allSettled(batch.map((t) => deps.readLater.delete(t.sourceId)));
+    results.forEach((r, j) => {
+      const target = batch[j]!;
+      if (r.status === "fulfilled" || isNotFound(r.reason)) deleted.push(target.id);
+      else failures.push(`${target.id}: ${errorText(r.reason)}`);
+    });
+  }
+
+  // Tombstone first, then report: the index must never be left describing
+  // documents that no longer exist at the backend, even on the error path.
+  await deps.overlay.softDelete(deleted);
+  if (failures.length > 0) {
+    throw new Error(
+      `deleted ${deleted.length} of ${targets.length}; ${failures.length} failed — ` +
+        failures.slice(0, 5).join("; "),
     );
   }
-  await deps.overlay.softDelete(targets.map((t) => t.id));
+}
+
+/** A backend 404 on a delete means the item is already gone — the outcome we wanted. */
+function isNotFound(err: unknown): boolean {
+  return err instanceof BackendHttpError && err.status === 404;
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /** The ignore list plus the senders currently in the library (for one-tap add). */

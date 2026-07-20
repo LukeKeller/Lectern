@@ -299,6 +299,10 @@ class FakeOverlayStore implements OverlayStore {
     return { cards: page, nextCursor };
   }
 
+  async liveDocumentIds(): Promise<string[]> {
+    return [...this.index.keys()].filter((id) => !this.deleted.has(id));
+  }
+
   async documentsChangedSince(since: string | undefined): Promise<ChangedDocuments> {
     const cards: Card[] = [];
     for (const id of this.index.keys()) {
@@ -489,11 +493,11 @@ class FakeOverlayStore implements OverlayStore {
   async isIndexed(id: string): Promise<boolean> {
     return this.index.has(id);
   }
-  async findByUrl(url: string): Promise<IndexedUrlMatch | null> {
+  async findByAnyUrl(urls: readonly string[]): Promise<IndexedUrlMatch | null> {
     // Matches tombstoned rows too, like the real store — "already seen" must
     // survive a delete.
     for (const [id, card] of this.index) {
-      if (card.url === url) return { id, deleted: this.deleted.has(id) };
+      if (urls.includes(card.url)) return { id, deleted: this.deleted.has(id) };
     }
     return null;
   }
@@ -1363,6 +1367,92 @@ describe("documents", () => {
     await a.close();
   });
 
+  it("keeps index and backend consistent when one Readeck delete fails", async () => {
+    // THE BUG. A throw in the Readeck loop propagated before `softDelete` ran, so
+    // every bookmark deleted up to that point was gone at the backend while its
+    // index row stayed live — documents that render in the library and 404 the
+    // moment they are opened, with nothing to repair them.
+    for (const id of ["b1", "b2", "b3"]) {
+      harness.deps.readLater.bookmarks.set(
+        id,
+        makeCard({ id: `readeck:${id}`, source: "readeck", location: "archive" }),
+      );
+    }
+    await poll();
+    const realDelete = harness.deps.readLater.delete.bind(harness.deps.readLater);
+    harness.deps.readLater.delete = async (sourceId: string) => {
+      if (sourceId === "b2") throw new Error("readeck exploded");
+      await realDelete(sourceId);
+    };
+
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "archive" },
+    });
+
+    // The failure is reported, not swallowed...
+    expect(res.statusCode).toBe(500);
+    // ...and the two sides agree: what is gone at the backend is tombstoned,
+    // what survived the failure is still live in the index.
+    expect(harness.deps.overlay.deleted.has("readeck:b1")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("readeck:b3")).toBe(true);
+    expect(harness.deps.overlay.deleted.has("readeck:b2")).toBe(false);
+    expect(harness.deps.readLater.bookmarks.has("b2")).toBe(true);
+    await a.close();
+  });
+
+  it("treats a 404 from the backend as already-deleted and tombstones the row", async () => {
+    // The item is absent, which is the state we asked for. Refusing to tombstone
+    // would strand an index row describing a document that does not exist.
+    harness.deps.readLater.bookmarks.set(
+      "b1",
+      makeCard({ id: "readeck:b1", source: "readeck", location: "archive" }),
+    );
+    await poll();
+    harness.deps.readLater.delete = async () => {
+      throw new BackendHttpError("readeck", 404, null, "not found");
+    };
+
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "archive" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(harness.deps.overlay.deleted.has("readeck:b1")).toBe(true);
+    await a.close();
+  });
+
+  it("does not tombstone MiniFlux rows when the batched removal fails", async () => {
+    harness.deps.rss.entries.set(
+      "1",
+      makeCard({ id: "miniflux:1", source: "miniflux", location: "archive" }),
+    );
+    await poll();
+    harness.deps.rss.setRemoved = async () => {
+      throw new Error("miniflux down");
+    };
+
+    const a = app();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/v1/documents/bulk-delete",
+      headers: auth,
+      payload: { scope: "archive" },
+    });
+
+    expect(res.statusCode).toBe(500);
+    // Still present at the source, so it must still be present in the index.
+    expect(harness.deps.overlay.deleted.has("miniflux:1")).toBe(false);
+    await a.close();
+  });
+
   it("returns article content routed to the owning backend", async () => {
     harness.deps.readLater.content.set("b1", "<article>hello</article>");
     harness.deps.readLater.bookmarks.set("b1", makeCard({ id: "readeck:b1", source: "readeck" }));
@@ -1706,6 +1796,31 @@ describe("sync", () => {
     });
     expect(next.json().deletedIds).toContain("readeck:b0");
     expect((next.json().cards as { id: string }[]).map((c) => c.id)).not.toContain("readeck:b0");
+    await a.close();
+  });
+
+  it("serves an id-only manifest of the live library, excluding tombstoned rows", async () => {
+    for (let i = 0; i < 3; i++) {
+      harness.deps.readLater.bookmarks.set(
+        `b${i}`,
+        makeCard({ id: `readeck:b${i}`, source: "readeck", url: `https://m.test/${i}` }),
+      );
+    }
+    const a = app();
+    await poll();
+
+    const before = await a.inject({ method: "GET", url: "/api/v1/sync/manifest", headers: auth });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().ids).toHaveLength(3);
+    expect(before.json().count).toBe(3);
+    // Ids only — no card bodies ride along.
+    expect(typeof (before.json().ids as string[])[0]).toBe("string");
+
+    await harness.deps.overlay.softDeleteMissing("readeck", new Set(["readeck:b1", "readeck:b2"]));
+
+    const after = await a.inject({ method: "GET", url: "/api/v1/sync/manifest", headers: auth });
+    expect(after.json().ids).not.toContain("readeck:b0");
+    expect(after.json().count).toBe(2);
     await a.close();
   });
 

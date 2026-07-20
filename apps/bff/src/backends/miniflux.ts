@@ -291,6 +291,17 @@ export class MinifluxBackend implements RssBackend {
     return enrichBlueskyContent(entry.url ?? "", fallback);
   }
 
+  /**
+   * Existence probe for one entry: resolves if MiniFlux still holds it, throws
+   * `BackendHttpError(404)` if it does not. Used by the deletion reconcile to
+   * re-verify a would-be tombstone individually, because a paginated list walk
+   * can silently skip an item and must never be trusted on its own. Deliberately
+   * the cheap `/v1/entries/:id` read — no scrape, no enrichment.
+   */
+  async getEntry(sourceId: string): Promise<{ content?: string; url?: string }> {
+    return this.entry(sourceId);
+  }
+
   /** Fetch a single entry's JSON (we need both its `content` and `url`). */
   private async entry(sourceId: string): Promise<{ content?: string; url?: string }> {
     const res = await this.request(`/v1/entries/${sourceId}`);

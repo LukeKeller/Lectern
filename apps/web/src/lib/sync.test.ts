@@ -2,7 +2,14 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Card, type Mutation, type SyncPushRequest, type SyncPushResponse } from '@lectern/shared';
 import { LecternDB } from './db';
-import { applyMutation, SyncEngine, type SyncClient } from './sync';
+import {
+	applyMutation,
+	isReconcileDue,
+	planReconcile,
+	RECONCILE_INTERVAL_MS,
+	SyncEngine,
+	type SyncClient
+} from './sync';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
 	return Card.parse({
@@ -30,10 +37,19 @@ class FakeClient implements SyncClient {
 	pushCalls = 0;
 	pushedMutations: Mutation[][] = [];
 	failPushes = 0;
+	manifest: { ids: string[]; count: number } = { ids: [], count: 0 };
+	manifestCalls = 0;
+	failManifest = false;
 
 	async syncPull(query?: { since?: string }) {
 		this.lastSince = query?.since;
 		return this.pull;
+	}
+
+	async syncManifest() {
+		this.manifestCalls += 1;
+		if (this.failManifest) throw new Error('manifest unreachable');
+		return this.manifest;
 	}
 
 	async syncPush(body: SyncPushRequest): Promise<SyncPushResponse> {
@@ -190,6 +206,198 @@ describe('activity reporting', () => {
 		await engine.flush();
 		expect(events.at(-1)).toEqual({ flushing: false, failed: false });
 		expect(await db.outbox.count()).toBe(0);
+	});
+});
+
+describe('planReconcile (pure)', () => {
+	const complete = (ids: string[]) => ({ ids, count: ids.length });
+
+	it('removes local ids absent from the authoritative set', () => {
+		const plan = planReconcile({
+			localIds: ['a', 'b', 'gone'],
+			authoritative: complete(['a', 'b']),
+			pendingIds: []
+		});
+		expect(plan).toEqual({ removeIds: ['gone'] });
+	});
+
+	it('protects a card with a pending outbox mutation', () => {
+		const plan = planReconcile({
+			localIds: ['a', 'pending'],
+			authoritative: complete(['a']),
+			pendingIds: ['pending']
+		});
+		expect(plan).toEqual({ removeIds: [] });
+	});
+
+	it('removes nothing when the authoritative set is truncated', () => {
+		// Server said 500 ids, we only received 2 — the absences prove nothing.
+		expect(
+			planReconcile({
+				localIds: ['a', 'b', 'c'],
+				authoritative: { ids: ['a', 'b'], count: 500 },
+				pendingIds: []
+			})
+		).toBeNull();
+	});
+
+	it('removes nothing local when the server set is a superset', () => {
+		const plan = planReconcile({
+			localIds: ['a'],
+			authoritative: complete(['a', 'b', 'c']),
+			pendingIds: []
+		});
+		expect(plan).toEqual({ removeIds: [] });
+	});
+
+	it('empties the mirror only when the server genuinely reports an empty library', () => {
+		const plan = planReconcile({
+			localIds: ['a', 'b'],
+			authoritative: complete([]),
+			pendingIds: []
+		});
+		expect(plan).toEqual({ removeIds: ['a', 'b'] });
+	});
+});
+
+describe('isReconcileDue (pure)', () => {
+	const now = Date.parse('2026-07-19T12:00:00Z');
+
+	it('is due when no reconcile has ever run', () => {
+		expect(isReconcileDue(undefined, now)).toBe(true);
+	});
+
+	it('is not due inside the interval', () => {
+		const recent = new Date(now - RECONCILE_INTERVAL_MS + 60_000).toISOString();
+		expect(isReconcileDue(recent, now)).toBe(false);
+	});
+
+	it('is due once the interval has elapsed', () => {
+		const old = new Date(now - RECONCILE_INTERVAL_MS).toISOString();
+		expect(isReconcileDue(old, now)).toBe(true);
+	});
+
+	it('is due for an unparseable or future marker rather than wedging', () => {
+		expect(isReconcileDue('not-a-date', now)).toBe(true);
+		expect(isReconcileDue(new Date(now + 86_400_000).toISOString(), now)).toBe(true);
+	});
+});
+
+describe('reconcile', () => {
+	it('drops local cards the server no longer has', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'keep' }), makeCard({ id: 'hard-deleted' })]);
+		client.manifest = { ids: ['keep'], count: 1 };
+
+		const removed = await engine.reconcile();
+
+		expect(removed).toBe(1);
+		expect(await db.cards.get('hard-deleted')).toBeUndefined();
+		expect(await db.cards.get('keep')).toBeDefined();
+	});
+
+	it('keeps a card whose mutation is still queued in the outbox', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'keep' }), makeCard({ id: 'unsynced' })]);
+		await engine.enqueue({ type: 'setLocation', id: 'unsynced', location: 'later' });
+		// The server has not seen the mutation, so it is absent from the manifest.
+		client.manifest = { ids: ['keep'], count: 1 };
+
+		const removed = await engine.reconcile();
+
+		expect(removed).toBe(0);
+		expect(await db.cards.get('unsynced')).toBeDefined();
+	});
+
+	it('removes nothing and stays due when the fetch fails', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'a' }), makeCard({ id: 'b' })]);
+		client.failManifest = true;
+
+		await expect(engine.reconcile()).rejects.toThrow('manifest unreachable');
+
+		expect(await db.cards.count()).toBe(2);
+		expect(await engine.getReconciledAt()).toBeUndefined();
+	});
+
+	it('removes nothing and stays due on a truncated response', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'a' }), makeCard({ id: 'b' })]);
+		client.manifest = { ids: ['a'], count: 900 };
+
+		expect(await engine.reconcile()).toBeNull();
+		expect(await db.cards.count()).toBe(2);
+		expect(await engine.getReconciledAt()).toBeUndefined();
+	});
+
+	it('records the run so the next check is not due', async () => {
+		client.manifest = { ids: [], count: 0 };
+		await engine.reconcile();
+		expect(await engine.getReconciledAt()).toBeTypeOf('string');
+	});
+});
+
+describe('maybeReconcile', () => {
+	it('runs when never reconciled, then not again inside the interval', async () => {
+		await db.cards.put(makeCard({ id: 'stale' }));
+		client.manifest = { ids: [], count: 0 };
+
+		expect(await engine.maybeReconcile()).toBe(1);
+		expect(client.manifestCalls).toBe(1);
+
+		// A second call moments later must not hit the network again.
+		expect(await engine.maybeReconcile()).toBeNull();
+		expect(client.manifestCalls).toBe(1);
+	});
+
+	it('runs again once the interval has elapsed', async () => {
+		client.manifest = { ids: [], count: 0 };
+		await engine.maybeReconcile();
+		expect(client.manifestCalls).toBe(1);
+
+		await engine.maybeReconcile(Date.now() + RECONCILE_INTERVAL_MS + 1000);
+		expect(client.manifestCalls).toBe(2);
+	});
+});
+
+describe('rebuild', () => {
+	it('clears the mirror and cursor, then repopulates from a full pull', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'stale1' }), makeCard({ id: 'stale2' })]);
+		await db.meta.put({ key: 'cursor', value: 'old-cursor' });
+		client.pull = {
+			cards: [makeCard({ id: 'fresh1' }), makeCard({ id: 'fresh2' })],
+			deletedIds: [],
+			cursor: 'new-cursor'
+		};
+
+		const count = await engine.rebuild();
+
+		expect(count).toBe(2);
+		// The stale local rows are gone even though no tombstone ever named them.
+		expect(await db.cards.get('stale1')).toBeUndefined();
+		expect(await db.cards.get('fresh1')).toBeDefined();
+		// The pull ran from scratch, not from the stale cursor.
+		expect(client.lastSince).toBeUndefined();
+		expect(await engine.getCursor()).toBe('new-cursor');
+	});
+
+	it('pushes queued work before clearing anything', async () => {
+		await db.cards.put(makeCard({ id: 'c1' }));
+		await engine.enqueue({ type: 'setLocation', id: 'c1', location: 'later' });
+		client.pull = { cards: [makeCard({ id: 'c1' })], deletedIds: [], cursor: '1' };
+
+		await engine.rebuild();
+
+		expect(client.pushCalls).toBe(1);
+		expect(await db.outbox.count()).toBe(0);
+	});
+
+	it('aborts without touching the mirror when queued work cannot be pushed', async () => {
+		await db.cards.put(makeCard({ id: 'c1' }));
+		await engine.enqueue({ type: 'setLocation', id: 'c1', location: 'later' });
+		client.failPushes = 99;
+
+		await expect(engine.rebuild()).rejects.toThrow('network down');
+
+		// Nothing was dropped: the card, the queued mutation and the cursor survive.
+		expect(await db.cards.get('c1')).toBeDefined();
+		expect(await db.outbox.count()).toBe(1);
 	});
 });
 

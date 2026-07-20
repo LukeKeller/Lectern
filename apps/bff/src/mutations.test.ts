@@ -63,6 +63,21 @@ describe("MutationApplier dual-write routing", () => {
     expect(overlay.upsertOverlay).toHaveBeenCalledWith("readeck:rd1", { tags: ["a", "b"] });
   });
 
+  it("setTags strips reserved `lectern:` tags before either store sees them", async () => {
+    // Machine state, not a user tag: a forged sentinel would re-categorize the
+    // document. Stripped rather than thrown, because these also arrive in
+    // batches from the offline outbox.
+    const { applier, readLater, overlay } = harness();
+    await applier.setTags({ source: "readeck", sourceId: "rd1" }, "readeck:rd1", [
+      "a",
+      "lectern:email",
+      "Lectern:from:evil.example",
+      "b",
+    ]);
+    expect(readLater.setLabels).toHaveBeenCalledWith("rd1", ["a", "b"]);
+    expect(overlay.upsertOverlay).toHaveBeenCalledWith("readeck:rd1", { tags: ["a", "b"] });
+  });
+
   it("setProgress mirrors to Readeck reading progress and the overlay", async () => {
     const { applier, readLater, overlay } = harness();
     await applier.setProgress({ source: "readeck", sourceId: "rd1" }, "readeck:rd1", 0.5, "#n3");

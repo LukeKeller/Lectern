@@ -1,5 +1,7 @@
 import { Card } from "@lectern/shared";
+import { inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { documents } from "./db/schema";
 import {
   backendTruthSet,
   buildTagCentroids,
@@ -94,35 +96,112 @@ describe("DrizzleOverlayStore.getTtsConfig", () => {
   });
 });
 
-describe("DrizzleOverlayStore.findByUrl", () => {
-  // Minimal chainable stub for `db.select(...).from(...).where(...).limit(...)`.
-  const store = (rows: unknown[]) =>
+describe("DrizzleOverlayStore.findByAnyUrl", () => {
+  // Minimal chainable stub for
+  // `db.select(...).from(...).where(...).orderBy(...).limit(...)`, capturing the
+  // built WHERE so the query shape can be asserted.
+  //
+  // The stub APPLIES the ordering rather than ignoring it: rows come back
+  // live-first (deleted_at nulls first), newest id breaking ties, exactly as
+  // Postgres would. Without that the "prefers a live row" test below would pass
+  // against an unordered `limit 1`, which is the bug it exists to catch. Leaving
+  // the `orderBy` off the query entirely also breaks the chain, so it cannot be
+  // silently dropped.
+  const store = (rows: unknown[], captured: unknown[] = []) =>
     new DrizzleOverlayStore({
       select: () => ({
-        from: () => ({ where: () => ({ limit: async () => rows }) }),
+        from: () => ({
+          where: (w: unknown) => {
+            captured.push(w);
+            return {
+              orderBy: () => ({
+                limit: async (n: number) =>
+                  [...(rows as { id: string; deletedAt: Date | null }[])]
+                    .sort(
+                      (a, b) =>
+                        Number(a.deletedAt !== null) - Number(b.deletedAt !== null) ||
+                        b.id.localeCompare(a.id),
+                    )
+                    .slice(0, n),
+              }),
+            };
+          },
+        }),
       }),
     } as never);
 
-  it("returns null when no document holds the url", async () => {
-    expect(await store([]).findByUrl("https://newsletter.lectern.local/abc")).toBeNull();
+  const urls = ["https://newsletter.lectern.local/abc"];
+
+  it("returns null when no document holds any of the urls", async () => {
+    expect(await store([]).findByAnyUrl(urls)).toBeNull();
   });
 
   it("reports a live row as not deleted", async () => {
-    expect(
-      await store([{ id: "readeck:42", deletedAt: null }]).findByUrl(
-        "https://newsletter.lectern.local/abc",
-      ),
-    ).toEqual({ id: "readeck:42", deleted: false });
+    expect(await store([{ id: "readeck:42", deletedAt: null }]).findByAnyUrl(urls)).toEqual({
+      id: "readeck:42",
+      deleted: false,
+    });
   });
 
   it("still matches a soft-deleted row, flagged as deleted", async () => {
     // The delete must stay sticky: a tombstoned newsletter is still "already
     // seen", so ingestion skips it instead of resurrecting it on the next replay.
     expect(
-      await store([{ id: "readeck:42", deletedAt: new Date("2026-07-01T00:00:00Z") }]).findByUrl(
-        "https://newsletter.lectern.local/abc",
+      await store([{ id: "readeck:42", deletedAt: new Date("2026-07-01T00:00:00Z") }]).findByAnyUrl(
+        urls,
       ),
     ).toEqual({ id: "readeck:42", deleted: true });
+  });
+
+  it("prefers a live row when a tombstoned duplicate shares the url", async () => {
+    // Duplicates under one URL exist in production — that is the bug this whole
+    // effort is fixing — and an unordered `limit 1` picked an arbitrary one. A
+    // live document reported as `deleted: true` is not a cosmetic error: it is
+    // the answer ingestion and the reader both act on.
+    const rows = [
+      { id: "readeck:9", deletedAt: new Date("2026-07-01T00:00:00Z") },
+      { id: "readeck:42", deletedAt: null },
+    ];
+
+    expect(await store(rows).findByAnyUrl(urls)).toEqual({ id: "readeck:42", deleted: false });
+    // Order of arrival must not matter.
+    expect(await store([...rows].reverse()).findByAnyUrl(urls)).toEqual({
+      id: "readeck:42",
+      deleted: false,
+    });
+  });
+
+  it("still reports deleted when every duplicate is tombstoned", async () => {
+    const rows = [
+      { id: "readeck:9", deletedAt: new Date("2026-07-01T00:00:00Z") },
+      { id: "readeck:42", deletedAt: new Date("2026-07-02T00:00:00Z") },
+    ];
+
+    expect(await store(rows).findByAnyUrl(urls)).toEqual({ id: "readeck:9", deleted: true });
+  });
+
+  it("short-circuits on an empty url list instead of querying", async () => {
+    const captured: unknown[] = [];
+    expect(
+      await store([{ id: "readeck:42", deletedAt: null }], captured).findByAnyUrl([]),
+    ).toBeNull();
+    expect(captured).toEqual([]);
+  });
+
+  it("builds one index-friendly IN (...) predicate for all candidate urls", async () => {
+    // Not an OR-chain and not a LIKE: `url IN (...)` still rides documents_url_idx.
+    const captured: unknown[] = [];
+    await store([], captured).findByAnyUrl([
+      "https://newsletter.lectern.local/a%40b.com",
+      "https://newsletter.lectern.local/a@b.com",
+    ]);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toEqual(
+      inArray(documents.url, [
+        "https://newsletter.lectern.local/a%40b.com",
+        "https://newsletter.lectern.local/a@b.com",
+      ]),
+    );
   });
 });
 

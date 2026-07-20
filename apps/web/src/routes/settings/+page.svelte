@@ -88,13 +88,44 @@
 		syncError = undefined;
 		try {
 			const res = await getClient().forceSync();
-			const indexed = res.miniflux + res.readeck;
+			const indexed = res.miniflux + res.readeck + res.email;
 			syncResult = `Indexed ${indexed} new, removed ${res.tombstoned}`;
 			await getSync().pull();
 		} catch (err) {
 			syncError = err instanceof Error ? err.message : 'Sync failed.';
 		} finally {
 			syncing = false;
+		}
+	}
+
+	// ---- Sync (rebuild the local mirror) ----
+	let rebuilding = $state(false);
+	let rebuildResult = $state<string | undefined>(undefined);
+	let rebuildError = $state<string | undefined>(undefined);
+
+	// Drop this device's local copy of the library and re-download it. The fix for
+	// a mirror that has drifted from the server: pulls are additive, so a stale
+	// local card can otherwise linger indefinitely. Nothing server-side is touched,
+	// so this is safe — but it re-downloads everything, hence the confirm.
+	async function rebuildLibrary() {
+		if (rebuilding) return;
+		if (
+			!confirm(
+				'Rebuild this device’s local library? Your saved items, tags and highlights are not affected — this only clears the offline copy on this device and downloads it again. It may take a moment.'
+			)
+		) {
+			return;
+		}
+		rebuilding = true;
+		rebuildResult = undefined;
+		rebuildError = undefined;
+		try {
+			const count = await getSync().rebuild();
+			rebuildResult = `Rebuilt — ${count} item${count === 1 ? '' : 's'}`;
+		} catch (err) {
+			rebuildError = err instanceof Error ? err.message : 'Rebuild failed.';
+		} finally {
+			rebuilding = false;
 		}
 	}
 
@@ -1613,6 +1644,21 @@
 			{#if syncResult}<span class="ok">{syncResult}</span>{/if}
 		</div>
 		{#if syncError}<p class="err">{syncError}</p>{/if}
+
+		<p class="hint spaced">
+			If this device is showing items that no longer exist — or is missing ones that do — rebuild
+			its offline copy. This clears the library stored on this device and downloads it again from
+			the server. Your saved items, tags, notes and highlights are stored on the server and are not
+			affected. Anything still waiting to sync is sent first; if it can’t be sent, the rebuild is
+			cancelled rather than losing it.
+		</p>
+		<div class="row">
+			<button type="button" class="btn" disabled={rebuilding} onclick={rebuildLibrary}>
+				{rebuilding ? 'Rebuilding…' : 'Rebuild local library'}
+			</button>
+			{#if rebuildResult}<span class="ok">{rebuildResult}</span>{/if}
+		</div>
+		{#if rebuildError}<p class="err">{rebuildError}</p>{/if}
 	</section>
 
 	<section class="about">
@@ -2196,6 +2242,10 @@
 		color: var(--text-muted);
 		max-width: 30rem;
 		margin: 0 0 0.7rem;
+	}
+	/* A second hint within one section, separated from the control above it. */
+	.hint.spaced {
+		margin-top: 1.4rem;
 	}
 	.bm-link {
 		padding: 0.45rem 0.95rem;

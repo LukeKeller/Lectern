@@ -33,6 +33,41 @@ import { EMAIL_DOMAIN_LABEL_PREFIX, EMAIL_LABEL } from "./email-inbox";
  */
 export const DISCOVER_LABEL = "lectern:discover";
 
+/**
+ * The reserved label namespace. Everything Lectern writes to Readeck that is
+ * MACHINE state rather than a user tag carries this prefix: `lectern:email`
+ * (category sentinel), `lectern:from:<domain>` (sender identity),
+ * `lectern:discover` (transient extraction marker).
+ *
+ * Two rules follow from that, and both are enforced here rather than at each
+ * call site, because Readeck's label PATCH is a FULL REPLACEMENT:
+ *
+ *  1. Reserved labels are invisible. `readeckBookmarkToCard` strips them from the
+ *     user-facing `tags` array, so they can never be round-tripped back by a
+ *     client that echoes the tags it was given.
+ *  2. Reserved labels survive user writes. `setLabels` re-attaches whatever
+ *     reserved labels the bookmark currently carries, so a tag edit cannot drop
+ *     them. Before this, adding one tag to a newsletter erased `lectern:email`
+ *     and `lectern:from:*`, and the next poll re-derived the document as a plain
+ *     article — losing it from the Newsletters surface, from the read/ignore-
+ *     sender bulk actions, and from the sticky-finished carve-out, irrecoverably.
+ *
+ * The prefix is treated as a namespace, not as two known strings, so any label
+ * added later is protected without revisiting this file.
+ */
+export const RESERVED_LABEL_PREFIX = "lectern:";
+
+/** True for a label in the reserved `lectern:` namespace (case-insensitive, so a
+ *  user cannot smuggle one in as `Lectern:email`). */
+export function isReservedLabel(label: string): boolean {
+  return label.trim().toLowerCase().startsWith(RESERVED_LABEL_PREFIX);
+}
+
+/** Drop every reserved label from a list of user-supplied tags. */
+export function stripReservedLabels(labels: readonly string[]): string[] {
+  return labels.filter((l) => !isReservedLabel(l));
+}
+
 export interface ReadeckBookmark {
   id: string;
   url: string;
@@ -107,9 +142,11 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
   const senderDomain = domainLabel
     ? domainLabel.slice(EMAIL_DOMAIN_LABEL_PREFIX.length) || null
     : null;
-  const tags = isEmail
-    ? labels.filter((l) => l !== EMAIL_LABEL && !l.startsWith(EMAIL_DOMAIN_LABEL_PREFIX))
-    : labels;
+  // Reserved labels are machine state, never user tags — stripped for EVERY
+  // bookmark, not just email ones. A non-email bookmark can carry one too
+  // (`lectern:discover`), and any reserved label that leaked into `tags` would be
+  // echoed straight back by a tag edit, which is how the sentinels used to die.
+  const tags = stripReservedLabels(labels);
   return {
     id: `readeck:${bookmark.id}`,
     source: "readeck",
@@ -133,8 +170,12 @@ export function readeckBookmarkToCard(bookmark: ReadeckBookmark, highlightCount 
     note: null,
     savedAt: bookmark.created,
     updatedAt: bookmark.updated,
-    // Readeck may not extract a publish date; fall back to the save time so the
-    // unified publishedAt sort still orders these items sensibly.
+    // Null when Readeck extracted no publish date, deliberately: `publishedAt` is
+    // the article's own date and nothing else. Defaulting it to the save time
+    // would fabricate a publication date that reads as real everywhere it is
+    // shown (issue dates, cadence, "10 most recent issues"). Consumers that want
+    // an arrival instant do the fallback themselves and stay honest about it —
+    // see `issueDate` in apps/web/src/lib/newsletters.ts.
     publishedAt: bookmark.published ?? null,
   };
 }
@@ -223,9 +264,29 @@ export class ReadeckBackend implements ReadLaterBackend {
     const items = body
       .filter((b) => !(b.labels ?? []).includes(DISCOVER_LABEL))
       .map((b) => readeckBookmarkToCard(b));
-    const total = Number(res.headers.get("total-count") ?? body.length + offset);
     const nextOffset = offset + body.length;
-    return { items, nextCursor: nextOffset < total ? String(nextOffset) : null };
+    // An empty page cannot advance the offset, so returning a cursor here would
+    // hand every `do { } while (cursor)` caller the same offset forever.
+    if (body.length === 0) return { items, nextCursor: null };
+    // `Number(null)` is 0 and `Number("abc")` is NaN, and `n < NaN` is always
+    // false -- so a missing OR malformed total-count header silently ended
+    // pagination after page one. For `reconcileDeletions` that meant enumerating
+    // one page and treating every document beyond it as deleted.
+    //
+    // With no trustworthy total, a FULL page is the only honest signal that more
+    // may exist: keep going and let the empty-page guard above terminate. A short
+    // page means the end. This can cost one extra request when the total happens
+    // to be an exact multiple of the limit; truncating a deletion reconcile is
+    // the far worse failure.
+    // Read the header as a string first: `Number(null)` is 0, which is finite,
+    // so an ABSENT header would otherwise read as a legitimate total of zero and
+    // truncate just as surely as a malformed one.
+    const totalHeader = res.headers.get("total-count");
+    const rawTotal = totalHeader === null ? Number.NaN : Number(totalHeader);
+    if (!Number.isFinite(rawTotal)) {
+      return { items, nextCursor: body.length >= limit ? String(nextOffset) : null };
+    }
+    return { items, nextCursor: nextOffset < rawTotal ? String(nextOffset) : null };
   }
 
   async get(sourceId: string): Promise<Card> {
@@ -260,7 +321,38 @@ export class ReadeckBackend implements ReadLaterBackend {
     };
   }
 
+  /**
+   * Save a URL and wait (bounded) for Readeck to finish extracting it.
+   *
+   * Returns the id only. The wait's outcome is NOT visible here — see
+   * `saveWithStatus`, which is the same call with the extraction result attached.
+   * Kept as-is because `save` is the `ReadLaterBackend` contract and because
+   * giving up on the wait is not a save failure: the bookmark exists either way.
+   */
   async save(input: { url: string; html?: string; labels?: string[] }): Promise<string> {
+    return (await this.saveWithStatus(input)).sourceId;
+  }
+
+  /**
+   * `save`, with the extraction outcome made observable.
+   *
+   * `loaded: false` means the bounded poll (20 tries × 1.2s ≈ 24s) expired with
+   * Readeck still working — NOT that the save failed. Deliberately not an error:
+   * the bookmark is real, a later poll/backfill picks the article up, and turning
+   * a slow extraction into a throw would abort newsletter ingestion mid-batch
+   * over a transiently busy Readeck.
+   *
+   * What a caller should do with it depends on whether it reads the content
+   * straight back. Ingestion can ignore it (the next `pollReadeck` /
+   * `backfillReadeckContent` fills the gap). A caller that immediately calls
+   * `getContent` — discovery extract does — should treat `loaded: false` as
+   * "content probably not ready yet" and prefer its fallback over an empty or
+   * half-extracted article, rather than silently caching the gap.
+   */
+  async saveWithStatus(input: { url: string; html?: string; labels?: string[] }): Promise<{
+    sourceId: string;
+    loaded: boolean;
+  }> {
     const body: Record<string, unknown> = { url: input.url };
     if (input.labels && input.labels.length > 0) body.labels = input.labels;
     if (input.html) body.html = input.html;
@@ -273,8 +365,8 @@ export class ReadeckBackend implements ReadLaterBackend {
     }
     if (!id) throw new Error("Readeck save: no bookmark id in response headers");
 
-    await this.pollLoaded(id);
-    return id;
+    const loaded = await this.pollLoaded(id);
+    return { sourceId: id, loaded };
   }
 
   async createBookmark(input: {
@@ -295,13 +387,21 @@ export class ReadeckBackend implements ReadLaterBackend {
     return id;
   }
 
-  private async pollLoaded(sourceId: string): Promise<void> {
+  /**
+   * Wait for Readeck to finish extracting a bookmark. Returns true when it
+   * reported the article loaded, false when all `pollTries` were exhausted first.
+   *
+   * The distinction used to be invisible: the loop simply fell out and the caller
+   * could not tell a fast extraction from 24 seconds of waiting in vain.
+   */
+  private async pollLoaded(sourceId: string): Promise<boolean> {
     for (let i = 0; i < this.pollTries; i++) {
       const res = await this.request(`/api/bookmarks/${sourceId}`);
       const bookmark = (await res.json()) as ReadeckBookmark;
-      if (bookmark.loaded === true || bookmark.state === 0) return;
+      if (bookmark.loaded === true || bookmark.state === 0) return true;
       await sleep(this.pollIntervalMs);
     }
+    return false;
   }
 
   async setReadingProgress(
@@ -322,10 +422,40 @@ export class ReadeckBackend implements ReadLaterBackend {
     });
   }
 
+  /**
+   * Replace the bookmark's USER tags, preserving the reserved `lectern:` labels.
+   *
+   * Readeck's PATCH replaces the label array wholesale, so a naive write of the
+   * user-facing tags erases the sentinels the card's identity is derived from
+   * (see `RESERVED_LABEL_PREFIX`). The merge lives HERE, in the adapter, rather
+   * than in `MutationApplier.setTags`, for three reasons:
+   *
+   *  - This is the only layer that can see the bookmark's raw labels. The overlay
+   *    stores the stripped, user-facing tags, so the caller would have to
+   *    reconstruct the sentinels from `category`/`senderDomain` — lossy, and it
+   *    would silently drop any reserved label added later.
+   *  - It protects EVERY caller, including future ones, instead of one method.
+   *  - The full-replacement semantics are a Readeck detail; containing them here
+   *    is what the adapter seam is for.
+   *
+   * The cost is one extra GET per label write. Tag edits are rare, user-initiated,
+   * and already round-trip to the backend, so a second request is not worth
+   * trading the invariant for. A failed GET aborts the write, which matches the
+   * MutationApplier's rule that a backend failure aborts before the overlay write.
+   */
   async setLabels(sourceId: string, labels: string[]): Promise<void> {
+    const res = await this.request(`/api/bookmarks/${sourceId}`);
+    const current = ((await res.json()) as ReadeckBookmark).labels ?? [];
+    const reserved = current.filter(isReservedLabel);
+    // User input cannot introduce a reserved label — it is machine state, and a
+    // forged `lectern:email` would silently re-categorize a document.
+    const next = [...reserved];
+    for (const label of stripReservedLabels(labels)) {
+      if (!next.includes(label)) next.push(label);
+    }
     await this.request(`/api/bookmarks/${sourceId}`, {
       method: "PATCH",
-      body: { labels },
+      body: { labels: next },
     });
   }
 

@@ -26,6 +26,45 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.43.0',
+		date: '2026-07-20',
+		title: 'Only new mail, and a library that tells the truth',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Newsletter ingestion no longer sweeps your whole mailbox. When the mail server renumbers its mailbox — which the Proton Bridge does on every restart — Lectern now notes where the mailbox currently ends and carries on from there, instead of treating every message it has ever held as new.'
+			},
+			{
+				kind: 'fixed',
+				text: 'The duplicate check shipped in 0.42.1 never actually matched anything, so newsletters kept coming back. It now recognises an issue it has already saved.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Newsletters now keep their own copy of the email, so the sender’s images load instead of breaking. Saving one no longer fails silently behind the scenes, and issues appear the moment they arrive rather than up to five minutes later.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Newsletters carry their real send date, so issues sort by when they were published rather than when Lectern happened to fetch them.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Two background syncs can no longer run at the same time and save the same mail twice, and a single unreadable message can no longer wedge ingestion for everything behind it.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Adding a tag to a newsletter no longer quietly turns it into an ordinary article and drops it out of your Newsletters shelf.'
+			},
+			{
+				kind: 'improved',
+				text: 'Publications that share a hosting platform — Ghost, Substack, Buttondown and friends — now get their own shelves instead of piling onto one, and a publication that writes under several bylines stays together.'
+			},
+			{
+				kind: 'added',
+				text: 'Settings → Sync can now rebuild your local library from the server. Lectern also reconciles quietly in the background, so a device that has drifted out of step repairs itself instead of showing items that are no longer there.'
+			}
+		]
+	},
+	{
 		version: '0.42.1',
 		date: '2026-07-19',
 		title: 'Newsletters stay where you put them',

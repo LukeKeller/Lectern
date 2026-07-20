@@ -9,6 +9,7 @@ import {
 } from "@lectern/shared";
 import { locationToReadeckArchived, type DocumentStore, type HighlightStore } from "./unify";
 import { parseId, type ParsedId } from "./ids";
+import { stripReservedLabels } from "./backends/readeck";
 
 /**
  * The write path, shared by `PATCH /documents/:id`, the highlight/delete routes,
@@ -137,9 +138,24 @@ export class MutationApplier {
     await this.deps.overlay.upsertOverlay(id, { location });
   }
 
+  /**
+   * User tags. The reserved `lectern:` namespace is machine state (the email
+   * sentinel, the sender-domain key, the discovery marker), never a user tag, so
+   * anything in it is stripped from the incoming list before it reaches either
+   * store — a client cannot forge `lectern:email` and re-categorize a document.
+   *
+   * Stripped rather than rejected on purpose: these mutations also arrive in
+   * batches from the offline outbox, where throwing would fail the whole queued
+   * mutation (surfaced as a sync conflict) over a tag the user cannot have meant.
+   *
+   * PRESERVING the sentinels already on the bookmark is a separate concern and
+   * lives in `ReadeckBackend.setLabels` — see the note there on why the merge
+   * belongs in the adapter.
+   */
   async setTags(parsed: ParsedId, id: string, tags: string[]): Promise<void> {
-    await this.toBackend(parsed, { aspect: "labels", value: tags });
-    await this.deps.overlay.upsertOverlay(id, { tags });
+    const userTags = stripReservedLabels(tags);
+    await this.toBackend(parsed, { aspect: "labels", value: userTags });
+    await this.deps.overlay.upsertOverlay(id, { tags: userTags });
   }
 
   async setProgress(

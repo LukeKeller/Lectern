@@ -32,6 +32,15 @@ const EnvSchema = z.object({
   IMAP_SECURE: z.string().default("1"),
   /** Comma-separated From addresses to skip during ingestion (internal/system mail). */
   IMAP_EXCLUDE_SENDERS: z.string().default(""),
+  /**
+   * Set to "1" to import the mailbox's existing back catalogue. Off by default:
+   * on the first run and after a UIDVALIDITY reset (every Proton Bridge restart,
+   * and any IMAP_HOST/IMAP_USER change) Lectern seeds its UID cursor to the
+   * mailbox's current high-water mark and ingests nothing that poll, so only mail
+   * arriving afterwards becomes a card. Turn this on for a deliberate one-off
+   * backfill, then turn it back off.
+   */
+  IMAP_INGEST_BACKLOG: z.string().default(""),
   /** When set, the BFF serves the prebuilt web SPA from this dir (production single-service). */
   LECTERN_WEB_DIR: z.string().default(""),
   /** Public origin (scheme + host) used to build absolute podcast feed/enclosure
@@ -72,5 +81,9 @@ export const config: Config = EnvSchema.parse(process.env);
  * rather than crashing the server.
  */
 export function pushEnabled(cfg: Config = config): boolean {
-  return Boolean(cfg.LECTERN_ENABLE_PUSH) && !!cfg.LECTERN_VAPID_PUBLIC_KEY && !!cfg.LECTERN_VAPID_PRIVATE_KEY;
+  return (
+    Boolean(cfg.LECTERN_ENABLE_PUSH) &&
+    !!cfg.LECTERN_VAPID_PUBLIC_KEY &&
+    !!cfg.LECTERN_VAPID_PRIVATE_KEY
+  );
 }

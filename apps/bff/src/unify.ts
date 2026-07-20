@@ -183,7 +183,7 @@ export interface ChangedDocuments {
 }
 
 /**
- * A `findByUrl` hit: the unified id already holding that URL, plus whether the
+ * A `findByAnyUrl` hit: the unified id already holding that URL, plus whether the
  * row is tombstoned. Both states mean "already ingested"; `deleted` only tells
  * the caller WHY it is skipping, for the ingestion log.
  */
@@ -227,6 +227,13 @@ export interface DocumentStore extends OverlayReader {
    * documents soft-deleted since then. `since` undefined = full snapshot.
    */
   documentsChangedSince(since: string | undefined): Promise<ChangedDocuments>;
+  /**
+   * Ids of every live (non-tombstoned) document. The authoritative set a client
+   * prunes its local mirror against; ids only, so it stays cheap. Deltas cannot
+   * express a hard-deleted row (no tombstone is ever emitted for one), so an
+   * absence from this set is the only signal that such a row is gone.
+   */
+  liveDocumentIds(): Promise<string[]>;
 
   // --- unified document index (denormalized, populated by backend polling) ---
   /** Reconstruct a fully-overlaid `Card` from the glue index, or null if absent. */
@@ -242,7 +249,8 @@ export interface DocumentStore extends OverlayReader {
    */
   isIndexed(id: string): Promise<boolean>;
   /**
-   * The indexed document stored under `url`, or null if we've never seen it.
+   * The indexed document stored under ANY of `urls`, or null if we've never seen
+   * it.
    *
    * Lectern's own dedupe key for ingestion paths where the backend does NOT
    * dedupe. Readeck in particular does not: `POST /api/bookmarks` mints a fresh
@@ -250,12 +258,18 @@ export interface DocumentStore extends OverlayReader {
    * `readeck:<id>`, a re-save would land on a NEW row and strand the old row's
    * read state, tags, and delete tombstone.
    *
+   * WHY A SET OF URLS, NOT ONE. The URL we send a backend is not necessarily the
+   * URL it stores: Readeck normalizes percent-escapes, so a newsletter POSTed as
+   * `...%40example.com` comes back indexed as `...@example.com`. A single-URL
+   * exact match against the sent form silently never matched — see
+   * `newsletterUrlVariants`, which produces the forms to try.
+   *
    * CRITICAL: this intentionally ignores `deletedAt` and matches tombstoned rows
    * too — a newsletter the user deleted must keep counting as "already seen" so
    * the delete stays sticky across a re-ingest. `deleted` lets the caller tell
    * a live hit from a tombstoned one (both mean "do not save again").
    */
-  findByUrl(url: string): Promise<IndexedUrlMatch | null>;
+  findByAnyUrl(urls: readonly string[]): Promise<IndexedUrlMatch | null>;
   /** Flip the read state on the indexed backend card (RSS "mark seen" on open). */
   markIndexedRead(id: string, read: boolean): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */

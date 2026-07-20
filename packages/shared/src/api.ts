@@ -215,6 +215,25 @@ export const SyncPullQuery = z.object({
 });
 export type SyncPullQuery = z.infer<typeof SyncPullQuery>;
 
+/**
+ * Id-only snapshot of every live document — the authoritative set a client
+ * reconciles its local mirror against.
+ *
+ * Deliberately minimal: no card bodies and no highlight-count join, so it stays
+ * cheap enough to run on a schedule as the library grows. It carries no cursor,
+ * because it says nothing about field-level changes: a client must never treat a
+ * manifest as having caught it up on deltas.
+ *
+ * `count` is redundant with `ids.length` on a well-formed response and exists
+ * precisely so a client can PROVE the set is complete before deleting anything
+ * on the strength of an absence.
+ */
+export const SyncManifestResponse = z.object({
+  ids: z.array(z.string()),
+  count: z.number().int().nonnegative(),
+});
+export type SyncManifestResponse = z.infer<typeof SyncManifestResponse>;
+
 export const FeedsResponse = z.object({ feeds: z.array(Feed), folders: z.array(FeedFolder) });
 export type FeedsResponse = z.infer<typeof FeedsResponse>;
 
@@ -622,6 +641,15 @@ export const endpoints: Endpoint[] = [
     tags: ["sync"],
     body: SyncPushRequest,
     response: SyncPushResponse,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/sync/manifest",
+    operationId: "syncManifest",
+    summary: "List the ids of every live document",
+    tags: ["sync"],
+    response: SyncManifestResponse,
     status: 200,
   },
   {

@@ -1030,6 +1030,14 @@ const handlers: Record<string, MockHandler> = {
   syncPull: () => ({
     json: { cards: sampleCards(), deletedIds: [...mockDeletedEmailIds], cursor: "1" },
   }),
+  // Ids of the same live sample set /sync serves, minus the mock tombstones —
+  // so a client reconciling against the mock prunes exactly what it should.
+  syncManifest: () => {
+    const ids = sampleCards()
+      .map((c) => c.id)
+      .filter((id) => !mockDeletedEmailIds.has(id));
+    return { json: { ids, count: ids.length } };
+  },
   syncPush: ({ body }) => ({
     json: { applied: (body as SyncPushRequest).mutations.length, conflicts: [] },
   }),
@@ -1039,6 +1047,7 @@ const handlers: Record<string, MockHandler> = {
       json: {
         miniflux: cards.filter((c) => c.source === "miniflux").length,
         readeck: cards.filter((c) => c.source === "readeck").length,
+        email: cards.filter((c) => c.category === "email").length,
         tombstoned: mockDeletedEmailIds.size,
       },
     };

@@ -359,11 +359,23 @@
 		const sync = getSync();
 		sync.start();
 		syncStatus.start();
+		// Heal any drift between the local mirror and the server. Deltas are purely
+		// additive, so a hard-deleted row or a missed delta lingers locally forever
+		// otherwise. `maybeReconcile` is a no-op (one IndexedDB read, no request)
+		// until the interval is up, so running it on start and hourly is cheap; the
+		// hourly tick is what covers a PWA session left open for days. Failures are
+		// swallowed — a reconcile that cannot reach the server just stays due.
+		void sync.maybeReconcile().catch(() => {});
+		const reconcileTimer = setInterval(
+			() => void sync.maybeReconcile().catch(() => {}),
+			60 * 60 * 1000
+		);
 		// Service-worker update lifecycle (deploy detection + "new version" prompt)
 		// lives in <UpdatePrompt>.
 		window.addEventListener('keydown', onKeydown);
 		return () => {
 			sync.stop();
+			clearInterval(reconcileTimer);
 			window.removeEventListener('keydown', onKeydown);
 		};
 	});
