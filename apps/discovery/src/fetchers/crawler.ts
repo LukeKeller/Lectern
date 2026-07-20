@@ -19,24 +19,80 @@ const CRAWLER_UA = "LecternDiscoveryBot";
 const PER_HOST_CAP = 50;
 
 /** Extensions that are clearly not article pages. */
-const NON_ARTICLE_EXT = /\.(?:png|jpe?g|gif|webp|svg|ico|css|js|mjs|json|xml|rss|pdf|zip|gz|mp4|mp3|woff2?|ttf)(?:$|\?)/i;
+const NON_ARTICLE_EXT =
+  /\.(?:png|jpe?g|gif|webp|svg|ico|css|js|mjs|json|xml|rss|pdf|zip|gz|mp4|mp3|woff2?|ttf)(?:$|\?)/i;
 
 /** Social networks / profile silos — never article content. */
-const SOCIAL_HOST = /(?:^|\.)(?:bsky\.app|twitter\.com|x\.com|facebook\.com|instagram\.com|linkedin\.com|youtube\.com|youtu\.be|reddit\.com|tiktok\.com|threads\.net|t\.me|hachyderm\.io|mstdn\.social|mas\.to|mastodon\.social)$/i;
+const SOCIAL_HOST =
+  /(?:^|\.)(?:bsky\.app|twitter\.com|x\.com|facebook\.com|instagram\.com|linkedin\.com|youtube\.com|youtu\.be|reddit\.com|tiktok\.com|threads\.net|t\.me|hachyderm\.io|mstdn\.social|mas\.to|mastodon\.social)$/i;
 
 /**
  * First-path-segment names that denote a section index, profile, or site
  * utility rather than a single article. Reject these — there's no story there.
  */
 const NAV_SEGMENTS = new Set([
-  "about", "contact", "support", "privacy", "terms", "tos", "legal", "cookie",
-  "cookies", "tag", "tags", "category", "categories", "topics", "archive",
-  "archives", "page", "pages", "feed", "feeds", "rss", "atom", "search", "login",
-  "logout", "signin", "signup", "register", "subscribe", "subscription",
-  "newsletter", "social", "donate", "sponsor", "sponsors", "advertise", "index",
-  "home", "account", "settings", "profile", "profiles", "user", "users", "author",
-  "authors", "follow", "following", "followers", "mentions", "colophon", "uses",
-  "now", "links", "shop", "store", "cart", "faq", "help", "careers", "jobs", "press",
+  "about",
+  "contact",
+  "support",
+  "privacy",
+  "terms",
+  "tos",
+  "legal",
+  "cookie",
+  "cookies",
+  "tag",
+  "tags",
+  "category",
+  "categories",
+  "topics",
+  "archive",
+  "archives",
+  "page",
+  "pages",
+  "feed",
+  "feeds",
+  "rss",
+  "atom",
+  "search",
+  "login",
+  "logout",
+  "signin",
+  "signup",
+  "register",
+  "subscribe",
+  "subscription",
+  "newsletter",
+  "social",
+  "donate",
+  "sponsor",
+  "sponsors",
+  "advertise",
+  "index",
+  "home",
+  "account",
+  "settings",
+  "profile",
+  "profiles",
+  "user",
+  "users",
+  "author",
+  "authors",
+  "follow",
+  "following",
+  "followers",
+  "mentions",
+  "colophon",
+  "uses",
+  "now",
+  "links",
+  "shop",
+  "store",
+  "cart",
+  "faq",
+  "help",
+  "careers",
+  "jobs",
+  "press",
 ]);
 
 /**
@@ -49,7 +105,10 @@ export function isContentUrl(u: URL): boolean {
   const path = u.pathname.replace(/\/+$/, "");
   if (path.length <= 1) return false; // site root / homepage
   if (path.startsWith("/@")) return false; // mastodon-style handles
-  const segs = path.split("/").filter(Boolean).map((s) => s.toLowerCase());
+  const segs = path
+    .split("/")
+    .filter(Boolean)
+    .map((s) => s.toLowerCase());
   if (segs.length === 0) return false;
   if (NAV_SEGMENTS.has(segs[0]!)) return false;
   // A lone bare word (e.g. /culture, /social) is a section index, not a post;

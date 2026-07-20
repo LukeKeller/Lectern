@@ -15,27 +15,27 @@ stop and report the mismatch.
 **Current code** (MagazineReader.svelte:468-473):
 
 ```css
-	/* Article body typography. The HTML is sanitized upstream. */
-	.mr-body {
-		font-size: var(--text-lg);
-		line-height: 1.7;
-		color: var(--text);
-	}
+/* Article body typography. The HTML is sanitized upstream. */
+.mr-body {
+  font-size: var(--text-lg);
+  line-height: 1.7;
+  color: var(--text);
+}
 ```
 
 **Change to:**
 
 ```css
-	/* Article body typography. The HTML is sanitized upstream. Body copy reads in
+/* Article body typography. The HTML is sanitized upstream. Body copy reads in
 	   the reading serif (via --reader-font when a reader pane ever provides it),
 	   not the UI sans the page chrome uses; serif at this size wants slightly
 	   tighter leading than the sans did. */
-	.mr-body {
-		font-family: var(--reader-font, var(--font-serif));
-		font-size: var(--text-lg);
-		line-height: 1.6;
-		color: var(--text);
-	}
+.mr-body {
+  font-family: var(--reader-font, var(--font-serif));
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  color: var(--text);
+}
 ```
 
 **Do not:** Do not touch any other `.mr-body :global(...)` rules, the drop-cap/small-caps rules, or anything in the `<script>` block. Do not change `font-size`. Do not reformat the file (tabs, prettier `trailingComma: none`).
@@ -57,33 +57,33 @@ stop and report the mismatch.
 **Current code** (FlipReader.svelte:549-557):
 
 ```css
-	/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
+/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
 	   columns and collapses to a single column on narrow screens. */
-	.fr-band {
-		columns: 2 17rem;
-		column-gap: 2.4rem;
-		column-rule: 1px solid var(--border);
-		text-align: justify;
-		hyphens: auto;
-	}
+.fr-band {
+  columns: 2 17rem;
+  column-gap: 2.4rem;
+  column-rule: 1px solid var(--border);
+  text-align: justify;
+  hyphens: auto;
+}
 ```
 
 **Change to:**
 
 ```css
-	/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
+/* Each band is a short, bounded 2-column block. The `2 17rem` form caps at two
 	   columns and collapses to a single column on narrow screens. Ragged-right:
 	   greedy line-breaking justified ~31ch columns into rivers, so keep the left
 	   axis and let hyphenation + pretty wrapping tidy the rag. */
-	.fr-band {
-		columns: 2 17rem;
-		column-gap: 2.4rem;
-		column-rule: 1px solid var(--border);
-		text-align: left;
-		hyphens: auto;
-		hyphenate-limit-chars: 6 3 2;
-		text-wrap: pretty;
-	}
+.fr-band {
+  columns: 2 17rem;
+  column-gap: 2.4rem;
+  column-rule: 1px solid var(--border);
+  text-align: left;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 3 2;
+  text-wrap: pretty;
+}
 ```
 
 **Do not:** Do not change `columns`, `column-gap`, or `column-rule`. Do not touch `.fr-full`, `.fr-break`, drop-cap rules, or any script logic. Do not "gate justification ≥ 20rem" — justification is removed entirely.
@@ -106,8 +106,8 @@ stop and report the mismatch.
 
 ```css
 ::selection {
-	background: var(--accent-soft);
-	color: var(--text);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 ```
 
@@ -115,10 +115,10 @@ stop and report the mismatch.
 
 ```css
 ::selection {
-	/* --accent-soft is near-invisible against the light papers (~1.1:1); a 25%
+  /* --accent-soft is near-invisible against the light papers (~1.1:1); a 25%
 	   accent-into-bg mix reads clearly on all six themes and keeps text AAA. */
-	background: color-mix(in srgb, var(--accent) 25%, var(--bg));
-	color: var(--text);
+  background: color-mix(in srgb, var(--accent) 25%, var(--bg));
+  color: var(--text);
 }
 ```
 
@@ -274,27 +274,27 @@ stop and report the mismatch.
 **Step 9 — the mark rule. Current code** (read/[id]/+page.svelte:1854-1859):
 
 ```css
-	.doc :global(mark.lectern-hl) {
-		background: color-mix(in srgb, var(--hl, #e0b341) 38%, transparent);
-		color: inherit;
-		border-radius: 2px;
-		padding: 0.05em 0;
-	}
+.doc :global(mark.lectern-hl) {
+  background: color-mix(in srgb, var(--hl, #e0b341) 38%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0;
+}
 ```
 
 **Change to:**
 
 ```css
-	/* Marker-on-paper on light themes (solid ink, multiplied); translucent tint
+/* Marker-on-paper on light themes (solid ink, multiplied); translucent tint
 	   on dark themes. --hl-mix / --hl-blend come from the theme blocks in app.css
 	   and re-scope when .doc overrides the app theme via data-theme. */
-	.doc :global(mark.lectern-hl) {
-		background: color-mix(in srgb, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
-		mix-blend-mode: var(--hl-blend, multiply);
-		color: inherit;
-		border-radius: 2px;
-		padding: 0.05em 0;
-	}
+.doc :global(mark.lectern-hl) {
+  background: color-mix(in srgb, var(--hl, #e0b341) var(--hl-mix, 100%), transparent);
+  mix-blend-mode: var(--hl-blend, multiply);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0;
+}
 ```
 
 **Do not:** Do not touch the per-color `--hl` rules (`.doc :global(mark.lectern-hl[data-color='blue'])` etc.), the `mark.find-hit` rules, or the `.hl-item` panel-card colors. Do not add dark-theme line-height or image-brightness rules — that is a later phase. Do not rename the tokens.
@@ -359,45 +359,45 @@ stop and report the mismatch.
 **Step 2 — register it. Current code** (read/[id]/+page.svelte:664-668):
 
 ```ts
-		window.addEventListener('keydown', onFindKey);
-		window.addEventListener('scroll', onScroll, { passive: true });
-		window.addEventListener('keydown', onKey);
-		window.addEventListener('resize', updateBar);
-		document.addEventListener('mouseup', onMouseUp);
+window.addEventListener("keydown", onFindKey);
+window.addEventListener("scroll", onScroll, { passive: true });
+window.addEventListener("keydown", onKey);
+window.addEventListener("resize", updateBar);
+document.addEventListener("mouseup", onMouseUp);
 ```
 
 **Change to:**
 
 ```ts
-		window.addEventListener('keydown', onEscapeCapture, true);
-		window.addEventListener('keydown', onFindKey);
-		window.addEventListener('scroll', onScroll, { passive: true });
-		window.addEventListener('keydown', onKey);
-		window.addEventListener('resize', updateBar);
-		document.addEventListener('mouseup', onMouseUp);
+window.addEventListener("keydown", onEscapeCapture, true);
+window.addEventListener("keydown", onFindKey);
+window.addEventListener("scroll", onScroll, { passive: true });
+window.addEventListener("keydown", onKey);
+window.addEventListener("resize", updateBar);
+document.addEventListener("mouseup", onMouseUp);
 ```
 
 **Step 3 — unregister it. Current code** (read/[id]/+page.svelte:674-679):
 
 ```ts
-			window.removeEventListener('scroll', onScroll);
-			window.removeEventListener('keydown', onKey);
-			window.removeEventListener('resize', updateBar);
-			document.removeEventListener('mouseup', onMouseUp);
-			window.removeEventListener('keydown', onFindKey);
-			if (findTimer) clearTimeout(findTimer);
+window.removeEventListener("scroll", onScroll);
+window.removeEventListener("keydown", onKey);
+window.removeEventListener("resize", updateBar);
+document.removeEventListener("mouseup", onMouseUp);
+window.removeEventListener("keydown", onFindKey);
+if (findTimer) clearTimeout(findTimer);
 ```
 
 **Change to:**
 
 ```ts
-			window.removeEventListener('keydown', onEscapeCapture, true);
-			window.removeEventListener('scroll', onScroll);
-			window.removeEventListener('keydown', onKey);
-			window.removeEventListener('resize', updateBar);
-			document.removeEventListener('mouseup', onMouseUp);
-			window.removeEventListener('keydown', onFindKey);
-			if (findTimer) clearTimeout(findTimer);
+window.removeEventListener("keydown", onEscapeCapture, true);
+window.removeEventListener("scroll", onScroll);
+window.removeEventListener("keydown", onKey);
+window.removeEventListener("resize", updateBar);
+document.removeEventListener("mouseup", onMouseUp);
+window.removeEventListener("keydown", onFindKey);
+if (findTimer) clearTimeout(findTimer);
 ```
 
 **Do not:** Do not modify the layout's keydown handler or `keyboard.ts` — Escape-goes-back from a clean reader must keep working. Do not remove the `true` capture flag from either call (add and remove must match). Do not fold this into `onKey` (bubble phase runs after the layout's listener).
@@ -409,7 +409,7 @@ stop and report the mismatch.
 - Escape with no overlay open still exits the reader.
 - No leaked listener (close/reopen reader, Escape behavior unchanged).
 
-*Coordination note: C2 (Phase C) also adds Escape layering via `controller.back()` for its new "…" menu. If C2 is already applied, extend its `back()` branch instead of duplicating; if A5 is applied first, C2's implementer should fold `menuOpen` into this capture handler.*
+_Coordination note: C2 (Phase C) also adds Escape layering via `controller.back()` for its new "…" menu. If C2 is already applied, extend its `back()` branch instead of duplicating; if A5 is applied first, C2's implementer should fold `menuOpen` into this capture handler._
 
 ---
 
@@ -452,56 +452,56 @@ stop and report the mismatch.
 **Step 2 — wrapping segments. Current code** (read/[id]/+page.svelte:1209-1229):
 
 ```css
-	.seg {
-		display: flex;
-		gap: 0.25rem;
-		padding: 0.2rem;
-		background: var(--surface-alt);
-		border-radius: var(--radius);
-	}
-	.seg button {
-		flex: 1;
-		padding: 0.34rem 0.4rem;
-		border: 0;
-		border-radius: calc(var(--radius) - 3px);
-		background: transparent;
-		color: var(--text-muted);
-		font-size: var(--text-sm);
-		font-weight: 500;
-		cursor: pointer;
-		transition:
-			background var(--dur-fast) var(--ease),
-			color var(--dur-fast) var(--ease);
-	}
+.seg {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+}
+.seg button {
+  flex: 1;
+  padding: 0.34rem 0.4rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
 ```
 
 **Change to:**
 
 ```css
-	/* Wrap the segments into an even grid so long labels (Newsprint, Contrast,
+/* Wrap the segments into an even grid so long labels (Newsprint, Contrast,
 	   OpenDyslexic) never clip off the popover edge. */
-	.seg {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-		gap: 0.25rem;
-		padding: 0.2rem;
-		background: var(--surface-alt);
-		border-radius: var(--radius);
-	}
-	.seg button {
-		min-width: 0;
-		padding: 0.34rem 0.4rem;
-		border: 0;
-		border-radius: calc(var(--radius) - 3px);
-		background: transparent;
-		color: var(--text-muted);
-		font-size: var(--text-sm);
-		font-weight: 500;
-		cursor: pointer;
-		transition:
-			background var(--dur-fast) var(--ease),
-			color var(--dur-fast) var(--ease);
-	}
+.seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+}
+.seg button {
+  min-width: 0;
+  padding: 0.34rem 0.4rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
 ```
 
 **Do not:** Do not change the base `.panel` rule's `width` (it leaks to the Info side rail). Do not build a mobile bottom sheet, width presets, or an "Aa" preview — out of scope. Do not touch the sliders or the scrim.
@@ -532,79 +532,79 @@ stop and report the mismatch.
  * browser-safe punycode decoder and the domain is not a byline anyway.
  */
 export function displayAuthor(raw: string): string {
-	let author = raw.trim();
-	if (!author) return raw;
-	// "Name <user@host>": prefer the display name; a bare "<user@host>" falls
-	// through to local-part handling below.
-	const angled = author.match(/^(.*?)\s*<\s*([^\s<>]+@[^\s<>]+)\s*>$/);
-	if (angled) {
-		const name = angled[1]
-			.trim()
-			.replace(/^["']+|["']+$/g, '')
-			.trim();
-		if (name) return name;
-		author = angled[2];
-	}
-	// "user@host (Name)": the display name trails in parentheses.
-	const commented = author.match(/^[^\s()]+@[^\s()]+\s*\(([^)]*)\)$/);
-	if (commented) {
-		const name = commented[1].trim();
-		if (name) return name;
-		author = author.replace(/\s*\([^)]*\)$/, '');
-	}
-	// Bare address: humanize the local part and drop the domain entirely.
-	const bare = author.match(/^([^\s@]+)@[^\s@]+$/);
-	if (bare) {
-		const local = bare[1]
-			.replace(/["']/g, '')
-			.replace(/[._+-]+/g, ' ')
-			.trim();
-		return local ? local.replace(/\b\p{L}/gu, (m) => m.toUpperCase()) : author;
-	}
-	// Already a human name (or an unrecognized form): pass through untouched.
-	return author;
+  let author = raw.trim();
+  if (!author) return raw;
+  // "Name <user@host>": prefer the display name; a bare "<user@host>" falls
+  // through to local-part handling below.
+  const angled = author.match(/^(.*?)\s*<\s*([^\s<>]+@[^\s<>]+)\s*>$/);
+  if (angled) {
+    const name = angled[1]
+      .trim()
+      .replace(/^["']+|["']+$/g, "")
+      .trim();
+    if (name) return name;
+    author = angled[2];
+  }
+  // "user@host (Name)": the display name trails in parentheses.
+  const commented = author.match(/^[^\s()]+@[^\s()]+\s*\(([^)]*)\)$/);
+  if (commented) {
+    const name = commented[1].trim();
+    if (name) return name;
+    author = author.replace(/\s*\([^)]*\)$/, "");
+  }
+  // Bare address: humanize the local part and drop the domain entirely.
+  const bare = author.match(/^([^\s@]+)@[^\s@]+$/);
+  if (bare) {
+    const local = bare[1]
+      .replace(/["']/g, "")
+      .replace(/[._+-]+/g, " ")
+      .trim();
+    return local ? local.replace(/\b\p{L}/gu, (m) => m.toUpperCase()) : author;
+  }
+  // Already a human name (or an unrecognized form): pass through untouched.
+  return author;
 }
 ```
 
 **Step 2 — create `/Users/luke/git/luke/Lectern/apps/web/src/lib/author.test.ts` with exactly this content:**
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { displayAuthor } from './author';
+import { describe, expect, it } from "vitest";
+import { displayAuthor } from "./author";
 
-describe('displayAuthor', () => {
-	it('shows the parenthesized display name from "email (Name)" forms', () => {
-		expect(displayAuthor('marius@xn--gckvb8fzb.com (Marius)')).toBe('Marius');
-	});
+describe("displayAuthor", () => {
+  it('shows the parenthesized display name from "email (Name)" forms', () => {
+    expect(displayAuthor("marius@xn--gckvb8fzb.com (Marius)")).toBe("Marius");
+  });
 
-	it('shows the display name from "Name <email>" forms', () => {
-		expect(displayAuthor('Jane Doe <jane@example.com>')).toBe('Jane Doe');
-		expect(displayAuthor('"Jane Doe" <jane@example.com>')).toBe('Jane Doe');
-	});
+  it('shows the display name from "Name <email>" forms', () => {
+    expect(displayAuthor("Jane Doe <jane@example.com>")).toBe("Jane Doe");
+    expect(displayAuthor('"Jane Doe" <jane@example.com>')).toBe("Jane Doe");
+  });
 
-	it('falls back to a humanized local part for bare addresses', () => {
-		expect(displayAuthor('jane.doe@example.com')).toBe('Jane Doe');
-		expect(displayAuthor('<jane@example.com>')).toBe('Jane');
-	});
+  it("falls back to a humanized local part for bare addresses", () => {
+    expect(displayAuthor("jane.doe@example.com")).toBe("Jane Doe");
+    expect(displayAuthor("<jane@example.com>")).toBe("Jane");
+  });
 
-	it('passes plain names through untouched', () => {
-		expect(displayAuthor('Maria Popova')).toBe('Maria Popova');
-		expect(displayAuthor('  Maria Popova  ')).toBe('Maria Popova');
-	});
+  it("passes plain names through untouched", () => {
+    expect(displayAuthor("Maria Popova")).toBe("Maria Popova");
+    expect(displayAuthor("  Maria Popova  ")).toBe("Maria Popova");
+  });
 });
 ```
 
 **Step 3 — reader byline. Current code** (read/[id]/+page.svelte:32):
 
 ```ts
-	import TagEditor from '$lib/components/TagEditor.svelte';
+import TagEditor from "$lib/components/TagEditor.svelte";
 ```
 
 **Change to:**
 
 ```ts
-	import { displayAuthor } from '$lib/author';
-	import TagEditor from '$lib/components/TagEditor.svelte';
+import { displayAuthor } from "$lib/author";
+import TagEditor from "$lib/components/TagEditor.svelte";
 ```
 
 **Current code** (read/[id]/+page.svelte:919-920):
@@ -621,7 +621,7 @@ describe('displayAuthor', () => {
 				{card.siteName ?? (card.author ? displayAuthor(card.author) : new URL(card.url).hostname)}
 ```
 
-*(If E11 — structured byline — is already applied, instead wrap the author reference in its new byline markup: `By {displayAuthor(card.author)}`.)*
+_(If E11 — structured byline — is already applied, instead wrap the author reference in its new byline markup: `By {displayAuthor(card.author)}`.)_
 
 **Step 4 — Info panel. Current code** (read/[id]/+page.svelte:983-986):
 
@@ -644,73 +644,73 @@ describe('displayAuthor', () => {
 **Step 5 — FlipReader byline. Current code** (FlipReader.svelte:10):
 
 ```ts
-	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
+import SourceAvatar from "$lib/components/SourceAvatar.svelte";
 ```
 
 **Change to:**
 
 ```ts
-	import SourceAvatar from '$lib/components/SourceAvatar.svelte';
-	import { displayAuthor } from '$lib/author';
+import SourceAvatar from "$lib/components/SourceAvatar.svelte";
+import { displayAuthor } from "$lib/author";
 ```
 
 **Current code** (FlipReader.svelte:108-113):
 
 ```ts
-	function byline(card: Card): string {
-		const parts: string[] = [];
-		if (card.author) parts.push(card.author);
-		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
-		return parts.join(' · ');
-	}
+function byline(card: Card): string {
+  const parts: string[] = [];
+  if (card.author) parts.push(card.author);
+  if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
+  return parts.join(" · ");
+}
 ```
 
 **Change to:**
 
 ```ts
-	function byline(card: Card): string {
-		const parts: string[] = [];
-		if (card.author) parts.push(displayAuthor(card.author));
-		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
-		return parts.join(' · ');
-	}
+function byline(card: Card): string {
+  const parts: string[] = [];
+  if (card.author) parts.push(displayAuthor(card.author));
+  if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min read`);
+  return parts.join(" · ");
+}
 ```
 
 **Step 6 — MagazineReader meta. Current code** (MagazineReader.svelte:10):
 
 ```ts
-	import SourceAvatar from './SourceAvatar.svelte';
+import SourceAvatar from "./SourceAvatar.svelte";
 ```
 
 **Change to:**
 
 ```ts
-	import SourceAvatar from './SourceAvatar.svelte';
-	import { displayAuthor } from '$lib/author';
+import SourceAvatar from "./SourceAvatar.svelte";
+import { displayAuthor } from "$lib/author";
 ```
 
 **Current code** (MagazineReader.svelte:33-39):
 
 ```ts
-	function meta(card: Card): string {
-		const parts: string[] = [];
-		if (card.siteName) parts.push(card.siteName);
-		if (card.author) parts.push(card.author);
-		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
-		return parts.join(' · ');
-	}
+function meta(card: Card): string {
+  const parts: string[] = [];
+  if (card.siteName) parts.push(card.siteName);
+  if (card.author) parts.push(card.author);
+  if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
+  return parts.join(" · ");
+}
 ```
 
 **Change to:**
 
 ```ts
-	function meta(card: Card): string {
-		const parts: string[] = [];
-		if (card.siteName) parts.push(card.siteName);
-		if (card.author) parts.push(displayAuthor(card.author));
-		if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
-		return parts.join(' · ');
-	}
+function meta(card: Card): string {
+  const parts: string[] = [];
+  if (card.siteName) parts.push(card.siteName);
+  if (card.author) parts.push(displayAuthor(card.author));
+  if (card.readingTimeMinutes) parts.push(`${card.readingTimeMinutes} min`);
+  return parts.join(" · ");
+}
 ```
 
 **Do not:** Do not modify the stored `card.author` data or any sync/mutation code — this is display-only. Do not add a punycode decoder. Do not touch the `meta()` in routes/magazine/+page.svelte (it shows siteName + minutes only, no author).
@@ -763,73 +763,70 @@ export function magazineTitle(tag: string): string {
 **Step 2 — tests. Current code** (magazine.test.ts:3):
 
 ```ts
-import { buildMagazines, isLibraryItem } from './magazine';
+import { buildMagazines, isLibraryItem } from "./magazine";
 ```
 
 **Change to:**
 
 ```ts
-import { buildMagazines, isLibraryItem, magazineTitle } from './magazine';
+import { buildMagazines, isLibraryItem, magazineTitle } from "./magazine";
 ```
 
 **Then append at the very end of magazine.test.ts** (after the closing `});` of the `buildMagazines` describe block, whose last test is `it('honours a custom minimum', ...)`):
 
 ```ts
+describe("magazineTitle", () => {
+  it("strips leaked tag syntax and title-cases the words", () => {
+    expect(magazineTitle("['rss'")).toBe("Rss");
+    expect(magazineTitle("'article'")).toBe("Article");
+    expect(magazineTitle("politics-society]")).toBe("Politics Society");
+  });
 
-describe('magazineTitle', () => {
-	it('strips leaked tag syntax and title-cases the words', () => {
-		expect(magazineTitle("['rss'")).toBe('Rss');
-		expect(magazineTitle("'article'")).toBe('Article');
-		expect(magazineTitle('politics-society]')).toBe('Politics Society');
-	});
+  it("turns separators into spaces and capitalizes each word", () => {
+    expect(magazineTitle("machine_learning")).toBe("Machine Learning");
+    expect(magazineTitle("long-reads")).toBe("Long Reads");
+  });
 
-	it('turns separators into spaces and capitalizes each word', () => {
-		expect(magazineTitle('machine_learning')).toBe('Machine Learning');
-		expect(magazineTitle('long-reads')).toBe('Long Reads');
-	});
-
-	it('falls back to the raw tag when stripping leaves nothing', () => {
-		expect(magazineTitle("[]''")).toBe("[]''");
-	});
+  it("falls back to the raw tag when stripping leaves nothing", () => {
+    expect(magazineTitle("[]''")).toBe("[]''");
+  });
 });
 ```
 
 **Step 3 — MagazineReader masthead. Current code** (MagazineReader.svelte:3):
 
 ```ts
-	import type { Magazine } from '$lib/magazine';
+import type { Magazine } from "$lib/magazine";
 ```
 
 **Change to:**
 
 ```ts
-	import { magazineTitle, type Magazine } from '$lib/magazine';
+import { magazineTitle, type Magazine } from "$lib/magazine";
 ```
 
 **Current code** (MagazineReader.svelte:29-31):
 
 ```ts
-	const title = $derived(
-		magazine.tag.replace(/[-_]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
-	);
+const title = $derived(magazine.tag.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()));
 ```
 
 **Change to:**
 
 ```ts
-	const title = $derived(magazineTitle(magazine.tag));
+const title = $derived(magazineTitle(magazine.tag));
 ```
 
 **Step 4 — rack covers. Current code** (routes/magazine/+page.svelte:9):
 
 ```ts
-	import { buildMagazines, type Magazine } from '$lib/magazine';
+import { buildMagazines, type Magazine } from "$lib/magazine";
 ```
 
 **Change to:**
 
 ```ts
-	import { buildMagazines, magazineTitle, type Magazine } from '$lib/magazine';
+import { buildMagazines, magazineTitle, type Magazine } from "$lib/magazine";
 ```
 
 **Current code** (routes/magazine/+page.svelte:152):
@@ -887,10 +884,10 @@ describe('magazineTitle', () => {
 
 /** Lowercase, strip everything but letters/digits, collapse runs to spaces. */
 function comparable(s: string): string {
-	return s
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}]+/gu, ' ')
-		.trim();
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 }
 
 /**
@@ -899,158 +896,159 @@ function comparable(s: string): string {
  * (one contains the other and the shorter side is substantial).
  */
 export function titlesMatch(heading: string, title: string): boolean {
-	const a = comparable(heading);
-	const b = comparable(title);
-	if (!a || !b) return false;
-	if (a === b) return true;
-	const shorter = a.length <= b.length ? a : b;
-	const longer = a.length <= b.length ? b : a;
-	return shorter.length >= 10 && longer.includes(shorter);
+  const a = comparable(heading);
+  const b = comparable(title);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.length >= 10 && longer.includes(shorter);
 }
 
 /** Characters of rendered text that precede `el` within `root`. */
 function textBefore(root: Element, el: Element): number {
-	const range = root.ownerDocument.createRange();
-	range.setStart(root, 0);
-	range.setEndBefore(el);
-	return range.toString().trim().length;
+  const range = root.ownerDocument.createRange();
+  range.setStart(root, 0);
+  range.setEndBefore(el);
+  return range.toString().trim().length;
 }
 
 export function cleanArticleHtml(html: string, title?: string | null): string {
-	if (!html || typeof DOMParser === 'undefined') return html;
-	const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
-	const body = doc.body;
-	// Strip the leading h1 when it repeats the document title. "Leading" allows
-	// a little front matter (a kicker or byline) before it, but not body prose.
-	const first = body.querySelector('h1');
-	if (
-		first &&
-		title &&
-		textBefore(body, first) < 80 &&
-		titlesMatch(first.textContent ?? '', title)
-	) {
-		first.remove();
-	}
-	// Demote any remaining in-content h1s — the reader chrome owns the h1.
-	for (const h1 of Array.from(body.querySelectorAll('h1'))) {
-		const h2 = doc.createElement('h2');
-		for (const attr of Array.from(h1.attributes)) h2.setAttribute(attr.name, attr.value);
-		while (h1.firstChild) h2.appendChild(h1.firstChild);
-		h1.replaceWith(h2);
-	}
-	return body.innerHTML;
+  if (!html || typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const body = doc.body;
+  // Strip the leading h1 when it repeats the document title. "Leading" allows
+  // a little front matter (a kicker or byline) before it, but not body prose.
+  const first = body.querySelector("h1");
+  if (
+    first &&
+    title &&
+    textBefore(body, first) < 80 &&
+    titlesMatch(first.textContent ?? "", title)
+  ) {
+    first.remove();
+  }
+  // Demote any remaining in-content h1s — the reader chrome owns the h1.
+  for (const h1 of Array.from(body.querySelectorAll("h1"))) {
+    const h2 = doc.createElement("h2");
+    for (const attr of Array.from(h1.attributes)) h2.setAttribute(attr.name, attr.value);
+    while (h1.firstChild) h2.appendChild(h1.firstChild);
+    h1.replaceWith(h2);
+  }
+  return body.innerHTML;
 }
 ```
 
 **Step 2 — create `/Users/luke/git/luke/Lectern/apps/web/src/lib/article-html.test.ts` with exactly this content** (the vitest project runs in the node environment with no DOMParser, so the DOM path is exercised manually in the browser; the pure matcher and the no-DOM guard are unit-tested):
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { cleanArticleHtml, titlesMatch } from './article-html';
+import { describe, expect, it } from "vitest";
+import { cleanArticleHtml, titlesMatch } from "./article-html";
 
-describe('titlesMatch', () => {
-	it('matches identical titles regardless of case and punctuation', () => {
-		expect(titlesMatch('Hello, World — a Story', 'hello world a story')).toBe(true);
-	});
+describe("titlesMatch", () => {
+  it("matches identical titles regardless of case and punctuation", () => {
+    expect(titlesMatch("Hello, World — a Story", "hello world a story")).toBe(true);
+  });
 
-	it('matches truncated variants when the overlap is substantial', () => {
-		expect(
-			titlesMatch('The Rise and Fall of Everything', 'The Rise and Fall of Everything — Example Site')
-		).toBe(true);
-	});
+  it("matches truncated variants when the overlap is substantial", () => {
+    expect(
+      titlesMatch(
+        "The Rise and Fall of Everything",
+        "The Rise and Fall of Everything — Example Site",
+      ),
+    ).toBe(true);
+  });
 
-	it('rejects short or unrelated headings', () => {
-		expect(titlesMatch('Intro', 'A completely different article title')).toBe(false);
-		expect(titlesMatch('', 'Some title')).toBe(false);
-	});
+  it("rejects short or unrelated headings", () => {
+    expect(titlesMatch("Intro", "A completely different article title")).toBe(false);
+    expect(titlesMatch("", "Some title")).toBe(false);
+  });
 });
 
-describe('cleanArticleHtml', () => {
-	it('returns input unchanged when no DOM is available (node test env)', () => {
-		const html = '<h1>Title</h1><p>Body</p>';
-		expect(cleanArticleHtml(html, 'Title')).toBe(html);
-	});
+describe("cleanArticleHtml", () => {
+  it("returns input unchanged when no DOM is available (node test env)", () => {
+    const html = "<h1>Title</h1><p>Body</p>";
+    expect(cleanArticleHtml(html, "Title")).toBe(html);
+  });
 });
 ```
 
 **Step 3 — full reader. Current code** (read/[id]/+page.svelte:13):
 
 ```ts
-	import { serializeRange, renderHighlights } from '$lib/highlight';
+import { serializeRange, renderHighlights } from "$lib/highlight";
 ```
 
 **Change to:**
 
 ```ts
-	import { serializeRange, renderHighlights } from '$lib/highlight';
-	import { cleanArticleHtml } from '$lib/article-html';
+import { serializeRange, renderHighlights } from "$lib/highlight";
+import { cleanArticleHtml } from "$lib/article-html";
 ```
 
 **Current code** (read/[id]/+page.svelte:632-635):
 
 ```ts
-			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
-			if (docId !== id) return;
-			// Sanitize before rendering untrusted article HTML on the client.
-			html = DOMPurify.sanitize(content.html);
+const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
+if (docId !== id) return;
+// Sanitize before rendering untrusted article HTML on the client.
+html = DOMPurify.sanitize(content.html);
 ```
 
 **Change to:**
 
 ```ts
-			const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
-			if (docId !== id) return;
-			// Sanitize before rendering untrusted article HTML on the client, then
-			// drop the duplicated leading h1 / demote in-content h1s.
-			html = cleanArticleHtml(DOMPurify.sanitize(content.html), initial?.title);
+const content = await getClient().getContent(docId, refresh ? { refresh: true } : undefined);
+if (docId !== id) return;
+// Sanitize before rendering untrusted article HTML on the client, then
+// drop the duplicated leading h1 / demote in-content h1s.
+html = cleanArticleHtml(DOMPurify.sanitize(content.html), initial?.title);
 ```
 
 **Step 4 — FlipReader. Current code** (FlipReader.svelte:7):
 
 ```ts
-	import { getArticleHtml, prefetchArticles } from '$lib/content';
+import { getArticleHtml, prefetchArticles } from "$lib/content";
 ```
 
 **Change to:**
 
 ```ts
-	import { getArticleHtml, prefetchArticles } from '$lib/content';
-	import { cleanArticleHtml } from '$lib/article-html';
+import { getArticleHtml, prefetchArticles } from "$lib/content";
+import { cleanArticleHtml } from "$lib/article-html";
 ```
 
 **Current code** (FlipReader.svelte:123-128):
 
 ```ts
-		getArticleHtml(card.id)
-			.then((h) => {
-				if (cancelled) return;
-				html = h;
-				loading = false;
-			})
+getArticleHtml(card.id).then((h) => {
+  if (cancelled) return;
+  html = h;
+  loading = false;
+});
 ```
 
 **Change to:**
 
 ```ts
-		getArticleHtml(card.id)
-			.then((h) => {
-				if (cancelled) return;
-				html = cleanArticleHtml(h, card.title);
-				loading = false;
-			})
+getArticleHtml(card.id).then((h) => {
+  if (cancelled) return;
+  html = cleanArticleHtml(h, card.title);
+  loading = false;
+});
 ```
 
 **Step 5 — MagazineReader. Current code** (MagazineReader.svelte:8):
 
 ```ts
-	import { getArticleHtml } from '$lib/content';
+import { getArticleHtml } from "$lib/content";
 ```
 
 **Change to:**
 
 ```ts
-	import { getArticleHtml } from '$lib/content';
-	import { cleanArticleHtml } from '$lib/article-html';
+import { getArticleHtml } from "$lib/content";
+import { cleanArticleHtml } from "$lib/article-html";
 ```
 
 **Current code** (MagazineReader.svelte:67-72):

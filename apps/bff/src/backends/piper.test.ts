@@ -91,9 +91,7 @@ describe("PiperBackend", () => {
   });
 
   it("surfaces a rejecting transcode as a BackendHttpError", async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(new Uint8Array(10), { status: 200 }),
-    );
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array(10), { status: 200 }));
     const failingTranscode = async () => {
       throw new BackendHttpError(
         "piper",

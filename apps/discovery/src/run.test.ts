@@ -368,10 +368,20 @@ describe("runDiscovery", () => {
   it("captures a forensic trace: queries, per-source detail, crawl internals, scoring funnel", async () => {
     const client = new FakeClient({ config: { ...baseConfig, mutedDomains: ["spam.com"] } });
     const searxng = fakeFetcher("searxng", [
-      { url: "https://a.com/rust", title: "Rust safety", excerpt: "systems rust", fetcher: "searxng" },
+      {
+        url: "https://a.com/rust",
+        title: "Rust safety",
+        excerpt: "systems rust",
+        fetcher: "searxng",
+      },
       { url: "https://a.com/rust", title: "Rust safety dup", excerpt: "dup", fetcher: "searxng" },
       { url: "https://spam.com/x", title: "Spam", excerpt: "muted", fetcher: "searxng" },
-      { url: "https://c.com/cooking", title: "Sourdough", excerpt: "baking dough", fetcher: "searxng" },
+      {
+        url: "https://c.com/cooking",
+        title: "Sourdough",
+        excerpt: "baking dough",
+        fetcher: "searxng",
+      },
     ]);
     const brave = throwingFetcher("brave");
     // A stand-in crawler that reports through the sink exactly as the real one does.
@@ -388,7 +398,12 @@ describe("runDiscovery", () => {
         ctx.crawlTrace?.robotsBlocked("blog.example");
         ctx.crawlTrace?.stop("deadline");
         return [
-          { url: "https://blog.example/post-1", title: "Rust async runtime", excerpt: "rust systems", fetcher: "crawl" },
+          {
+            url: "https://blog.example/post-1",
+            title: "Rust async runtime",
+            excerpt: "rust systems",
+            fetcher: "crawl",
+          },
         ];
       },
     };

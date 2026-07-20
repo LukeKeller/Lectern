@@ -15,18 +15,18 @@ library (`@mozilla/readability` + `linkedom`)? Run against the **real library**
 
 ## Results
 
-| Outcome | Count | % |
-| --- | --- | --- |
-| Extracted cleanly (`ok`) | 208 | 78% |
-| Fetch/HTTP failure (403/401/404/410/400/timeout) | 38 | 14% |
-| PDF (Readability can't) | 6 | 2% |
-| Thin (<50 words; likely JS-rendered) | 15 | 6% |
+| Outcome                                          | Count | %   |
+| ------------------------------------------------ | ----- | --- |
+| Extracted cleanly (`ok`)                         | 208   | 78% |
+| Fetch/HTTP failure (403/401/404/410/400/timeout) | 38    | 14% |
+| PDF (Readability can't)                          | 6     | 2%  |
+| Thin (<50 words; likely JS-rendered)             | 15    | 6%  |
 
 - **When Readability can fetch the HTML, it matches Readeck almost exactly:**
   median Readability/Readeck word ratio = **1.0**; of 203 `ok` pages with a
   Readeck baseline, **201 were comparable (0.5–1.6×)**, 0 thin, 2 longer.
 - **Quality sample: 9/10 judged "clean"** by an independent LLM. The lone "junk"
-  was `abcnews.com` — a *section index* URL the user saved, not an article, so
+  was `abcnews.com` — a _section index_ URL the user saved, not an article, so
   no extractor would do better.
 
 ## The big caveat

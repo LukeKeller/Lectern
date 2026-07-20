@@ -20,6 +20,9 @@ class StubClient implements SyncClient {
 	async syncPush(body: SyncPushRequest): Promise<SyncPushResponse> {
 		return { applied: body.mutations.length, conflicts: [] };
 	}
+	async syncManifest() {
+		return { ids: [], count: 0 };
+	}
 }
 
 function makeCard(): Card {

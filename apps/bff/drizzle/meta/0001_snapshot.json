@@ -152,10 +152,7 @@
         "documents_source_source_id_key": {
           "name": "documents_source_source_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "source",
-            "source_id"
-          ]
+          "columns": ["source", "source_id"]
         }
       },
       "policies": {},

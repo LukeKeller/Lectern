@@ -141,7 +141,7 @@ components:
 
 Lectern is a quiet, well-lit room built for one purpose: reading. Every surface is warm
 paper and hushed chrome; the loudest thing on any screen should be a column of words. This
-is a *product* register where design serves the reading workflow — but the workflow is
+is a _product_ register where design serves the reading workflow — but the workflow is
 reading, so the craft of the page is the craft of the product. The palette is warm tinted
 neutrals (never pure black or white), carrying one restrained ink-blue accent that appears
 rarely and means something. Type is set on a single disciplined scale; spacing follows one
@@ -163,6 +163,7 @@ Black-OLED, High-Contrast) and four bundled reading faces tuned for legibility a
 where feasible**.
 
 **Key Characteristics:**
+
 - Warm paper neutrals; never pure `#000` or `#fff`.
 - One ink-blue accent (`#3a5e8c`), used on ≤10% of any screen.
 - Hairline borders + soft warm shadows; depth is paper-tactile, not glassy.
@@ -176,9 +177,10 @@ A warm, paper-derived palette: tinted off-white grounds, ink-brown text, hairlin
 and a single ink-blue accent. Semantic colors (sage, brick) are muted to sit on paper, never
 saturated UI primaries. (Values below are the **Paper / light** theme — the canonical base.
 Sepia, Newsprint, Dark, Black, and High-Contrast are sibling theme overrides of the same
-token names; the *roles* are identical, only the values shift.)
+token names; the _roles_ are identical, only the values shift.)
 
 ### Primary
+
 - **Ink Blue** (`#3a5e8c`): the one accent. Active nav, primary buttons, unread dots, focus
   rings, progress bars, selected/active states. Its rarity is the point — if it's everywhere,
   it means nothing.
@@ -188,6 +190,7 @@ token names; the *roles* are identical, only the values shift.)
   without shouting.
 
 ### Neutral
+
 - **Warm Paper** (`#f6f4ee`): the page ground. A faint accent-tinted radial sits at the top
   edge; otherwise this is the stock everything rests on.
 - **Bright Leaf** (`#fdfcf9`): raised surface — cards on hover, menus, palette, inputs,
@@ -204,10 +207,12 @@ token names; the *roles* are identical, only the values shift.)
   Hairline at rest, Strong on hover/emphasis. Always 1px.
 
 ### Tertiary (semantic, muted)
+
 - **Sage** (`#3f7d56`): success / finished-reading progress. Desaturated to live on paper.
 - **Brick** (`#b34a3a`): errors and destructive-action hover. Warm, not a fire-alarm red.
 
 ### Named Rules
+
 **The One Voice Rule.** The ink-blue accent appears on ≤10% of any screen. It marks exactly
 one thing per region: the active route, the primary action, the unread state. Two accent
 elements competing in one glance is a bug.
@@ -226,12 +231,14 @@ bundled face ships a metric-matched fallback (`Literata-fallback` = size-adjuste
 font swap never reflows the column.
 **Mono Font:** `'SF Mono', 'JetBrains Mono'` — code and tabular data only.
 
-**Character:** The chrome is set in a neutral system sans so it recedes; the *reading column*
+**Character:** The chrome is set in a neutral system sans so it recedes; the _reading column_
 is where typographic personality lives, and it is handed to the reader. The app never imposes
 a display typeface — its restraint is the statement.
 
 ### Hierarchy
+
 A single 8-step scale: `0.6875 · 0.75 · 0.8125 · 0.9375 · 1.0625 · 1.25 · 1.5 · 2rem`.
+
 - **Display** (650, `2rem`, lh 1.2, ls −0.01em): page titles, the largest headings. App UI uses
   fixed rem — no fluid `clamp()` in product chrome.
 - **Headline** (650, `1.5rem`, lh 1.2): section headers within a page.
@@ -249,6 +256,7 @@ A single 8-step scale: `0.6875 · 0.75 · 0.8125 · 0.9375 · 1.0625 · 1.25 · 
   680 / Wide 760.
 
 ### Named Rules
+
 **The Reader-Owns-Type Rule.** In the reading column, type size, measure, family, and theme
 are the reader's to set, not the designer's. Ship sensible defaults; never lock them.
 
@@ -277,6 +285,7 @@ it is zeroed on E-ink (which dithers) and left off the high-contrast theme. Glas
 backdrop-blur panels, and decorative glows are forbidden.
 
 ### Shadow Vocabulary
+
 - **Hairline lift** (`box-shadow: 0 1px 2px rgba(31,28,22,0.05)` — `--shadow-sm`): card hover,
   selected rows, segmented-control active thumb. The faintest possible separation.
 - **Floating panel** (`0 6px 20px rgba(31,28,22,0.1), 0 1px 3px rgba(31,28,22,0.06)` —
@@ -291,13 +300,15 @@ backdrop-blur panels, and decorative glows are forbidden.
   highlight on raised surfaces.
 
 ### Named Rules
+
 **The Flat-At-Rest Rule.** Resting surfaces are flat with a 1px hairline. Shadow is a
-*response* — to hover, to floating, to focus — never decoration. If a static card has a drop
+_response_ — to hover, to floating, to focus — never decoration. If a static card has a drop
 shadow for no reason, delete it.
 
 ## 5. Components
 
 ### Buttons
+
 - **Shape:** gently rounded, `9px` (`--radius`). Padding `0.42rem 0.85rem` (small variant
   `0.3rem 0.6rem`). All states transition `120ms` with the standard ease.
 - **Primary:** solid Ink Blue ground, white text, 1px border matching the fill. Hover darkens
@@ -311,6 +322,7 @@ shadow for no reason, delete it.
   Paper and darkens the glyph. Toggle-on state uses accent text on Faint Ink Wash.
 
 ### Chips / Tags / Pills
+
 - **Tag chip:** Aged Paper ground, Faded Ink text, fully rounded (`--radius-full`), `text-xs`,
   asymmetric padding leaving room for an inline remove button. Quiet, not a button.
 - **Badge / count:** fully-rounded accent pill, white text, `text-2xs`, weight 600,
@@ -318,9 +330,10 @@ shadow for no reason, delete it.
 - **Unread pill:** Faint Ink Wash ground with accent text — a soft state marker, not a badge.
 
 ### Cards / List Items (signature)
+
 - **Corner Style:** `14px` (`--radius-lg`), the softest radius in the system.
 - **Background:** transparent at rest on a hairline-divided list (`border-bottom: 1px solid
-  Hairline`). Hover washes in ~55% Aged Paper + the Hairline-lift shadow. Selected uses Faint
+Hairline`). Hover washes in ~55% Aged Paper + the Hairline-lift shadow. Selected uses Faint
   Ink Wash.
 - **Unread:** a single 8px Ink-Blue **dot** at the left edge — never a border stripe.
 - **Progress:** a 2px accent bar pinned to the row's bottom edge; turns Sage at 100%.
@@ -330,6 +343,7 @@ shadow for no reason, delete it.
   gutter).
 
 ### Inputs / Fields
+
 - **Style:** Bright Leaf ground, 1px Hairline border, `9px` radius, `0.5rem 0.65rem` padding.
 - **Search field:** a `2rem`-tall pill-of-a-box with an inline icon; the inner `<input>` is
   chromeless (no border/background) so the wrapper is the only visible field.
@@ -339,22 +353,25 @@ shadow for no reason, delete it.
   active segment lifts onto a Bright Leaf thumb with the Hairline-lift shadow.
 
 ### Navigation
+
 - **Sidebar rail:** items are `text-base`, weight 500, muted ink, `9px` radius, `0.46rem
-  0.55rem` padding. Hover fills Aged Paper and darkens text. **Active** uses Faint Ink Wash
+0.55rem` padding. Hover fills Aged Paper and darkens text. **Active** uses Faint Ink Wash
   ground + Ink-Blue text at weight 600; the trailing count also turns accent. Tree rows and
   playlist items follow the same default→hover→active language one level quieter (`text-sm`).
 - **Count badges** are right-aligned, `text-2xs`, tabular-nums, muted — accent only when their
   row is active.
 
 ### Command Palette (signature)
+
 A centered `min(560px, 92vw)` panel at 13vh, Bright Leaf on an ink-tinted scrim
 (`rgba(20,16,10,0.34)`), `14px` radius, Modal shadow, entering with a 180ms `pop` (fade +
 6px rise + slight scale). The input is chromeless and large (`text-md`); the active row is
 accent-on-Faint-Ink-Wash. This is the keyboard-first spine of the app.
 
 ### Highlight Marker (signature)
+
 Reader highlights are the **one** sanctioned colored left border: a `3px` stripe whose color
-*encodes the highlight color* the user chose (yellow `#e0b341`, blue `#4f8edc`, green
+_encodes the highlight color_ the user chose (yellow `#e0b341`, blue `#4f8edc`, green
 `#5fae6a`, pink `#d97aa6`, orange `#e08a3c`). This is data, not decoration — it is the
 explicit exception to the no-stripe rule below, permitted only because the color carries the
 user's meaning.
@@ -362,6 +379,7 @@ user's meaning.
 ## 6. Do's and Don'ts
 
 ### Do:
+
 - **Do** keep the Ink-Blue accent (`#3a5e8c`) on ≤10% of any screen; mark one thing per region.
 - **Do** tint every neutral toward the warm paper hue; reach for Warm Paper / Bright Leaf /
   Aged Paper, never a flat gray card.
@@ -379,6 +397,7 @@ user's meaning.
 - **Do** hold WCAG AAA where feasible; preserve the high-contrast theme and reading faces.
 
 ### Don't:
+
 - **Don't** build a **busy social feed**: no infinite-scroll bait, no algorithmic reordering,
   no scatter of notification badges. The queue is the user's, in their order.
 - **Don't** ship a **sterile corporate SaaS** look: no gray cards, no cold default blue, no

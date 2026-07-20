@@ -8,9 +8,9 @@ import {
 
 describe("parseBlueskyPostUrl", () => {
   it("parses a handle-based post url", () => {
-    expect(parseBlueskyPostUrl("https://bsky.app/profile/bumas.bsky.social/post/3moe3yoasqc2z")).toEqual(
-      { repo: "bumas.bsky.social", rkey: "3moe3yoasqc2z" },
-    );
+    expect(
+      parseBlueskyPostUrl("https://bsky.app/profile/bumas.bsky.social/post/3moe3yoasqc2z"),
+    ).toEqual({ repo: "bumas.bsky.social", rkey: "3moe3yoasqc2z" });
   });
 
   it("parses a did-based post url", () => {
@@ -114,9 +114,9 @@ describe("renderBlueskyPost", () => {
   });
 
   it("ignores unknown embed types and missing fields without throwing", () => {
-    expect(renderBlueskyPost({ record: { text: "hi" }, embed: { $type: "app.bsky.embed.weird" } })).toBe(
-      "<p>hi</p>",
-    );
+    expect(
+      renderBlueskyPost({ record: { text: "hi" }, embed: { $type: "app.bsky.embed.weird" } }),
+    ).toBe("<p>hi</p>");
     expect(renderBlueskyPost({})).toBe("");
   });
 });
@@ -135,8 +135,8 @@ describe("enrichBlueskyContent", () => {
   };
 
   it("returns enriched HTML from an injected fetch stub", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify(thread), { status: 200 }),
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify(thread), { status: 200 }),
     ) as unknown as typeof fetch;
     const html = await enrichBlueskyContent(
       "https://bsky.app/profile/alice.bsky.social/post/aaa111",
@@ -160,7 +160,9 @@ describe("enrichBlueskyContent", () => {
   });
 
   it("returns the fallback on a non-ok response", async () => {
-    const fetchImpl = vi.fn(async () => new Response("nope", { status: 502 })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(
+      async () => new Response("nope", { status: 502 }),
+    ) as unknown as typeof fetch;
     const html = await enrichBlueskyContent(
       "https://bsky.app/profile/alice.bsky.social/post/notok1",
       "FALLBACK",
@@ -170,7 +172,9 @@ describe("enrichBlueskyContent", () => {
   });
 
   it("returns the fallback for a non-bluesky url without calling fetch", async () => {
-    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(
+      async () => new Response("{}", { status: 200 }),
+    ) as unknown as typeof fetch;
     const html = await enrichBlueskyContent("https://example.com/post/1", "FALLBACK", fetchImpl);
     expect(html).toBe("FALLBACK");
     expect(fetchImpl).not.toHaveBeenCalled();

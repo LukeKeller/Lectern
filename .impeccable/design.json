@@ -4,34 +4,211 @@
   "title": "Design System: Lectern",
   "extensions": {
     "colorMeta": {
-      "accent": { "role": "primary", "displayName": "Ink Blue", "canonical": "#3a5e8c", "tonalRamp": ["#1b2c43", "#243a59", "#2e4a70", "#3a5e8c", "#5c7da6", "#86abd8", "#b3c9e3", "#dde7f2"] },
-      "accent-soft": { "role": "primary", "displayName": "Faint Ink Wash", "canonical": "#e7edf4", "tonalRamp": ["#3a5e8c", "#5c7da6", "#86abd8", "#a9c3e0", "#c7d8ec", "#e7edf4", "#f1f5f9", "#f8fafc"] },
-      "paper-bg": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#f6f4ee", "tonalRamp": ["#2a2620", "#4a443a", "#6b6457", "#938b7a", "#c2bba9", "#e4ded1", "#f6f4ee", "#fdfcf9"] },
-      "paper-surface": { "role": "neutral", "displayName": "Bright Leaf", "canonical": "#fdfcf9", "tonalRamp": ["#2a2620", "#4a443a", "#6b6457", "#938b7a", "#ece7dd", "#f6f4ee", "#fbfaf6", "#fdfcf9"] },
-      "paper-surface-alt": { "role": "neutral", "displayName": "Aged Paper", "canonical": "#ece7dd", "tonalRamp": ["#2a2620", "#4a443a", "#6b6457", "#938b7a", "#c2bba9", "#d6cfbf", "#ece7dd", "#f6f4ee"] },
-      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#2a2620", "tonalRamp": ["#15130f", "#2a2620", "#43382e", "#6b6457", "#938b7a", "#c2bba9", "#e4ded1", "#f6f4ee"] },
-      "ink-muted": { "role": "neutral", "displayName": "Faded Ink", "canonical": "#56503f", "tonalRamp": ["#2a2620", "#3e382c", "#56503f", "#7c745f", "#a49b85", "#c7bfab", "#e0d9c9", "#f6f4ee"] },
-      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e4ded1", "tonalRamp": ["#6b6457", "#938b7a", "#c2bba9", "#d6cfbf", "#e4ded1", "#ece7dd", "#f6f4ee", "#fdfcf9"] },
-      "sage": { "role": "tertiary", "displayName": "Sage", "canonical": "#3f7d56", "tonalRamp": ["#1d3a27", "#285134", "#336743", "#3f7d56", "#5f9c74", "#85b994", "#b0d3ba", "#dceae0"] },
-      "brick": { "role": "tertiary", "displayName": "Brick", "canonical": "#b34a3a", "tonalRamp": ["#5a241c", "#7a3127", "#963d2f", "#b34a3a", "#c66e5f", "#d8948880", "#e8bcb4", "#f3ddd8"] }
+      "accent": {
+        "role": "primary",
+        "displayName": "Ink Blue",
+        "canonical": "#3a5e8c",
+        "tonalRamp": [
+          "#1b2c43",
+          "#243a59",
+          "#2e4a70",
+          "#3a5e8c",
+          "#5c7da6",
+          "#86abd8",
+          "#b3c9e3",
+          "#dde7f2"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Faint Ink Wash",
+        "canonical": "#e7edf4",
+        "tonalRamp": [
+          "#3a5e8c",
+          "#5c7da6",
+          "#86abd8",
+          "#a9c3e0",
+          "#c7d8ec",
+          "#e7edf4",
+          "#f1f5f9",
+          "#f8fafc"
+        ]
+      },
+      "paper-bg": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "#f6f4ee",
+        "tonalRamp": [
+          "#2a2620",
+          "#4a443a",
+          "#6b6457",
+          "#938b7a",
+          "#c2bba9",
+          "#e4ded1",
+          "#f6f4ee",
+          "#fdfcf9"
+        ]
+      },
+      "paper-surface": {
+        "role": "neutral",
+        "displayName": "Bright Leaf",
+        "canonical": "#fdfcf9",
+        "tonalRamp": [
+          "#2a2620",
+          "#4a443a",
+          "#6b6457",
+          "#938b7a",
+          "#ece7dd",
+          "#f6f4ee",
+          "#fbfaf6",
+          "#fdfcf9"
+        ]
+      },
+      "paper-surface-alt": {
+        "role": "neutral",
+        "displayName": "Aged Paper",
+        "canonical": "#ece7dd",
+        "tonalRamp": [
+          "#2a2620",
+          "#4a443a",
+          "#6b6457",
+          "#938b7a",
+          "#c2bba9",
+          "#d6cfbf",
+          "#ece7dd",
+          "#f6f4ee"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#2a2620",
+        "tonalRamp": [
+          "#15130f",
+          "#2a2620",
+          "#43382e",
+          "#6b6457",
+          "#938b7a",
+          "#c2bba9",
+          "#e4ded1",
+          "#f6f4ee"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Faded Ink",
+        "canonical": "#56503f",
+        "tonalRamp": [
+          "#2a2620",
+          "#3e382c",
+          "#56503f",
+          "#7c745f",
+          "#a49b85",
+          "#c7bfab",
+          "#e0d9c9",
+          "#f6f4ee"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#e4ded1",
+        "tonalRamp": [
+          "#6b6457",
+          "#938b7a",
+          "#c2bba9",
+          "#d6cfbf",
+          "#e4ded1",
+          "#ece7dd",
+          "#f6f4ee",
+          "#fdfcf9"
+        ]
+      },
+      "sage": {
+        "role": "tertiary",
+        "displayName": "Sage",
+        "canonical": "#3f7d56",
+        "tonalRamp": [
+          "#1d3a27",
+          "#285134",
+          "#336743",
+          "#3f7d56",
+          "#5f9c74",
+          "#85b994",
+          "#b0d3ba",
+          "#dceae0"
+        ]
+      },
+      "brick": {
+        "role": "tertiary",
+        "displayName": "Brick",
+        "canonical": "#b34a3a",
+        "tonalRamp": [
+          "#5a241c",
+          "#7a3127",
+          "#963d2f",
+          "#b34a3a",
+          "#c66e5f",
+          "#d8948880",
+          "#e8bcb4",
+          "#f3ddd8"
+        ]
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Page titles, largest headings. Fixed rem, no fluid clamp in product chrome." },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles, largest headings. Fixed rem, no fluid clamp in product chrome."
+      },
       "body": { "displayName": "Body", "purpose": "Default UI text and list rows." },
-      "label": { "displayName": "Label", "purpose": "Counts, badges, timestamps, metadata. Tabular-nums where numeric; short only." },
-      "reading": { "displayName": "Reading", "purpose": "The reader column. Serif, 19px / 1.6 / 680px (~71ch) default; size (12-28px), measure (480-760px), leading, family and theme are all reader-controlled." }
+      "label": {
+        "displayName": "Label",
+        "purpose": "Counts, badges, timestamps, metadata. Tabular-nums where numeric; short only."
+      },
+      "reading": {
+        "displayName": "Reading",
+        "purpose": "The reader column. Serif, 19px / 1.6 / 680px (~71ch) default; size (12-28px), measure (480-760px), leading, family and theme are all reader-controlled."
+      }
     },
     "shadows": [
-      { "name": "shadow-sm", "value": "0 1px 2px rgba(31,28,22,0.05)", "purpose": "Hairline lift: card hover, selected rows, segmented active thumb." },
-      { "name": "shadow-md", "value": "0 6px 20px rgba(31,28,22,0.1), 0 1px 3px rgba(31,28,22,0.06)", "purpose": "Floating panels: dropdown menus, toasts." },
-      { "name": "shadow", "value": "0 14px 36px rgba(31,28,22,0.14), 0 2px 8px rgba(31,28,22,0.08)", "purpose": "Modal overlays: command palette." },
-      { "name": "shadow-paper", "value": "0 1px 2px rgba(31,28,22,0.05), 0 22px 48px -30px rgba(31,28,22,0.32)", "purpose": "Sheet on a desk: the newspaper broadsheet and magazine contents leaf. A page resting on paper, not a floating card. Zeroed on E-ink." },
-      { "name": "edge-hi", "value": "inset 0 1px 0 rgba(255,255,255,0.55)", "purpose": "Top-edge sheen on raised surfaces; the physical page-edge highlight." }
+      {
+        "name": "shadow-sm",
+        "value": "0 1px 2px rgba(31,28,22,0.05)",
+        "purpose": "Hairline lift: card hover, selected rows, segmented active thumb."
+      },
+      {
+        "name": "shadow-md",
+        "value": "0 6px 20px rgba(31,28,22,0.1), 0 1px 3px rgba(31,28,22,0.06)",
+        "purpose": "Floating panels: dropdown menus, toasts."
+      },
+      {
+        "name": "shadow",
+        "value": "0 14px 36px rgba(31,28,22,0.14), 0 2px 8px rgba(31,28,22,0.08)",
+        "purpose": "Modal overlays: command palette."
+      },
+      {
+        "name": "shadow-paper",
+        "value": "0 1px 2px rgba(31,28,22,0.05), 0 22px 48px -30px rgba(31,28,22,0.32)",
+        "purpose": "Sheet on a desk: the newspaper broadsheet and magazine contents leaf. A page resting on paper, not a floating card. Zeroed on E-ink."
+      },
+      {
+        "name": "edge-hi",
+        "value": "inset 0 1px 0 rgba(255,255,255,0.55)",
+        "purpose": "Top-edge sheen on raised surfaces; the physical page-edge highlight."
+      }
     ],
     "motion": [
-      { "name": "dur-fast", "value": "120ms", "purpose": "Hover/state transitions on buttons, nav, inputs." },
+      {
+        "name": "dur-fast",
+        "value": "120ms",
+        "purpose": "Hover/state transitions on buttons, nav, inputs."
+      },
       { "name": "dur", "value": "180ms", "purpose": "Open/close animations (palette pop, menus)." },
-      { "name": "ease", "value": "cubic-bezier(0.22, 0.61, 0.36, 1)", "purpose": "Standard ease-out; quiet deceleration, never bounce." }
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.22, 0.61, 0.36, 1)",
+        "purpose": "Standard ease-out; quiet deceleration, never bounce."
+      }
     ],
     "breakpoints": [
       { "name": "sidebar-w", "value": "15rem" },
@@ -116,12 +293,36 @@
       "Reader-owned typography and seven themes; accessibility is built in, not bolted on."
     ],
     "rules": [
-      { "name": "The One Voice Rule", "body": "The ink-blue accent appears on ≤10% of any screen. It marks exactly one thing per region: the active route, the primary action, the unread state.", "section": "colors" },
-      { "name": "The Tinted Neutral Rule", "body": "Pure #000 and #fff are forbidden. Every neutral is warmed toward the paper hue. Gray text on a colored ground is forbidden — use a darker shade of that ground instead.", "section": "colors" },
-      { "name": "The Reader-Owns-Type Rule", "body": "In the reading column, type size, measure, family, and theme are the reader's to set, not the designer's. Ship sensible defaults; never lock them.", "section": "typography" },
-      { "name": "The Measure Rule", "body": "Body and reading columns cap at ~65-75ch (the shared .page column is 44rem). Wider is fatiguing and forbidden.", "section": "typography" },
-      { "name": "The Theme-Fidelity Rule", "body": "The reading column is tuned per theme. Dark grounds open the leading (--prose-leading-boost 0.06) and pull images back from the flashlight effect (--prose-img-filter brightness 0.86); highlight marks multiply into light papers but switch to a 26% translucent tint on dark themes; text selection is a 25%-accent-into-bg mix so the passage stays AAA on every theme.", "section": "typography" },
-      { "name": "The Flat-At-Rest Rule", "body": "Resting surfaces are flat with a 1px hairline. Shadow is a response — to hover, to floating, to focus — never decoration.", "section": "elevation" }
+      {
+        "name": "The One Voice Rule",
+        "body": "The ink-blue accent appears on ≤10% of any screen. It marks exactly one thing per region: the active route, the primary action, the unread state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tinted Neutral Rule",
+        "body": "Pure #000 and #fff are forbidden. Every neutral is warmed toward the paper hue. Gray text on a colored ground is forbidden — use a darker shade of that ground instead.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reader-Owns-Type Rule",
+        "body": "In the reading column, type size, measure, family, and theme are the reader's to set, not the designer's. Ship sensible defaults; never lock them.",
+        "section": "typography"
+      },
+      {
+        "name": "The Measure Rule",
+        "body": "Body and reading columns cap at ~65-75ch (the shared .page column is 44rem). Wider is fatiguing and forbidden.",
+        "section": "typography"
+      },
+      {
+        "name": "The Theme-Fidelity Rule",
+        "body": "The reading column is tuned per theme. Dark grounds open the leading (--prose-leading-boost 0.06) and pull images back from the flashlight effect (--prose-img-filter brightness 0.86); highlight marks multiply into light papers but switch to a 26% translucent tint on dark themes; text selection is a 25%-accent-into-bg mix so the passage stays AAA on every theme.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-At-Rest Rule",
+        "body": "Resting surfaces are flat with a 1px hairline. Shadow is a response — to hover, to floating, to focus — never decoration.",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do keep the Ink-Blue accent (#3a5e8c) on ≤10% of any screen; mark one thing per region.",

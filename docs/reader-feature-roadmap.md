@@ -12,6 +12,7 @@ with a bottom action bar (hidden in "long-form" mode). Lists support split tabs
 (Unseen/Seen), count badges, and bulk actions.
 
 ## Already at parity (don't rebuild)
+
 Locations + triage, document tags & notes, saved/filtered **views** (query AST),
 sidebar **counts**, **command palette** + `?` shortcut sheet + keyboard-driven
 nav, **full-text search** (offline metadata + server FTS over bodies), **Feed
@@ -21,54 +22,61 @@ offline + share-target + bookmarklet, owned content + dedup, version badge +
 auto-update.
 
 ## P0 — Reading experience (the core Readwise feel)
-| # | Feature | Lectern | Notes |
-|---|---|---|---|
-| 1 | **Paragraph focus + advance** — accent bar on the current paragraph; `Space`/`↓`/`j` next, `↑`/`k` prev; auto-scroll to keep it centered | missing | **User-requested.** Reader's "blue focus indicator." Pairs with our keyboard layer. Foundation for `H`/`T`/`N` paragraph actions. |
-| 2 | **Highlighting UI** — select-to-highlight (and `H` on focused paragraph), render highlights in the article, highlight notes, edit/remove | plumbed, no UI | Model/sync/storage + `createHighlight`/`listHighlights` already exist; needs reader UI + rendering + anchoring. The defining Reader action. |
-| 3 | **Right panel: Info + Notebook** — Info = metadata (type, domain, published, length, progress %, saved, author w/ drill-down); Notebook = this doc's highlights & notes; toggle `]` | missing | Signature 3-pane reading layout. |
-| 4 | **Left Table of Contents** from headings; toggle `[`; click to jump | missing | Completes the 3-pane layout; great for long reads. |
+
+| #   | Feature                                                                                                                                                                             | Lectern        | Notes                                                                                                                                       |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Paragraph focus + advance** — accent bar on the current paragraph; `Space`/`↓`/`j` next, `↑`/`k` prev; auto-scroll to keep it centered                                            | missing        | **User-requested.** Reader's "blue focus indicator." Pairs with our keyboard layer. Foundation for `H`/`T`/`N` paragraph actions.           |
+| 2   | **Highlighting UI** — select-to-highlight (and `H` on focused paragraph), render highlights in the article, highlight notes, edit/remove                                            | plumbed, no UI | Model/sync/storage + `createHighlight`/`listHighlights` already exist; needs reader UI + rendering + anchoring. The defining Reader action. |
+| 3   | **Right panel: Info + Notebook** — Info = metadata (type, domain, published, length, progress %, saved, author w/ drill-down); Notebook = this doc's highlights & notes; toggle `]` | missing        | Signature 3-pane reading layout.                                                                                                            |
+| 4   | **Left Table of Contents** from headings; toggle `[`; click to jump                                                                                                                 | missing        | Completes the 3-pane layout; great for long reads.                                                                                          |
 
 ## P1 — Reading polish
-- ✅ **Find in document** (`Cmd/Ctrl+F` in-article search). *Shipped.*
-- ✅ **Progress readout**: % + "~N min left" (we have the bar; add the numbers). *Shipped.*
+
+- ✅ **Find in document** (`Cmd/Ctrl+F` in-article search). _Shipped._
+- ✅ **Progress readout**: % + "~N min left" (we have the bar; add the numbers). _Shipped._
 - **Long-form / focus mode** toggle (hide chrome) — partly there; formalize.
 - **Mark feed item seen on open** (so hide-read flows naturally as you read).
 - **Auto-advance to next document** after triage/archive (toggleable).
 
 ## P1 — Library / navigation UX
-- ✅ **Bulk actions** — "Mark all as seen" / "Archive all" on the Feed/lists. *Shipped.*
-- ✅ **Split views by status** — generalize hide-read into Unseen/Seen (and Inbox/Later/Archive) tabs. *Shipped.*
-- ✅ **Smart default views** (cheap, query-based, high delight): Continue reading, Quick reads (<10m), Long reads (>30m), Recently highlighted. *Shipped (`/collections/[key]`).*
+
+- ✅ **Bulk actions** — "Mark all as seen" / "Archive all" on the Feed/lists. _Shipped._
+- ✅ **Split views by status** — generalize hide-read into Unseen/Seen (and Inbox/Later/Archive) tabs. _Shipped._
+- ✅ **Smart default views** (cheap, query-based, high delight): Continue reading, Quick reads (<10m), Long reads (>30m), Recently highlighted. _Shipped (`/collections/[key]`)._
 - **Saved-view polish**: count badges, emoji icon (first char of name), reorder/pin.
 - **Cover thumbnails** in list rows (needs `coverImage` on Card + extraction).
 - **Power filter bar** — expose the query language (domain/author/words/minutes/progress/has/date ops/`__not`) over the existing view AST.
 
 ## Lectern-original — Daily desk (beyond Reader)
+
 Ways to read down a backlog that Readwise Reader doesn't have. Both are pure,
 client-side views over the offline mirror (`lib/newspaper.ts`, `lib/magazine.ts`),
 reachable from a new **Daily** sidebar group, the command palette, and direct URLs.
+
 - ✅ **Daily Newspaper** (`/newspaper`) — yesterday's **unread feed** items set in a
   print-style edition: masthead + dateline with day-by-day navigation, a promoted
   lead story (the day's longest read), and sections grouped by publication in
-  reflowing columns. "Mark issue read" clears the day. *Shipped.*
+  reflowing columns. "Mark issue read" clears the day. _Shipped._
 - ✅ **Magazines** (`/magazine`) — the saved **library** bound into themed issues:
   every tag shared by 2+ articles becomes a collection of related reading, each with
-  a colour-coded cover. *Shipped.*
+  a colour-coded cover. _Shipped._
 - Next: group the Newspaper by MiniFlux feed **folder** (true topical sections) once
   `folderTitle` rides on the Card; "today"/"this week" spans; printable edition.
 
 ## Deliberately deferred (per ADR/MVP — note, don't build now)
+
 Ghostreader/**AI** (chat, summarize, auto-tag), **TTS**, **YouTube/video** +
 transcript, **PDF** annotate/zoom/snapshot, **EPUB**/paged scroll, Kindle,
 public **share bundles**/links + highlight-as-image, e-ink mode, browser
 extension, native mobile apps, Daily Digest.
 
 ## Captured ideas (logged, not scheduled)
+
 - **"Listen" — per-article read-aloud (TTS) + listen queue.** A Listen action on
-  *every* item (card menu + reader view, alongside `H`) using **ElevenLabs**
+  _every_ item (card menu + reader view, alongside `H`) using **ElevenLabs**
   ([API ref](https://elevenlabs.io/docs/api-reference/introduction); owner has an
   account + key). Hard requirements:
-  - **Cost control:** NEVER call ElevenLabs implicitly. Synthesis fires *only* on
+  - **Cost control:** NEVER call ElevenLabs implicitly. Synthesis fires _only_ on
     an explicit Listen click — no prefetch, no hover, no background warming.
   - **Queue:** allow queueing multiple articles ("Add to queue") and a queue
     manager (reorder, remove, clear, autoplay next, now-playing + up-next).
@@ -77,10 +85,11 @@ extension, native mobile apps, Daily Digest.
     queue replays don't re-bill. Stream/seek playback; persist queue + playback
     position offline (Dexie). Pick voice/model + chunk long articles by paragraph
     so playback can start before the whole piece renders (and to bound spend).
-  Revisits the MVP-deferred TTS line above. Build only AFTER the current
-  flip-through/reader/library work is shipped (owner's call).
+    Revisits the MVP-deferred TTS line above. Build only AFTER the current
+    flip-through/reader/library work is shipped (owner's call).
 
 ## Requested — do after the current flip/reader/library batch
+
 - **Sort by published date, as the default.** Order lists by article publish date
   and make it the default sort (today the default is `updatedAt`). For RSS,
   publish date ≈ `Card.savedAt` (MiniFlux `published_at`); for saved articles
@@ -103,6 +112,7 @@ extension, native mobile apps, Daily Digest.
   gesture handling + reveal animation + an undo affordance for destructive moves.
 
 ## Proposed build order
+
 1. **Reading view overhaul (P0):** 3-pane shell (TOC | article | Info/Notebook) +
    `[`/`]` toggles → paragraph focus + `Space`/arrow advance + auto-scroll →
    highlighting UI (`H`, select-to-highlight, render, notes) wired to the existing

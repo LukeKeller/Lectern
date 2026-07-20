@@ -17,6 +17,7 @@ trust-breaking details (fake folios, leaked tag syntax, punycode bylines).
 ## P0 — Blocks "top-tier"
 
 ### 1. Magazine body text is set in the UI sans
+
 `MagazineReader.svelte:469-473` — `.mr-body` has no `font-family`, so it inherits
 `--font-ui` from `body`. The flagship "literary" surface reads like a settings panel, with a
 serif accent drop cap floating in Helvetica. Live-confirmed on /magazine issues.
@@ -24,6 +25,7 @@ Fix: `font-family: var(--reader-font, var(--font-serif));` then re-tune leading 
 ~1.6 at 20px, not 1.7).
 
 ### 2. Print modes ignore reader typography settings (accessibility regression)
+
 `MagazineReader.svelte:469-472`, `FlipReader.svelte:485-490, 652-655` hard-code face/size/leading.
 A reader who chose OpenDyslexic at 24px loses it the moment they open an issue or edition.
 Fix: body copy consumes `var(--reader-font)` and scales from `var(--reader-size)`
@@ -31,6 +33,7 @@ Fix: body copy consumes `var(--reader-font)` and scales from `var(--reader-size)
 body text must not.
 
 ### 3. Justified two-column text at ~31ch produces rivers; justification survives the mobile collapse
+
 `FlipReader.svelte:552-557` — `columns: 2 17rem; text-align: justify; hyphens: auto`. Browsers
 use greedy line-breaking; at ~31ch words gape. On phones the columns collapse but
 `text-align: justify` remains — live-confirmed gappy justified ~38ch on mobile.
@@ -39,6 +42,7 @@ Fix: `text-align: left`, keep `hyphens: auto`, add `hyphenate-limit-chars: 6 3 2
 resolving ≥ 20rem.
 
 ### 4. The article ends in a dead end
+
 `read/[id]/+page.svelte:961` — nothing after `</article>`: no end mark, no triage, no next-up.
 Auto-advance exists but only via invisible keyboard triage (`e/l/s/i`). Live-confirmed: the page
 just stops at the source's last line.
@@ -46,6 +50,7 @@ Fix: quiet centered end mark, then Archive / Later / Shortlist row, then a "Next
 (title + source + reading time) from the reading queue.
 
 ### 5. Dark themes get zero prose adaptation
+
 No dark-scoped rule touches the article (`+page.svelte:1458-1555`, `app.css:233-300`).
 Light-on-dark reads optically thinner/tighter; `-webkit-font-smoothing: antialiased` thins it
 further; images render full-brightness (flashlight effect on Black/OLED); highlight tints stay
@@ -55,17 +60,20 @@ Fix: dark themes add `line-height: calc(var(--reader-leading) + 0.06)`,
 (~24-28%, desaturated). Token route: `--prose-leading-boost` / `--prose-weight` per theme.
 
 ### 6. Text selection is nearly invisible on light themes — and selection is the highlight gesture
+
 `app.css:393-396` — `::selection` uses `--accent-soft`: 1.07:1 vs Paper bg, 1.10 Sepia,
 1.12 Newsprint. The highlight popover appears only after a selection the user can barely see.
 Fix: `::selection { background: color-mix(in srgb, var(--accent) 25%, var(--bg)); }` —
 keeps AAA text-on-selection on all six themes.
 
 ### 7. The default yellow highlight almost disappears on Sepia/Newsprint
+
 `+page.svelte:1854-1858` — 38% translucent washes composite to 1.18-1.50:1 on the light themes.
 Fix: on light themes render marks as solid `var(--hl)` with `mix-blend-mode: multiply`
 ("marker on paper": yellow → ~1.9:1 vs bg, text stays AA/AAA). Theme-scope dark variants per #5.
 
 ### 8. Both side panels open crush the article to ~30 characters per line
+
 Live-confirmed: TOC + Info open at desktop width squeezes the column to a sliver; the TOC also
 holds a full panel just to say "No headings."
 Fix: minimum measure guard — below a threshold, panels overlay instead of compress; collapse the
@@ -76,9 +84,10 @@ app sidebar in reading view; don't open an empty TOC (disable the toggle or show
 ## P1 — Meaningful
 
 ### Typography and prose
+
 - **No micro-typography layer** (`+page.svelte:1458-1465`): add `font-kerning: normal;
-  font-variant-ligatures: common-ligatures; font-variant-numeric: oldstyle-nums proportional-nums;
-  text-wrap: pretty; hyphens: auto` (set `lang` on `<article>` from doc metadata);
+font-variant-ligatures: common-ligatures; font-variant-numeric: oldstyle-nums proportional-nums;
+text-wrap: pretty; hyphens: auto` (set `lang` on `<article>` from doc metadata);
   `text-wrap: balance` on title and h2/h3. `hanging-punctuation: first allow-end` as Safari
   progressive enhancement.
 - **Duplicate title** (live finding, desktop + flip reader): extracted content often opens with an
@@ -95,7 +104,7 @@ app sidebar in reading view; don't open an empty TOC (disable the toggle or show
   h4 has no size; give it a proper small-eyebrow level.
 - **Blockquote triple-signals** (`+page.svelte:1509-1514`): border + whole-paragraph italic +
   muted ink (which also misses AAA at 5.3:1). Use `color: var(--text); font-style: normal;
-  font-size: 0.97em; border-left: 2px` (or 1px to match the magazine's considered choice).
+font-size: 0.97em; border-left: 2px` (or 1px to match the magazine's considered choice).
 - **Body links carry full accent ink** (`:1488-1493`): link-dense articles turn blue-speckled.
   `color: inherit` + accent-tinted underline; accent on hover.
 - **The header is a template, not a set piece** (`:917-924`): the `??` chain means author and
@@ -110,6 +119,7 @@ app sidebar in reading view; don't open an empty TOC (disable the toggle or show
   existing pre-paint script to kill the reflow on first article.
 
 ### Chrome and flow
+
 - **Nine persistent top-bar controls** (`+page.svelte:694-860`): keep Back + Display (+ progress);
   move Listen/Podcast/Re-fetch/Original behind "…" or Info. Auto-hide on scroll-down, reveal on
   scroll-up. On mobile this is worse: app bar + reader bar stack (live-confirmed).
@@ -130,6 +140,7 @@ app sidebar in reading view; don't open an empty TOC (disable the toggle or show
   address.
 
 ### Print surfaces
+
 - **Drop caps are not optically sized** (three competing specs: 3.2em/3.1em/3.4em, line-height
   0.7-0.72): caps occupy ~1.4 lines, foot hanging in dead air. Use `initial-letter: 3` with a
   float fallback sized to exactly 2 lines; one shared `.drop-cap` recipe, one weight, ink not
@@ -176,7 +187,7 @@ app sidebar in reading view; don't open an empty TOC (disable the toggle or show
 - Code blocks inherit prose leading and user tracking/word-spacing (`:1534-1544`): reset to
   `line-height: 1.5; letter-spacing: 0; word-spacing: 0; tab-size: 2` + hairline border.
 - Content images wear 9px app radius (`:1494-1499`): 2px or none; `display: block;
-  margin-inline: auto`.
+margin-inline: auto`.
 - Figcaption: flush-left, UI face, 0.8em — not centered (`:1503-1508`).
 - `hr`: short centered rule or asterism, not border-to-border (`:1522-1526`).
 - Paragraph-indent mode (book convention) as a `paragraphStyle: 'spaced' | 'indented'` setting.

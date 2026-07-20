@@ -228,7 +228,14 @@ export function parseSourceHead(html: string): ParsedHead {
   const titleMatch = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const siteName = ogSiteName ?? applicationName ?? brandFromTitle(titleMatch?.[1]);
 
-  return { themeColor, themeColorDark, faviconHref: touch ?? icon, manifestHref, displayFont, siteName };
+  return {
+    themeColor,
+    themeColorDark,
+    faviconHref: touch ?? icon,
+    manifestHref,
+    displayFont,
+    siteName,
+  };
 }
 
 // ---- Pure palette mining from CSS (unit-tested) ----------------------------
@@ -248,10 +255,7 @@ function hexToRgb(hex: string): [number, number, number] | null {
 
 /** [r,g,b] 0..255 → `#rrggbb` (rounded + clamped). */
 function rgbToHex(r: number, g: number, b: number): string {
-  const to = (v: number) =>
-    clampN(Math.round(v), 0, 255)
-      .toString(16)
-      .padStart(2, "0");
+  const to = (v: number) => clampN(Math.round(v), 0, 255).toString(16).padStart(2, "0");
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
@@ -440,7 +444,10 @@ function isValidFontName(name: string): boolean {
 function fontName(raw: string | null, vars: Map<string, string>): string | null {
   const resolved = resolveCssValue(raw, vars);
   if (!resolved) return null;
-  const first = (resolved.split(",")[0] ?? "").trim().replace(/^['"]|['"]$/g, "").trim();
+  const first = (resolved.split(",")[0] ?? "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "")
+    .trim();
   if (!first) return null;
   const lower = first.toLowerCase();
   if (["inherit", "initial", "unset", "revert"].includes(lower)) return null;

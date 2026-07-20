@@ -170,8 +170,7 @@ export function resolveImageTarget(
     cardUrl && !cardUrl.startsWith("https://newsletter.lectern.local/") ? cardUrl : null;
 
   const abs = absoluteHttpUrl(trimmed);
-  if (abs)
-    return isBlockedHost(abs.hostname) ? null : { kind: "remote", url: abs.href, referer };
+  if (abs) return isBlockedHost(abs.hostname) ? null : { kind: "remote", url: abs.href, referer };
 
   // Relative reference.
   if (source === "readeck") {
@@ -187,9 +186,7 @@ export function resolveImageTarget(
     return null;
   }
   if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
-  return isBlockedHost(resolved.hostname)
-    ? null
-    : { kind: "remote", url: resolved.href, referer };
+  return isBlockedHost(resolved.hostname) ? null : { kind: "remote", url: resolved.href, referer };
 }
 
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;

@@ -29,13 +29,13 @@ match what is in the file, STOP and report the mismatch instead of improvising.
 
 ## Phases and ordering
 
-| Phase | File | Theme | Packets | Prerequisites |
-|-------|------|-------|---------|---------------|
-| A | `phase-a.md` | Quick wins (one-liners and small fixes) | A1-A10 | none |
-| B | `phase-b.md` | Shared prose layer (`.lectern-prose` + `--prose-*` tokens) | B1-B7 | none (B2-B5, B7 depend on B1) |
-| C | `phase-c.md` | Reading flow and chrome | C1-C8 | C3 depends on C2; C7 depends on C6 |
-| D | `phase-d.md` | Print-surface polish (Magazine / Newspaper) | D1-D14 | A2 (ragged text) first is ideal; D14 is diagnostic-only |
-| E | `phase-e.md` | System: fonts, themes, tokens | E1-E13 | E9/E10 coordinate with A4; suggested order inside the file |
+| Phase | File         | Theme                                                      | Packets | Prerequisites                                              |
+| ----- | ------------ | ---------------------------------------------------------- | ------- | ---------------------------------------------------------- |
+| A     | `phase-a.md` | Quick wins (one-liners and small fixes)                    | A1-A10  | none                                                       |
+| B     | `phase-b.md` | Shared prose layer (`.lectern-prose` + `--prose-*` tokens) | B1-B7   | none (B2-B5, B7 depend on B1)                              |
+| C     | `phase-c.md` | Reading flow and chrome                                    | C1-C8   | C3 depends on C2; C7 depends on C6                         |
+| D     | `phase-d.md` | Print-surface polish (Magazine / Newspaper)                | D1-D14  | A2 (ragged text) first is ideal; D14 is diagnostic-only    |
+| E     | `phase-e.md` | System: fonts, themes, tokens                              | E1-E13  | E9/E10 coordinate with A4; suggested order inside the file |
 
 Recommended overall order: **A → B → C → D → E**, but phases are largely independent; within a
 phase respect each packet's "Depends on" line. Cross-phase coordination points:

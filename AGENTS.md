@@ -50,18 +50,18 @@ MiniFlux / Readeck  --adapters-->  UnificationService  <--overlay--  glue Postgr
 
 ## Key Directories
 
-| Path | Purpose |
-| --- | --- |
-| `apps/web/src/routes/` | SvelteKit pages (`inbox`, `later`, `shortlist`, `archive`, `feed`, `feeds`, `library`, `read/[id]`, `search`, `views/[id]`, `settings`) |
-| `apps/web/src/lib/` | Client logic: `db.ts` (Dexie), `sync.ts`, `config.ts` (client/token), stores (`*.svelte.ts`), `search.ts`, `opml.ts`, `lists.ts`, components |
-| `apps/bff/src/` | `app.ts` (Fastify builder + DI), `server.ts` (entry), `routes.ts`, `unify.ts`, `auth.ts`, `jobs.ts`, `mutations.ts`, `config.ts`, `deps.ts` |
-| `apps/bff/src/backends/` | `miniflux.ts`, `readeck.ts` adapters (+ tests) |
-| `apps/bff/src/db/` | `schema.ts` (Drizzle), `client.ts`; migrations in `apps/bff/drizzle/` |
-| `packages/shared/src/` | `model.ts`, `api.ts` (endpoint registry + OpenAPI builder), `query.ts`, `feeds.ts`, `views.ts`, `sync.ts`, `adapters.ts` |
-| `packages/api-client/src/` | `client.ts` (`LecternClient`), `mock-server.ts` / `mock-cli.ts` |
-| `infra/` | `docker-compose.yml` dev backends (MiniFlux 8088, Readeck 8089, Postgres 5433) |
-| `packaging/` | `build-artifact.sh`, `lectern_ynh/` (YunoHost package) |
-| `docs/adr/` | Architecture decision records (read these first for "why") |
+| Path                       | Purpose                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/routes/`     | SvelteKit pages (`inbox`, `later`, `shortlist`, `archive`, `feed`, `feeds`, `library`, `read/[id]`, `search`, `views/[id]`, `settings`)      |
+| `apps/web/src/lib/`        | Client logic: `db.ts` (Dexie), `sync.ts`, `config.ts` (client/token), stores (`*.svelte.ts`), `search.ts`, `opml.ts`, `lists.ts`, components |
+| `apps/bff/src/`            | `app.ts` (Fastify builder + DI), `server.ts` (entry), `routes.ts`, `unify.ts`, `auth.ts`, `jobs.ts`, `mutations.ts`, `config.ts`, `deps.ts`  |
+| `apps/bff/src/backends/`   | `miniflux.ts`, `readeck.ts` adapters (+ tests)                                                                                               |
+| `apps/bff/src/db/`         | `schema.ts` (Drizzle), `client.ts`; migrations in `apps/bff/drizzle/`                                                                        |
+| `packages/shared/src/`     | `model.ts`, `api.ts` (endpoint registry + OpenAPI builder), `query.ts`, `feeds.ts`, `views.ts`, `sync.ts`, `adapters.ts`                     |
+| `packages/api-client/src/` | `client.ts` (`LecternClient`), `mock-server.ts` / `mock-cli.ts`                                                                              |
+| `infra/`                   | `docker-compose.yml` dev backends (MiniFlux 8088, Readeck 8089, Postgres 5433)                                                               |
+| `packaging/`               | `build-artifact.sh`, `lectern_ynh/` (YunoHost package)                                                                                       |
+| `docs/adr/`                | Architecture decision records (read these first for "why")                                                                                   |
 
 ## Development Commands
 

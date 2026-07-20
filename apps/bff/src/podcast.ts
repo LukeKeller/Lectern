@@ -85,9 +85,7 @@ export function buildPodcastFeed(opts: {
         ep.excerpt ? `      <description>${xmlEscape(ep.excerpt)}</description>` : "",
         ep.author ? `      <itunes:author>${xmlEscape(ep.author)}</itunes:author>` : "",
         `      <itunes:duration>${formatDuration(ep.durationSeconds)}</itunes:duration>`,
-        ep.coverImage
-          ? `      <itunes:image href="${xmlEscape(ep.coverImage)}" />`
-          : "",
+        ep.coverImage ? `      <itunes:image href="${xmlEscape(ep.coverImage)}" />` : "",
         `      <enclosure url="${xmlEscape(audioUrl)}" length="${ep.byteLength}" type="${xmlEscape(ep.mime)}" />`,
       ].filter(Boolean);
       return `    <item>\n${parts.join("\n")}\n    </item>`;
@@ -112,7 +110,10 @@ ${cover ? `    <itunes:image href="${xmlEscape(cover)}" />\n` : ""}${items}
 }
 
 /** Parse a single-range `Range` header against a known size, or null. */
-function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
+function parseRange(
+  header: string | undefined,
+  size: number,
+): { start: number; end: number } | null {
   if (!header) return null;
   const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
   if (!m) return null;

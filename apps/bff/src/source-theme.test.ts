@@ -59,7 +59,9 @@ describe("googleFontFamily", () => {
 describe("googleFontFromImport", () => {
   it("extracts the family from an @import url() with quotes", () => {
     expect(
-      googleFontFromImport(`@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400');`),
+      googleFontFromImport(
+        `@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400');`,
+      ),
     ).toBe("Lora");
   });
   it("handles a bare @import url() without quotes", () => {
