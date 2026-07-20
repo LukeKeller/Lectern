@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.43.4',
+		date: '2026-07-20',
+		title: 'Deleted feed items stay deleted',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Deleting an article from a feed could fail silently: Lectern marked it gone locally without waiting to hear whether the feed reader accepted it, so a failure went unnoticed and the next refresh brought the article straight back. The deletion is now confirmed before it is recorded.'
+			},
+			{
+				kind: 'improved',
+				text: 'A background failure can no longer bring the app down. Unexpected faults are now logged and contained rather than ending the process, and shutting down cleanly no longer stalls when something goes wrong on the way out.'
+			}
+		]
+	},
+	{
 		version: '0.43.3',
 		date: '2026-07-20',
 		title: 'A mail hiccup can no longer take down the app',
