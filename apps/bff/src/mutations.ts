@@ -117,7 +117,11 @@ export class MutationApplier {
         case "read":
           return this.deps.rss.setRead(parsed.sourceId, write.value);
         case "removed":
-          return void this.deps.rss.setRemoved([parsed.sourceId]);
+          // Awaited, not fire-and-forget. `void` here dropped the promise: a
+          // MiniFlux failure became an unhandled rejection AND the overlay write
+          // went ahead regardless, leaving the glue claiming an entry was removed
+          // that MiniFlux still serves — which the next poll faithfully restores.
+          return this.deps.rss.setRemoved([parsed.sourceId]);
         default:
           // MiniFlux owns nothing else user-writable.
           return;

@@ -153,6 +153,21 @@ describe("MutationApplier dual-write routing", () => {
     expect(rss.setRemoved).toHaveBeenCalledWith(["7"]);
     expect(overlay.softDelete).toHaveBeenCalledWith(["miniflux:7"]);
   });
+
+  // Regression: `toBackend` used `return void this.deps.rss.setRemoved(...)`,
+  // which dropped the promise. The rejection became an unhandledRejection (a
+  // process-level crash risk before the backstop in server.ts) and, worse, the
+  // tombstone was written anyway — so the glue claimed an entry was deleted that
+  // MiniFlux still serves, and the next poll dutifully restored it. The sibling
+  // `setRead` case was always awaited; this one silently was not.
+  it("a MiniFlux delete failure aborts before the tombstone, and is not swallowed", async () => {
+    const { applier, rss, overlay } = harness();
+    rss.setRemoved.mockRejectedValueOnce(new Error("MiniFlux 502"));
+    await expect(
+      applier.delete({ source: "miniflux", sourceId: "7" }, "miniflux:7"),
+    ).rejects.toThrow("MiniFlux 502");
+    expect(overlay.softDelete).not.toHaveBeenCalled();
+  });
 });
 
 describe("MutationApplier failure semantics", () => {
