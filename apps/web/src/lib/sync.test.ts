@@ -40,10 +40,22 @@ class FakeClient implements SyncClient {
 	manifest: { ids: string[]; count: number } = { ids: [], count: 0 };
 	manifestCalls = 0;
 	failManifest = false;
+	pullCalls = 0;
+	/** Server-side cards addressable by id, for the reconcile backfill. */
+	documents = new Map<string, Card>();
+	getDocumentCalls: string[] = [];
 
 	async syncPull(query?: { since?: string }) {
+		this.pullCalls += 1;
 		this.lastSince = query?.since;
 		return this.pull;
+	}
+
+	async getDocument(id: string): Promise<Card> {
+		this.getDocumentCalls.push(id);
+		const card = this.documents.get(id);
+		if (!card) throw new Error(`no such document: ${id}`);
+		return card;
 	}
 
 	async syncManifest() {
@@ -218,7 +230,7 @@ describe('planReconcile (pure)', () => {
 			authoritative: complete(['a', 'b']),
 			pendingIds: []
 		});
-		expect(plan).toEqual({ removeIds: ['gone'] });
+		expect(plan).toEqual({ removeIds: ['gone'], missingIds: [], backfill: 'none' });
 	});
 
 	it('protects a card with a pending outbox mutation', () => {
@@ -227,7 +239,7 @@ describe('planReconcile (pure)', () => {
 			authoritative: complete(['a']),
 			pendingIds: ['pending']
 		});
-		expect(plan).toEqual({ removeIds: [] });
+		expect(plan).toEqual({ removeIds: [], missingIds: [], backfill: 'none' });
 	});
 
 	it('removes nothing when the authoritative set is truncated', () => {
@@ -241,13 +253,13 @@ describe('planReconcile (pure)', () => {
 		).toBeNull();
 	});
 
-	it('removes nothing local when the server set is a superset', () => {
+	it('removes nothing local when the server set is a superset, and backfills the rest', () => {
 		const plan = planReconcile({
 			localIds: ['a'],
 			authoritative: complete(['a', 'b', 'c']),
 			pendingIds: []
 		});
-		expect(plan).toEqual({ removeIds: [] });
+		expect(plan).toEqual({ removeIds: [], missingIds: ['b', 'c'], backfill: 'fetch' });
 	});
 
 	it('empties the mirror only when the server genuinely reports an empty library', () => {
@@ -256,7 +268,53 @@ describe('planReconcile (pure)', () => {
 			authoritative: complete([]),
 			pendingIds: []
 		});
-		expect(plan).toEqual({ removeIds: ['a', 'b'] });
+		expect(plan).toEqual({ removeIds: ['a', 'b'], missingIds: [], backfill: 'none' });
+	});
+
+	it('fetches by id when only a small share of the library is missing', () => {
+		const ids = Array.from({ length: 100 }, (_, i) => `c${i}`);
+		const plan = planReconcile({
+			localIds: ids.slice(0, 98),
+			authoritative: complete(ids),
+			pendingIds: []
+		});
+		expect(plan?.backfill).toBe('fetch');
+		expect(plan?.missingIds).toEqual(['c98', 'c99']);
+	});
+
+	it('falls back to a full pull once too large a share is missing', () => {
+		const ids = Array.from({ length: 100 }, (_, i) => `c${i}`);
+		const plan = planReconcile({
+			localIds: ids.slice(0, 70),
+			authoritative: complete(ids),
+			pendingIds: []
+		});
+		expect(plan?.backfill).toBe('full');
+		expect(plan?.missingIds).toHaveLength(30);
+	});
+
+	it('falls back to a full pull past the absolute batch cap, however large the library', () => {
+		const ids = Array.from({ length: 10_000 }, (_, i) => `c${i}`);
+		const plan = planReconcile({
+			// 51 missing is a rounding error against 10k, but still too many to fetch
+			// one request at a time.
+			localIds: ids.slice(0, ids.length - 51),
+			authoritative: complete(ids),
+			pendingIds: []
+		});
+		expect(plan?.backfill).toBe('full');
+	});
+
+	it('never backfills a card whose delete is still queued in the outbox', () => {
+		// The card is gone locally (optimistic delete) but the server has not seen
+		// the mutation yet, so it is still in the manifest. Fetching it would undo
+		// the user's delete on every reconcile until the push lands.
+		const plan = planReconcile({
+			localIds: ['a'],
+			authoritative: complete(['a', 'deleted-offline']),
+			pendingIds: ['deleted-offline']
+		});
+		expect(plan).toEqual({ removeIds: [], missingIds: [], backfill: 'none' });
 	});
 });
 
@@ -324,6 +382,74 @@ describe('reconcile', () => {
 		expect(await engine.reconcile()).toBeNull();
 		expect(await db.cards.count()).toBe(2);
 		expect(await engine.getReconciledAt()).toBeUndefined();
+	});
+
+	// The other half of the production incident: the client had lost 160 of 164
+	// cards to a bad sync cursor, and a prune-only reconcile reported success
+	// forever while the mirror stayed short.
+	it('fetches ids present in the manifest but missing locally', async () => {
+		await db.cards.put(makeCard({ id: 'have' }));
+		client.manifest = { ids: ['have', 'lost1', 'lost2'], count: 3 };
+		client.documents.set('lost1', makeCard({ id: 'lost1' }));
+		client.documents.set('lost2', makeCard({ id: 'lost2' }));
+
+		await engine.reconcile();
+
+		expect(await db.cards.get('lost1')).toBeDefined();
+		expect(await db.cards.get('lost2')).toBeDefined();
+		expect(await db.cards.get('have')).toBeDefined();
+	});
+
+	it('re-pulls the whole set instead of N lookups when most of the mirror is gone', async () => {
+		const ids = Array.from({ length: 164 }, (_, i) => `n${i}`);
+		await db.cards.bulkPut(ids.slice(0, 4).map((id) => makeCard({ id })));
+		client.manifest = { ids, count: ids.length };
+		client.pull = { cards: ids.map((id) => makeCard({ id })), deletedIds: [], cursor: 'fresh' };
+
+		await engine.reconcile();
+
+		// One cursor-less pull, not 160 by-id requests.
+		expect(client.getDocumentCalls).toEqual([]);
+		expect(client.pullCalls).toBe(1);
+		expect(client.lastSince).toBeUndefined();
+		expect(await db.cards.count()).toBe(164);
+		expect(await engine.getCursor()).toBe('fresh');
+	});
+
+	it('prunes and backfills in the same run', async () => {
+		await db.cards.bulkPut([makeCard({ id: 'keep' }), makeCard({ id: 'hard-deleted' })]);
+		client.manifest = { ids: ['keep', 'lost'], count: 2 };
+		client.documents.set('lost', makeCard({ id: 'lost' }));
+
+		const removed = await engine.reconcile();
+
+		expect(removed).toBe(1);
+		expect(await db.cards.get('hard-deleted')).toBeUndefined();
+		expect(await db.cards.get('lost')).toBeDefined();
+	});
+
+	it('keeps the rest of the backfill when one lookup fails', async () => {
+		client.manifest = { ids: ['ok', 'vanished'], count: 2 };
+		client.documents.set('ok', makeCard({ id: 'ok' }));
+		// `vanished` is in the manifest but 404s — deleted between the two requests.
+
+		await engine.reconcile();
+
+		expect(await db.cards.get('ok')).toBeDefined();
+		expect(await db.cards.get('vanished')).toBeUndefined();
+	});
+
+	it('does not resurrect a card whose delete is still queued', async () => {
+		await db.cards.put(makeCard({ id: 'doomed' }));
+		await engine.enqueue({ type: 'delete', id: 'doomed' });
+		// The server has not applied the delete yet, so it is still in the manifest.
+		client.manifest = { ids: ['doomed'], count: 1 };
+		client.documents.set('doomed', makeCard({ id: 'doomed' }));
+
+		await engine.reconcile();
+
+		expect(client.getDocumentCalls).toEqual([]);
+		expect(await db.cards.get('doomed')).toBeUndefined();
 	});
 
 	it('records the run so the next check is not due', async () => {

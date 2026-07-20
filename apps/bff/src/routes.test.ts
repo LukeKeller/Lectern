@@ -311,8 +311,15 @@ class FakeOverlayStore implements OverlayStore {
       if (card && (!since || card.updatedAt > since)) cards.push(card);
     }
     const deletedIds: string[] = [];
-    if (since) for (const [id, at] of this.deleted) if (at > since) deletedIds.push(id);
-    return { cards, deletedIds };
+    let maxDeletedAt: string | null = null;
+    if (since) {
+      for (const [id, at] of this.deleted) {
+        if (at <= since) continue;
+        deletedIds.push(id);
+        if (!maxDeletedAt || at > maxDeletedAt) maxDeletedAt = at;
+      }
+    }
+    return { cards, deletedIds, maxDeletedAt };
   }
 
   async softDeleteMissing(source: Source, presentIds: Set<string>): Promise<number> {
@@ -1759,6 +1766,74 @@ describe("sync", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().cards).toHaveLength(2);
     expect(typeof res.json().cursor).toBe("string");
+    await a.close();
+  });
+
+  // Regression: the cursor used to be the server's wall clock at RESPONSE time,
+  // so a row whose transaction committed after the read's snapshot but whose
+  // updated_at was older than that clock fell into a permanent blind spot —
+  // every later pull asked for `updatedAt > cursor` and never saw it again.
+  it("delivers a card written concurrently with a pull on the NEXT pull", async () => {
+    const t0 = Date.now();
+    const a = app();
+    await harness.deps.overlay.indexFromBackend(
+      makeCard({
+        id: "readeck:early",
+        source: "readeck",
+        url: "https://race.test/early",
+        updatedAt: new Date(t0 - 2_000).toISOString(),
+      }),
+    );
+
+    const first = await a.inject({ method: "GET", url: "/api/v1/sync", headers: auth });
+    const cursor = first.json().cursor as string;
+    expect((first.json().cards as { id: string }[]).map((c) => c.id)).toEqual(["readeck:early"]);
+
+    // The concurrent write: updated_at is BEFORE the first response's wall clock,
+    // but the row only became visible afterwards.
+    await harness.deps.overlay.indexFromBackend(
+      makeCard({
+        id: "readeck:raced",
+        source: "readeck",
+        url: "https://race.test/raced",
+        updatedAt: new Date(t0 - 1_000).toISOString(),
+      }),
+    );
+
+    const next = await a.inject({
+      method: "GET",
+      url: `/api/v1/sync?since=${encodeURIComponent(cursor)}`,
+      headers: auth,
+    });
+    expect((next.json().cards as { id: string }[]).map((c) => c.id)).toContain("readeck:raced");
+    await a.close();
+  });
+
+  it("does not advance the cursor on an empty delta", async () => {
+    const a = app();
+    const since = new Date(Date.now() - 1_000).toISOString();
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/v1/sync?since=${encodeURIComponent(since)}`,
+      headers: auth,
+    });
+    expect(res.json().cards).toHaveLength(0);
+    expect(res.json().cursor).toBe(since);
+    await a.close();
+  });
+
+  it("never moves the cursor past the newest delivered row", async () => {
+    harness.deps.readLater.bookmarks.set(
+      "b1",
+      makeCard({ id: "readeck:b1", source: "readeck", updatedAt: "2026-06-01T00:00:00Z" }),
+    );
+    const a = app();
+    await poll();
+    const res = await a.inject({ method: "GET", url: "/api/v1/sync", headers: auth });
+    const newest = (res.json().cards as { updatedAt: string }[])
+      .map((c) => Date.parse(c.updatedAt))
+      .reduce((m, t) => Math.max(m, t), 0);
+    expect(Date.parse(res.json().cursor as string)).toBeLessThanOrEqual(newest);
     await a.close();
   });
 

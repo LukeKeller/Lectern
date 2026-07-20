@@ -180,6 +180,16 @@ export interface MaintenanceFilter {
 export interface ChangedDocuments {
   cards: Card[];
   deletedIds: string[];
+  /**
+   * The newest `deletedAt` across `deletedIds`, or null when there are none.
+   *
+   * Tombstones travel as bare ids on the wire, but the cursor must not advance
+   * past a deletion the client has not been given, and `deletedIds` alone cannot
+   * say when those deletions happened. Optional so an in-memory fake that omits
+   * it stays valid; omitting it only makes the cursor lag further behind, which
+   * costs re-delivery, never loss. See `sync-cursor.ts`.
+   */
+  maxDeletedAt?: string | null;
 }
 
 /**

@@ -23,6 +23,9 @@ class StubClient implements SyncClient {
 	async syncManifest() {
 		return { ids: [], count: 0 };
 	}
+	async getDocument(id: string): Promise<Card> {
+		throw new Error(`unexpected fetch of ${id}`);
+	}
 }
 
 function makeCard(): Card {

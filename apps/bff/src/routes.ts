@@ -110,6 +110,7 @@ import {
   upsertSubscription,
 } from "./push";
 import { MutationApplier } from "./mutations";
+import { nextSyncCursor } from "./sync-cursor";
 import { pollEmail, pollMiniflux, pollReadeck, reconcileDeletions } from "./jobs";
 import { BackendHttpError } from "./errors";
 import { DISCOVER_LABEL } from "./backends/readeck";
@@ -843,10 +844,24 @@ export function registerApiRoutes(app: FastifyInstance, deps: AppDeps): void {
     // client's cursor, plus the ids tombstoned since then (backend deletions /
     // dedup). Backends are no longer queried on the read path.
     const delta = await deps.overlay.documentsChangedSince(q.since);
+    // The cursor is derived from the rows actually delivered, never from the
+    // server's clock: a wall-clock cursor silently skips rows that committed
+    // after this read's snapshot but carry an older `updated_at`, and no later
+    // pull ever revisits them. See `sync-cursor.ts` for the full argument.
+    //
+    // The genuinely correct fix is a monotonic sequence (a bigint `seq` column
+    // assigned on write, cursor = max seq delivered): commit order and cursor
+    // order would then be the same thing, and the safety lag below could go
+    // away entirely. It needs a migration plus a backfill, so it is deliberately
+    // not done here — this fix is a strict improvement with neither.
     return SyncPullResponse.parse({
       cards: delta.cards,
       deletedIds: delta.deletedIds,
-      cursor: new Date().toISOString(),
+      cursor: nextSyncCursor({
+        since: q.since,
+        cards: delta.cards,
+        maxDeletedAt: delta.maxDeletedAt,
+      }),
     });
   });
 

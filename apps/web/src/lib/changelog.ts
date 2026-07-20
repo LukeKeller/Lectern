@@ -26,6 +26,17 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.43.1',
+		date: '2026-07-20',
+		title: 'Nothing falls through the gap',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Documents saved while a sync was in progress could become permanently invisible to that device — the sync marker moved past them and never looked back. One device was missing 160 of its 164 newsletters this way. The marker now only ever advances past items it has actually handed over, and a device that has fallen behind repairs itself instead of only pruning what it has too much of.'
+			}
+		]
+	},
+	{
 		version: '0.43.0',
 		date: '2026-07-20',
 		title: 'Only new mail, and a library that tells the truth',

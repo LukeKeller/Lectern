@@ -176,7 +176,7 @@ export class DrizzleOverlayStore implements OverlayStore {
   async documentsChangedSince(since: string | undefined): Promise<ChangedDocuments> {
     if (!since) {
       const rows = await this.db.select().from(documents).where(isNull(documents.deletedAt));
-      return { cards: await this.cardsFromRows(rows), deletedIds: [] };
+      return { cards: await this.cardsFromRows(rows), deletedIds: [], maxDeletedAt: null };
     }
     const sinceDate = new Date(since);
     const changed = await this.db
@@ -184,12 +184,20 @@ export class DrizzleOverlayStore implements OverlayStore {
       .from(documents)
       .where(and(isNull(documents.deletedAt), gt(documents.updatedAt, sinceDate)));
     const deleted = await this.db
-      .select({ id: documents.id })
+      .select({ id: documents.id, deletedAt: documents.deletedAt })
       .from(documents)
       .where(and(isNotNull(documents.deletedAt), gt(documents.deletedAt, sinceDate)));
+    // The caller derives the next cursor from what it actually delivers, so the
+    // tombstone timestamps have to come back with the ids.
+    let maxDeletedAt: Date | null = null;
+    for (const row of deleted) {
+      if (row.deletedAt && (!maxDeletedAt || row.deletedAt > maxDeletedAt))
+        maxDeletedAt = row.deletedAt;
+    }
     return {
       cards: await this.cardsFromRows(changed),
       deletedIds: deleted.map((r) => r.id),
+      maxDeletedAt: maxDeletedAt ? maxDeletedAt.toISOString() : null,
     };
   }
 
