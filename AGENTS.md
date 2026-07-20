@@ -138,6 +138,12 @@ The Vite dev server proxies `/api` → `http://127.0.0.1:8788` (the mock); point
 - `apps/web/src/lib/{db,sync,config}.ts` — local mirror, sync engine, client/token plumbing.
 - `apps/bff/src/config.ts` & `.env.example` — Zod-validated env (defaults boot against local dev).
 - `docs/adr/0001..0003` — architecture, backend choice, monorepo/tooling decisions.
+- `packaging/lectern_ynh/conf/.env` — the **template** the deployed `/var/www/lectern/.env` is
+  rendered from on every `yunohost app upgrade` and config-panel apply. Any value the app must
+  keep across upgrades needs a `__PLACEHOLDER__` here, a matching `ynh_app_setting_set` in
+  **both** `scripts/install` and `scripts/upgrade`, and (if user-configurable) a field in
+  `config_panel.toml`. A hardcoded value in this template can never be configured; the server's
+  `.env` is a rendered artifact and must never be hand-edited. See `docs/newsletters.md`.
 
 ## Runtime/Tooling Preferences
 

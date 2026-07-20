@@ -9,20 +9,35 @@ name = "Configuration"
         [main.newsletters.newsletters_help]
         type = "alert"
         style = "info"
-        ask = "Read email newsletters from a dedicated IMAP mailbox into your library. Subscribe newsletters to a mailbox nothing else reads, then point Lectern at it here. Leave the host empty to turn ingestion off. Lectern checks the mailbox every 5 minutes (background jobs must be enabled)."
+        ask = "Read email newsletters from a dedicated IMAP mailbox into your library. Subscribe newsletters to a mailbox nothing else reads, then point Lectern at it here. Leave the host empty to turn ingestion off. Lectern checks the mailbox every 5 minutes (background jobs must be enabled). These settings are the source of truth — /var/www/lectern/.env is re-rendered from them on every upgrade, so never hand-edit it on the server. Proton Bridge and self-signed certificates: see docs/newsletters.md."
 
         [main.newsletters.imap_host]
         ask = "IMAP host"
         type = "string"
         example = "mail.example.com"
-        help = "Use the mail server's certificate hostname (e.g. your mail domain), NOT 'localhost' — a TLS connection to 'localhost' fails the certificate name check even on the same server."
+        help = "Must match the name on the mail server's certificate. For a remote mail server that is your mail domain, NOT 'localhost' — a TLS connection to 'localhost' fails the certificate name check even on the same server. A local gateway follows the same rule but resolves differently: Proton Bridge issues its certificate for CN=127.0.0.1, so use 127.0.0.1 there (still not 'localhost')."
         optional = true
 
         [main.newsletters.imap_port]
         ask = "IMAP port"
         type = "number"
         default = 993
-        help = "993 for implicit TLS (recommended), 143 for STARTTLS/plain."
+        help = "993 for implicit TLS (recommended), 143 for STARTTLS/plain, 1143 for Proton Bridge."
+
+        [main.newsletters.imap_secure]
+        ask = "Implicit TLS"
+        type = "boolean"
+        yes = "1"
+        no = "0"
+        default = "1"
+        help = "On = the connection is TLS from the first byte, which is what port 993 expects. Off = connect in the clear then upgrade with STARTTLS, which is what ports 143 and 1143 expect — Proton Bridge is in this second group, so turn this OFF for it. Off does not mean unencrypted: STARTTLS is still negotiated and the certificate is still verified."
+
+        [main.newsletters.imap_mailbox]
+        ask = "Mailbox"
+        type = "string"
+        default = "INBOX"
+        example = "INBOX"
+        help = "IMAP folder to read newsletters from. Leave as INBOX unless you file them into a subfolder (e.g. 'INBOX/Newsletters'). Cleared = INBOX."
 
         [main.newsletters.imap_user]
         ask = "IMAP username"
@@ -40,6 +55,24 @@ name = "Configuration"
         type = "string"
         example = "diagnosis@digitallyadrift.com, noreply@example.com"
         help = "Comma-separated From addresses to skip — handy for internal or system mail (server diagnostics, cron) that lands in this mailbox. Case-insensitive, exact-match."
+        optional = true
+
+        [main.newsletters.imap_ingest_backlog]
+        ask = "Import existing mail (one-off)"
+        type = "boolean"
+        yes = "1"
+        no = "0"
+        default = "0"
+        help = "ONE-OFF SWITCH — turn it on, let a single poll run (up to 5 minutes), then turn it back OFF. Normally Lectern only ingests mail that arrives after it starts watching. Leaving this on means every UIDVALIDITY reset — which happens on every Proton Bridge restart, and on any host/username change — re-imports the entire mailbox from scratch."
+
+        [main.newsletters.node_extra_ca_certs]
+        ask = "Extra CA certificate (path)"
+        # Deliberately "string", not "path": YunoHost's path type normalizes to a
+        # URL path — it would turn an empty value into "/", and Node would then
+        # warn on every TLS handshake about failing to load "/" as a cert.
+        type = "string"
+        example = "/var/www/lectern/bridge-cert.pem"
+        help = "Only needed when the IMAP server presents a self-signed certificate — Proton Bridge is the usual case (its cert is at ~/.config/protonmail/bridge-v3/cert.pem; copy it somewhere the lectern user can read, e.g. /var/www/lectern/bridge-cert.pem owned lectern:lectern mode 640). This ADDS a trusted root; certificate verification stays fully on, so a wrong hostname or expired cert still fails. Leave empty for a normal publicly-trusted mail server. Must be a file that exists — a bad path makes Node warn on every connection."
         optional = true
 
     [main.tts]

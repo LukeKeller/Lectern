@@ -21,6 +21,27 @@ ynh_app_config_apply() {
     imap_user="$(ynh_app_setting_get --key=imap_user)"
     imap_password="$(ynh_app_setting_get --key=imap_password)"
 
+    # The panel's boolean fields are auto-bound to these settings by
+    # _ynh_app_config_apply above and always yield "1"/"0"; re-default them
+    # anyway so an install that predates the panel fields still renders .env.
+    imap_secure="$(ynh_app_setting_get --key=imap_secure)"
+    imap_secure="${imap_secure:-1}"
+    ynh_app_setting_set --key=imap_secure --value="$imap_secure"
+
+    imap_ingest_backlog="$(ynh_app_setting_get --key=imap_ingest_backlog)"
+    imap_ingest_backlog="${imap_ingest_backlog:-0}"
+    ynh_app_setting_set --key=imap_ingest_backlog --value="$imap_ingest_backlog"
+
+    # Must never be empty: the BFF's schema default only fires on an ABSENT var,
+    # an empty IMAP_MAILBOX stays empty and no mailbox opens.
+    imap_mailbox="$(ynh_app_setting_get --key=imap_mailbox)"
+    imap_mailbox="${imap_mailbox:-INBOX}"
+    ynh_app_setting_set --key=imap_mailbox --value="$imap_mailbox"
+
+    # Extra CA bundle for a self-signed IMAP cert (Proton Bridge). Empty is the
+    # normal case and Node ignores an empty value entirely, so no defaulting.
+    node_extra_ca_certs="$(ynh_app_setting_get --key=node_extra_ca_certs)"
+
     # Text-to-speech: the panel field is auto-bound to the kokoro_base_url setting
     # by _ynh_app_config_apply above; default it if the panel cleared it so the
     # .env render below never sees an empty base URL.

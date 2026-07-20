@@ -48,11 +48,25 @@ imap_user="${imap_user:-}"
 imap_password="${imap_password:-}"
 imap_exclude_senders="${imap_exclude_senders:-}"
 enable_email="${enable_email:-}"
+# These four used to be hardcoded in the .env template, so they had no setting to
+# restore from and no way to be configured at all. They are placeholders now, so
+# back them off with the same defaults a fresh install writes. imap_mailbox must
+# never end up empty — the BFF's zod default only fires on an ABSENT var, an
+# empty one stays empty. node_extra_ca_certs stays empty unless the operator
+# points it at a self-signed IMAP cert (Node ignores an empty value).
+imap_secure="${imap_secure:-1}"
+imap_mailbox="${imap_mailbox:-INBOX}"
+imap_ingest_backlog="${imap_ingest_backlog:-0}"
+node_extra_ca_certs="${node_extra_ca_certs:-}"
 ynh_app_setting_set --key=imap_host --value="$imap_host"
 ynh_app_setting_set --key=imap_port --value="$imap_port"
 ynh_app_setting_set --key=imap_user --value="$imap_user"
 ynh_app_setting_set --key=imap_password --value="$imap_password"
+ynh_app_setting_set --key=imap_mailbox --value="$imap_mailbox"
+ynh_app_setting_set --key=imap_secure --value="$imap_secure"
+ynh_app_setting_set --key=imap_ingest_backlog --value="$imap_ingest_backlog"
 ynh_app_setting_set --key=imap_exclude_senders --value="$imap_exclude_senders"
+ynh_app_setting_set --key=node_extra_ca_certs --value="$node_extra_ca_certs"
 ynh_app_setting_set --key=enable_email --value="$enable_email"
 
 # Text-to-speech (optional). Backfill the Kokoro-FastAPI base URL with its default
