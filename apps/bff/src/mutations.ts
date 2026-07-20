@@ -103,8 +103,12 @@ export class MutationApplier {
         case "removed":
           return b.delete(parsed.sourceId);
         case "read":
-          // Readeck read-state is derived from archive + progress, not set directly.
-          return;
+          // Readeck has no read flag; `deriveReadeckReadState` reads it back out of
+          // archive + progress. So completing (or clearing) reading progress IS the
+          // push — without it the backend keeps reporting `read_progress=0` and the
+          // next poll re-derives `unopened`, clobbering the mirrored read state in
+          // the index. Anchor stays null: marking read is not a scroll position.
+          return b.setReadingProgress(parsed.sourceId, write.value ? 1 : 0, null);
       }
     }
     if (parsed.source === "miniflux") {

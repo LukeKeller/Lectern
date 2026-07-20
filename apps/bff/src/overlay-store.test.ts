@@ -14,6 +14,8 @@ import {
   type RankableHit,
 } from "./overlay-store";
 import { termFrequencies, tokenize } from "@lectern/shared";
+import { is, SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { DocumentRow } from "./db/schema";
 
 /**
@@ -92,6 +94,38 @@ describe("DrizzleOverlayStore.getTtsConfig", () => {
   });
 });
 
+describe("DrizzleOverlayStore.findByUrl", () => {
+  // Minimal chainable stub for `db.select(...).from(...).where(...).limit(...)`.
+  const store = (rows: unknown[]) =>
+    new DrizzleOverlayStore({
+      select: () => ({
+        from: () => ({ where: () => ({ limit: async () => rows }) }),
+      }),
+    } as never);
+
+  it("returns null when no document holds the url", async () => {
+    expect(await store([]).findByUrl("https://newsletter.lectern.local/abc")).toBeNull();
+  });
+
+  it("reports a live row as not deleted", async () => {
+    expect(
+      await store([{ id: "readeck:42", deletedAt: null }]).findByUrl(
+        "https://newsletter.lectern.local/abc",
+      ),
+    ).toEqual({ id: "readeck:42", deleted: false });
+  });
+
+  it("still matches a soft-deleted row, flagged as deleted", async () => {
+    // The delete must stay sticky: a tombstoned newsletter is still "already
+    // seen", so ingestion skips it instead of resurrecting it on the next replay.
+    expect(
+      await store([{ id: "readeck:42", deletedAt: new Date("2026-07-01T00:00:00Z") }]).findByUrl(
+        "https://newsletter.lectern.local/abc",
+      ),
+    ).toEqual({ id: "readeck:42", deleted: true });
+  });
+});
+
 describe("cardFromRow", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -143,6 +177,96 @@ describe("backendTruthSet (index-never-clobbers-overlay invariant)", () => {
       updatedAt: row.updatedAt,
       deletedAt: null,
     });
+  });
+});
+
+describe("backendTruthSet email read-state backstop", () => {
+  // The guard is a conflict-set expression, so assert on the SQL it renders.
+  const renderMetadata = (row: DocumentRow) => {
+    const { metadata } = backendTruthSet(row);
+    expect(is(metadata, SQL)).toBe(true);
+    return new PgDialect().sqlToQuery(metadata as SQL).sql;
+  };
+
+  it("does not let a poll downgrade a finished newsletter to unopened", () => {
+    // Readeck reports is_archived=false/read_progress=0 for a newsletter the user
+    // finished but never archived, so the re-derived readState is `unopened`. The
+    // conflict set must pin the stored `finished` back onto the incoming card.
+    const sql = renderMetadata(
+      rowFromStoredCard({ ...validCard, source: "readeck", category: "email" }),
+    );
+    expect(sql).toContain("'card'->>'readState' = 'finished'");
+    expect(sql).toContain("jsonb_set(excluded.metadata, '{card,readState}', '\"finished\"'::jsonb");
+  });
+
+  it("guards both metadata blobs so jsonb_set can never null out the stored card", () => {
+    const sql = renderMetadata(
+      rowFromStoredCard({ ...validCard, source: "readeck", category: "email" }),
+    );
+    expect(sql).toContain(`jsonb_exists("documents"."metadata", 'card')`);
+    expect(sql).toContain("jsonb_exists(excluded.metadata, 'card')");
+  });
+
+  it("still writes the incoming metadata when the stored row is not finished", () => {
+    // The else-branch of the guard: nothing to preserve, so backend truth applies.
+    const sql = renderMetadata(
+      rowFromStoredCard({ ...validCard, source: "readeck", category: "email" }),
+    );
+    expect(sql).toContain("else excluded.metadata");
+  });
+
+  it("is scoped to email: a MiniFlux re-index still applies an upstream unread", () => {
+    // Un-reading in MiniFlux is a real user action, so the backend card is written
+    // through verbatim with no sticky-finished branch at all.
+    const row = rowFromStoredCard({ ...validCard, readState: "unopened" });
+    const { metadata } = backendTruthSet(row);
+    expect(is(metadata, SQL)).toBe(false);
+    expect(metadata).toBe(row.metadata);
+  });
+
+  it("is scoped to email: a Readeck article re-index still applies an un-archive", () => {
+    const row = rowFromStoredCard({
+      ...validCard,
+      source: "readeck",
+      category: "article",
+      readState: "unopened",
+    });
+    expect(backendTruthSet(row).metadata).toBe(row.metadata);
+  });
+});
+
+describe("DrizzleOverlayStore.markIndexedRead", () => {
+  // Chainable stubs for `db.select().from().where()` and `db.update().set().where()`.
+  type Written = { metadata: { card: { readState: string } }; updatedAt: Date };
+  const store = (row: unknown) => {
+    const set = vi.fn<(values: Written) => { where: () => Promise<void> }>(() => ({
+      where: async () => {},
+    }));
+    const db = {
+      select: () => ({ from: () => ({ where: async () => (row ? [row] : []) }) }),
+      update: () => ({ set }),
+    };
+    return { store: new DrizzleOverlayStore(db as never), set };
+  };
+
+  it("writes an explicit local un-read straight to metadata, bypassing the backstop", async () => {
+    // The email backstop lives in the poll's conflict set only; a deliberate
+    // un-read from the UI must still be able to clear a finished newsletter.
+    const row = rowFromStoredCard({ ...validCard, source: "readeck", category: "email" });
+    row.metadata = { card: { ...validCard, readState: "finished" } };
+    const { store: s, set } = store(row);
+    await s.markIndexedRead("readeck:rd1", false);
+    expect(set).toHaveBeenCalledOnce();
+    const written = set.mock.calls[0]?.[0];
+    expect(written?.metadata.card.readState).toBe("unopened");
+  });
+
+  it("marks a newsletter finished locally so it survives until the next poll", async () => {
+    const row = rowFromStoredCard({ ...validCard, source: "readeck", category: "email" });
+    const { store: s, set } = store(row);
+    await s.markIndexedRead("readeck:rd1", true);
+    const written = set.mock.calls[0]?.[0];
+    expect(written?.metadata.card.readState).toBe("finished");
   });
 });
 

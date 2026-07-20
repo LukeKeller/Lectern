@@ -95,6 +95,7 @@ import {
   type ChangedDocuments,
   type DocumentRef,
   type DocumentsPage,
+  type IndexedUrlMatch,
   type ListDocumentsParams,
   type MaintenanceFilter,
   type Overlay,
@@ -240,6 +241,19 @@ export class DrizzleOverlayStore implements OverlayStore {
       .from(documents)
       .where(eq(documents.id, id));
     return !!row;
+  }
+
+  async findByUrl(url: string): Promise<IndexedUrlMatch | null> {
+    // NOTE the deliberate absence of an `isNull(documents.deletedAt)` filter: a
+    // tombstoned row still answers "yes, we've seen this URL". Filtering deleted
+    // rows out would let a deleted newsletter be re-ingested on the next replay
+    // and resurrect itself. See the interface docstring in unify.ts.
+    const [row] = await this.db
+      .select({ id: documents.id, deletedAt: documents.deletedAt })
+      .from(documents)
+      .where(eq(documents.url, url))
+      .limit(1);
+    return row ? { id: row.id, deleted: row.deletedAt !== null } : null;
   }
 
   async markIndexedRead(id: string, read: boolean): Promise<void> {
@@ -1382,10 +1396,7 @@ export class DrizzleOverlayStore implements OverlayStore {
    * is the one path that hydrates it (`includeTrace`).
    */
   async getRun(id: string): Promise<DiscoveryRun | null> {
-    const [row] = await this.db
-      .select()
-      .from(discoveryRuns)
-      .where(eq(discoveryRuns.id, id));
+    const [row] = await this.db.select().from(discoveryRuns).where(eq(discoveryRuns.id, id));
     return row ? runFromRow(row, true) : null;
   }
 
@@ -1665,6 +1676,12 @@ function rowFromCard(card: Card): NewDocumentRow {
  * A backend poll MUST NOT write these; `backendTruthSet` excludes them by
  * construction, so refreshing the index from a backend card cannot clobber a
  * user's triage location, tags, note, or RSS reading progress/anchor.
+ *
+ * Read state is deliberately NOT in this list. It lives inside the `metadata`
+ * jsonb (`metadata.card.readState`) and is genuine backend truth for RSS and
+ * saved articles — un-reading in MiniFlux or un-archiving in Readeck are real
+ * upstream events that must win. The one exception is `category = 'email'`; see
+ * `backendTruthSet`.
  */
 export const OVERLAY_COLUMNS = ["location", "tags", "note", "readProgress", "readAnchor"] as const;
 
@@ -1676,17 +1693,48 @@ export const OVERLAY_COLUMNS = ["location", "tags", "note", "readProgress", "rea
  * writes the overlay columns. Keeping the overlay columns OUT of this builder makes
  * the "index never clobbers the overlay" invariant a property of the seam rather
  * than of remembering which method (`indexFromBackend` vs `upsertIndex`) to call.
+ *
+ * EMAIL CARVE-OUT. Newsletters live in Readeck, which has no read flag: its read
+ * state is re-derived from archive + progress (`deriveReadeckReadState`), so a
+ * newsletter the user finished but did not archive comes back as `unopened` on
+ * every poll and the `metadata` overwrite below would erase the read state Lectern
+ * owns. For `category = 'email'` only, this set therefore never downgrades a
+ * stored `finished` read state — the incoming metadata is written with
+ * `card.readState` pinned back to `finished`.
+ *
+ * It is scoped to email ON PURPOSE. For miniflux RSS entries and readeck articles
+ * the backend's read state IS the truth: marking unread in MiniFlux or
+ * un-archiving in Readeck are real user actions that must propagate. A blanket
+ * sticky rule would make un-reading from either backend permanently impossible.
+ * An explicit local un-read still works everywhere — `markIndexedRead(id, false)`
+ * writes `metadata` directly and never goes through this conflict set.
  */
 export function backendTruthSet(row: NewDocumentRow) {
   return {
     category: row.category,
     title: row.title,
     url: row.url,
-    metadata: row.metadata,
+    metadata: row.category === "email" ? stickyFinishedMetadata() : row.metadata,
     savedAt: row.savedAt,
     updatedAt: row.updatedAt,
     deletedAt: null,
   };
+}
+
+/**
+ * The email backstop as SQL: take the incoming (`excluded`) metadata, but if the
+ * row already on disk says the newsletter is finished, pin the incoming card's
+ * `readState` back to `finished`. Both `jsonb_exists` guards matter — `jsonb_set`
+ * of a NULL blob returns NULL, which would wipe the stored card entirely.
+ */
+function stickyFinishedMetadata() {
+  return dsql`case
+    when jsonb_exists(${documents.metadata}, 'card')
+     and ${documents.metadata}->'card'->>'readState' = 'finished'
+     and jsonb_exists(excluded.metadata, 'card')
+    then jsonb_set(excluded.metadata, '{card,readState}', '"finished"'::jsonb, true)
+    else excluded.metadata
+  end`;
 }
 
 /** Map a candidate row to the contract type: metadata jsonb spreads back out to

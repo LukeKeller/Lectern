@@ -98,11 +98,31 @@ describe("MutationApplier dual-write routing", () => {
     expect(overlay.markIndexedRead).toHaveBeenCalledWith("miniflux:7", true);
   });
 
-  it("markRead on a Readeck card mirrors to the index only (read-state is derived)", async () => {
-    const { applier, rss, overlay } = harness();
+  it("markRead on a Readeck card completes reading progress (its only read signal)", async () => {
+    // Readeck has no read flag, so read-state must be pushed as progress=1 —
+    // otherwise the backend keeps reporting progress 0 and the next poll
+    // re-derives `unopened`, losing the read state (newsletters especially).
+    const { applier, rss, readLater, overlay } = harness();
     await applier.markRead({ source: "readeck", sourceId: "rd1" }, "readeck:rd1", true);
     expect(rss.setRead).not.toHaveBeenCalled();
+    expect(readLater.setReadingProgress).toHaveBeenCalledWith("rd1", 1, null);
     expect(overlay.markIndexedRead).toHaveBeenCalledWith("readeck:rd1", true);
+  });
+
+  it("markRead(false) on a Readeck card clears reading progress", async () => {
+    const { applier, readLater, overlay } = harness();
+    await applier.markRead({ source: "readeck", sourceId: "rd1" }, "readeck:rd1", false);
+    expect(readLater.setReadingProgress).toHaveBeenCalledWith("rd1", 0, null);
+    expect(overlay.markIndexedRead).toHaveBeenCalledWith("readeck:rd1", false);
+  });
+
+  it("a Readeck markRead push failure aborts before the index mirror", async () => {
+    const { applier, readLater, overlay } = harness();
+    readLater.setReadingProgress.mockRejectedValueOnce(new Error("Readeck 502"));
+    await expect(
+      applier.markRead({ source: "readeck", sourceId: "rd1" }, "readeck:rd1", true),
+    ).rejects.toThrow("Readeck 502");
+    expect(overlay.markIndexedRead).not.toHaveBeenCalled();
   });
 
   it("delete removes the Readeck bookmark then tombstones the index row", async () => {

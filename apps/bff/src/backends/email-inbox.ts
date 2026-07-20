@@ -6,8 +6,10 @@ import { simpleParser, type ParsedMail } from "mailparser";
  * user subscribes newsletters to and nothing else reads), parses each message's
  * MIME into HTML, and turns it into a Readeck save payload tagged with a sentinel
  * label so the unifier renders it as an `email`-category card. Idempotent on two
- * axes: a UID cursor avoids re-fetching, and a stable Message-ID-derived URL lets
- * Readeck dedupe if the same message is ever re-processed (e.g. UIDVALIDITY reset).
+ * axes: a UID cursor avoids re-fetching, and a stable Message-ID-derived URL is
+ * the key LECTERN dedupes on before saving, so re-processing the same message
+ * (e.g. after a UIDVALIDITY reset) is a no-op. Readeck does NOT dedupe — see
+ * `newsletterUrl` below.
  *
  * The pure transforms (sanitize/build/map/cursor) are exported and unit-tested
  * without a live IMAP server; only `EmailInbox.fetchNew` touches the network.
@@ -182,7 +184,21 @@ export function senderDomain(address: string): string | null {
   return domain || null;
 }
 
-/** Stable synthetic URL from the Message-ID so Readeck dedupes re-ingested mail. */
+/**
+ * Stable synthetic URL derived from the Message-ID. This is LECTERN's dedupe key
+ * for re-ingested mail: `pollEmail` looks it up in the glue index (via
+ * `findByUrl`) and skips the save when it is already there.
+ *
+ * It is emphatically NOT a Readeck dedupe key. Readeck's `POST /api/bookmarks`
+ * happily creates a second bookmark with a new id for a URL it already holds,
+ * and since a document's identity is `readeck:<id>`, that new id becomes a NEW
+ * unified document — stranding the original's read state, tags, and delete
+ * tombstone on the old row. The dedupe has to happen here, before the save.
+ *
+ * Stability caveat: this is only as stable as the Message-ID. Mail with no
+ * Message-ID header gets a UID-derived fallback (see `fromParsedMail`), which
+ * changes across a UIDVALIDITY reset and therefore will not dedupe.
+ */
 export function newsletterUrl(messageId: string): string {
   const id = messageId.replace(/^<|>$/g, "").trim();
   return NEWSLETTER_URL_BASE + encodeURIComponent(id);
@@ -212,6 +228,11 @@ export function fromParsedMail(mail: ParsedMail, uid: number, mailbox: string): 
   const fromName = (fromVal?.name || fromVal?.address || "Newsletter").trim();
   const fromAddress = fromVal?.address ?? "";
   const subject = (mail.subject ?? "").trim() || "(no subject)";
+  // KNOWN LIMITATION: the fallback id is UID-derived, so for mail with no
+  // Message-ID header the synthetic newsletter URL changes whenever UIDVALIDITY
+  // rotates (every Proton Bridge restart) and the URL dedupe in `pollEmail` will
+  // not catch the replay. Rare in practice — real newsletters all set a
+  // Message-ID — and the only real fix is a content hash. Left as-is.
   const messageId = (mail.messageId ?? "").trim() || `<uid-${uid}@${mailbox}>`;
   const html =
     typeof mail.html === "string" && mail.html
@@ -231,9 +252,18 @@ export class EmailInbox {
   /**
    * Fetch every message with UID above the cursor's high-water mark, parsed and
    * sorted ascending. Returns the mailbox's current UIDVALIDITY so the caller can
-   * detect a reset (validity change) and restart from UID 0 — Readeck's URL dedupe
-   * makes that reprocessing harmless. Opens, reads, parses, and logs out; marking
-   * \Seen is unnecessary because the UID cursor is the source of truth.
+   * detect a reset (validity change) and restart from UID 0.
+   *
+   * That reset path is a NORMAL, routine occurrence, not an edge case: Proton Mail
+   * Bridge rotates UIDVALIDITY on restart, so every Bridge restart re-walks the
+   * whole mailbox. What keeps that harmless is LECTERN's own dedupe — `pollEmail`
+   * looks each message's `newsletterUrl` up in the glue index and skips the ones
+   * already there (live or tombstoned). Readeck does NOT dedupe by URL; without
+   * the Lectern-side check a Bridge restart would re-import the entire mailbox as
+   * fresh documents.
+   *
+   * Opens, reads, parses, and logs out; marking \Seen is unnecessary because the
+   * UID cursor is the source of truth.
    */
   async fetchNew(cursor: EmailCursor | null): Promise<{
     uidValidity: string;

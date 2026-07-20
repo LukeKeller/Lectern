@@ -1,0 +1,14 @@
+-- Lectern-side newsletter dedupe by URL. Newsletter ingestion looks a message's
+-- synthetic Message-ID URL up in `documents` before saving it to Readeck, because
+-- Readeck's POST /api/bookmarks is NOT idempotent — it mints a fresh bookmark id
+-- for a URL it already holds, and a document's identity is `readeck:<id>`, so a
+-- re-save would land on a new row and strand the original's read state, tags and
+-- delete tombstone. That lookup runs once per fetched message and, after a Proton
+-- Mail Bridge UIDVALIDITY rotation, once for the WHOLE mailbox — so it needs an
+-- index rather than a sequential scan.
+--
+-- Deliberately NOT unique: `url` is nullable and non-newsletter sources may
+-- legitimately hold the same URL twice (e.g. the same article saved from RSS and
+-- from Readeck, which are distinct unified documents). Uniqueness stays on
+-- (source, source_id). Idempotent.
+CREATE INDEX IF NOT EXISTS "documents_url_idx" ON "documents" ("url");

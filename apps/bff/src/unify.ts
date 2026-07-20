@@ -182,6 +182,16 @@ export interface ChangedDocuments {
   deletedIds: string[];
 }
 
+/**
+ * A `findByUrl` hit: the unified id already holding that URL, plus whether the
+ * row is tombstoned. Both states mean "already ingested"; `deleted` only tells
+ * the caller WHY it is skipping, for the ingestion log.
+ */
+export interface IndexedUrlMatch {
+  id: string;
+  deleted: boolean;
+}
+
 /** Minimal index-row identity used by bulk-delete routing (id -> source/sourceId). */
 export interface DocumentRef {
   id: string;
@@ -231,6 +241,21 @@ export interface DocumentStore extends OverlayReader {
    * upsert with no insert-vs-update signal. Must be called BEFORE indexing.
    */
   isIndexed(id: string): Promise<boolean>;
+  /**
+   * The indexed document stored under `url`, or null if we've never seen it.
+   *
+   * Lectern's own dedupe key for ingestion paths where the backend does NOT
+   * dedupe. Readeck in particular does not: `POST /api/bookmarks` mints a fresh
+   * bookmark id for a URL it already holds, and since a document's identity is
+   * `readeck:<id>`, a re-save would land on a NEW row and strand the old row's
+   * read state, tags, and delete tombstone.
+   *
+   * CRITICAL: this intentionally ignores `deletedAt` and matches tombstoned rows
+   * too — a newsletter the user deleted must keep counting as "already seen" so
+   * the delete stays sticky across a re-ingest. `deleted` lets the caller tell
+   * a live hit from a tombstoned one (both mean "do not save again").
+   */
+  findByUrl(url: string): Promise<IndexedUrlMatch | null>;
   /** Flip the read state on the indexed backend card (RSS "mark seen" on open). */
   markIndexedRead(id: string, read: boolean): Promise<void>;
   /** Drop the glue index + overlay (and RSS highlights) for a document. */

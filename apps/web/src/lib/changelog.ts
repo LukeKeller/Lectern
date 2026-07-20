@@ -26,6 +26,21 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.42.1',
+		date: '2026-07-19',
+		title: 'Newsletters stay where you put them',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Newsletters no longer reappear after you delete them. Each issue is now recognised by its message id before it is saved, so a mail server that renumbers its mailbox — as the Proton Bridge does every time it restarts — can no longer re-import your whole inbox as brand-new unread items.'
+			},
+			{
+				kind: 'fixed',
+				text: 'Marking a newsletter read now sticks. Swiping to mark read was only saving the change locally, so the next sync quietly undid it — whether it held depended on which control you used.'
+			}
+		]
+	},
+	{
 		version: '0.42.0',
 		date: '2026-07-17',
 		title: 'Piper joins the local voices',

@@ -12,10 +12,13 @@ import {
   isExcludedSender,
   messageToSaveInput,
   newsletterContentHtml,
+  newsletterUrl,
   parseEmailCursor,
   parseExcludedSenders,
+  type ParsedNewsletter,
 } from "./backends/email-inbox";
 import { DrizzleOverlayStore } from "./overlay-store";
+import type { IndexedUrlMatch } from "./unify";
 
 /**
  * Background ingestion jobs on pg-boss (same Postgres as the glue DB). Two poll
@@ -177,14 +180,111 @@ export async function pollReadeck(): Promise<number> {
   return indexed;
 }
 
+/** The store + backend surface newsletter ingestion needs, narrowed so tests can
+ *  pass hand-written in-memory fakes instead of a live DB and Readeck. */
+export interface NewsletterIngestDeps {
+  store: {
+    findByUrl(url: string): Promise<IndexedUrlMatch | null>;
+    putContent(id: string, html: string): Promise<void>;
+  };
+  readLater: {
+    save(input: { url: string; html?: string; labels?: string[] }): Promise<string>;
+  };
+  excluded: ReadonlySet<string>;
+  /** Persist the UID high-water mark (called after every message we finish with). */
+  setCursor(uid: number): Promise<void>;
+  /** Append an ingestion-log line (errors only; the caller writes the summary). */
+  log(status: string, message: string): Promise<void>;
+}
+
+export interface NewsletterIngestResult {
+  saved: number;
+  /** Dropped because the sender is on the exclude/ignore list. */
+  skippedExcluded: number;
+  /** Dropped because a document with this newsletter URL already exists. */
+  skippedDuplicate: number;
+}
+
+/**
+ * Save each parsed newsletter to Readeck, skipping senders the user excluded and
+ * messages we have already ingested. The UID cursor advances after EACH message
+ * we finish with (saved or skipped), so a crash mid-batch never reprocesses
+ * settled mail; on the first save error we stop, leaving that message for the
+ * next run rather than skipping past it.
+ *
+ * DEDUPE IS OURS, NOT READECK'S. Readeck's `POST /api/bookmarks` is not
+ * idempotent — it mints a fresh bookmark id even for a URL it already holds, and
+ * a document's identity is `readeck:<id>`, so a re-save lands on a NEW row and
+ * strands the original's read state, tags, and delete tombstone. So before
+ * saving we look the synthetic Message-ID URL up in our own index and skip it if
+ * it is there, whether live or tombstoned (a deleted newsletter must STAY
+ * deleted, not resurrect on the next replay). This is what makes a UIDVALIDITY
+ * reset — routine with Proton Mail Bridge, which rotates it on restart — a
+ * cheap re-walk instead of a duplicate library.
+ *
+ * KNOWN LIMITATION: a message with no Message-ID header falls back to a
+ * UID-derived id (`<uid-N@mailbox>`, see `fromParsedMail`), so its synthetic URL
+ * changes when UIDVALIDITY rotates and it will NOT dedupe across a reset. Such
+ * mail is rare (essentially every real newsletter sets a Message-ID) and the
+ * only fix is a content hash, which is out of scope here.
+ */
+export async function ingestNewsletters(
+  messages: ParsedNewsletter[],
+  deps: NewsletterIngestDeps,
+): Promise<NewsletterIngestResult> {
+  const result: NewsletterIngestResult = { saved: 0, skippedExcluded: 0, skippedDuplicate: 0 };
+  for (const msg of messages) {
+    // Internal/system mail (e.g. server diagnostics) the user has excluded: drop
+    // it but still advance the cursor so it isn't re-fetched on the next poll.
+    if (isExcludedSender(msg, deps.excluded)) {
+      result.skippedExcluded++;
+      await deps.setCursor(msg.uid);
+      continue;
+    }
+    // Already in the library (or deliberately deleted from it): don't re-save.
+    // Same cursor treatment as an excluded sender — the message is settled.
+    const existing = await deps.store.findByUrl(newsletterUrl(msg.messageId));
+    if (existing) {
+      result.skippedDuplicate++;
+      await deps.setCursor(msg.uid);
+      continue;
+    }
+    try {
+      const sourceId = await deps.readLater.save(messageToSaveInput(msg));
+      // Own the newsletter's body ourselves (with the sender's real image URLs)
+      // so the reader serves it instead of Readeck's archived copy — Readeck's
+      // newsletter image archiving is unreliable (most `_resources` URLs 404), so
+      // we keep the original URLs and let the image proxy fetch them at read time.
+      // Best-effort: a content-store failure must NOT stick the cursor (which
+      // would re-save the message every poll). Log and move on — the reader falls
+      // back to Readeck's copy for this one.
+      try {
+        await deps.store.putContent(`readeck:${sourceId}`, newsletterContentHtml(msg));
+      } catch (contentErr) {
+        await deps.log(
+          "error",
+          `uid ${msg.uid} content store: ${contentErr instanceof Error ? contentErr.message : String(contentErr)}`,
+        );
+      }
+      result.saved++;
+      await deps.setCursor(msg.uid);
+    } catch (err) {
+      await deps.log(
+        "error",
+        `uid ${msg.uid}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      break;
+    }
+  }
+  return result;
+}
+
 /**
  * Pull new newsletters from the dedicated IMAP mailbox and save each to Readeck
  * (with the `email` sentinel label) so they become first-class reader documents.
- * A no-op when IMAP isn't configured. The UID cursor advances after EACH
- * successful save, so a crash mid-batch never reprocesses saved mail; on the
- * first save error we stop (leaving that message for the next run) rather than
- * skipping past it. Readeck dedupes by the synthetic Message-ID URL, so any
- * replay is idempotent.
+ * A no-op when IMAP isn't configured. The per-message save/skip/cursor policy —
+ * including the Lectern-side URL dedupe that makes a replay idempotent — lives in
+ * `ingestNewsletters`; this wires it to the real IMAP inbox, Readeck, and glue DB.
  */
 export async function pollEmail(): Promise<number> {
   if (!config.IMAP_HOST) return 0;
@@ -211,53 +311,22 @@ export async function pollEmail(): Promise<number> {
   }
   const cursor = parseEmailCursor(await getCursor("email"));
   const { uidValidity, messages } = await inbox.fetchNew(cursor);
-  let saved = 0;
-  let skipped = 0;
-  for (const msg of messages) {
-    // Internal/system mail (e.g. server diagnostics) the user has excluded: drop
-    // it but still advance the cursor so it isn't re-fetched on the next poll.
-    if (isExcludedSender(msg, excluded)) {
-      skipped++;
-      await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
-      continue;
-    }
-    try {
-      const sourceId = await readLater.save(messageToSaveInput(msg));
-      // Own the newsletter's body ourselves (with the sender's real image URLs)
-      // so the reader serves it instead of Readeck's archived copy — Readeck's
-      // newsletter image archiving is unreliable (most `_resources` URLs 404), so
-      // we keep the original URLs and let the image proxy fetch them at read time.
-      // Best-effort: a content-store failure must NOT stick the cursor (which would
-      // re-save the message every poll and, since Readeck doesn't dedupe these
-      // synthetic URLs, pile up duplicates). Log and move on — the reader falls
-      // back to Readeck's copy for this one.
-      try {
-        await store.putContent(`readeck:${sourceId}`, newsletterContentHtml(msg));
-      } catch (contentErr) {
-        await logIngestion(
-          "email",
-          "poll",
-          "error",
-          `uid ${msg.uid} content store: ${contentErr instanceof Error ? contentErr.message : String(contentErr)}`,
-        );
-      }
-      saved++;
-      await setCursor("email", formatEmailCursor({ uidValidity, lastUid: msg.uid }));
-    } catch (err) {
-      await logIngestion(
-        "email",
-        "poll",
-        "error",
-        `uid ${msg.uid}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      break;
-    }
-  }
+  const { saved, skippedExcluded, skippedDuplicate } = await ingestNewsletters(messages, {
+    store,
+    readLater,
+    excluded,
+    setCursor: (uid) => setCursor("email", formatEmailCursor({ uidValidity, lastUid: uid })),
+    log: (status, message) => logIngestion("email", "poll", status, message),
+  });
+  const skips = [
+    skippedDuplicate ? `${skippedDuplicate} duplicate` : "",
+    skippedExcluded ? `${skippedExcluded} excluded sender` : "",
+  ].filter(Boolean);
   await logIngestion(
     "email",
     "poll",
     "ok",
-    `saved ${saved} of ${messages.length}${skipped ? `, skipped ${skipped}` : ""}`,
+    `saved ${saved} of ${messages.length}${skips.length ? `, skipped ${skips.join(" + ")}` : ""}`,
   );
   return saved;
 }

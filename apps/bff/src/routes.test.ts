@@ -49,6 +49,7 @@ import {
   type ChangedDocuments,
   type DocumentRef,
   type DocumentsPage,
+  type IndexedUrlMatch,
   type ListDocumentsParams,
   type MaintenanceFilter,
   type Overlay,
@@ -487,6 +488,14 @@ class FakeOverlayStore implements OverlayStore {
   }
   async isIndexed(id: string): Promise<boolean> {
     return this.index.has(id);
+  }
+  async findByUrl(url: string): Promise<IndexedUrlMatch | null> {
+    // Matches tombstoned rows too, like the real store — "already seen" must
+    // survive a delete.
+    for (const [id, card] of this.index) {
+      if (card.url === url) return { id, deleted: this.deleted.has(id) };
+    }
+    return null;
   }
   async markIndexedRead(id: string, read: boolean): Promise<void> {
     const base = this.index.get(id);
