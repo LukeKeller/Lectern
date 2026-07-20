@@ -709,10 +709,46 @@ export interface EmailPollDeps {
  *
  * Persisting the cursor on a zero-message poll is load-bearing: without it every
  * subsequent poll would cold-start again and never ingest anything.
+ *
+ * NOTHING HERE MAY THROW. Newsletter ingestion is optional and best-effort, and
+ * it shares a process with the API, the reader and the RSS feeds. It previously
+ * had no error handling at ALL around `fetchNew`: a TLS name-check failure at
+ * connect time propagated straight out, and the accompanying unhandled `'error'`
+ * event on the ImapFlow client (now fixed at its source in `EmailInbox`) took the
+ * whole BFF down and left systemd restart-looping it. So every failure — a
+ * connect rejection, an auth failure, a hung socket, a mid-fetch TLS error, or a
+ * fault in ingestion itself — is caught, written to the ingestion log, and turned
+ * into "this poll ingested 0". The next poll is five minutes away.
  */
 export async function runEmailPoll(deps: EmailPollDeps): Promise<number> {
+  try {
+    return await runEmailPollOnce(deps);
+  } catch (err) {
+    // The log write is itself part of the failure surface (the glue DB may be
+    // exactly what is broken), so it must not resurrect the throw it is
+    // reporting.
+    try {
+      await deps.log("error", `newsletter poll failed: ${describeError(err)}`);
+    } catch {
+      // nothing left to report to; the poll still must not take the app down
+    }
+    return 0;
+  }
+}
+
+async function runEmailPollOnce(deps: EmailPollDeps): Promise<number> {
   const cursor = parseEmailCursor(await deps.getCursor());
-  const { uidValidity, messages, coldStart } = await deps.inbox.fetchNew(cursor);
+  // Connection-time faults are the ones that crashed production, and they are
+  // worth naming distinctly: "the mail server is unreachable/untrusted" is a very
+  // different operator action from "ingesting a message failed".
+  let fetched: EmailFetchResult;
+  try {
+    fetched = await deps.inbox.fetchNew(cursor);
+  } catch (err) {
+    await deps.log("error", `imap connect/fetch failed: ${describeError(err)}`);
+    return 0;
+  }
+  const { uidValidity, messages, coldStart } = fetched;
 
   if (coldStart) {
     await deps.setCursor(formatEmailCursor({ uidValidity, lastUid: coldStart.seededLastUid }));
@@ -1196,6 +1232,16 @@ async function ensureQueue(instance: PgBoss, name: string): Promise<void> {
 export async function startJobs(): Promise<PgBoss> {
   if (boss) return boss;
   const instance = new PgBoss(config.DATABASE_URL);
+  // Same crash class as the ImapFlow one, and a livelier one: PgBoss is an
+  // EventEmitter that promotes 'error' from its manager, maintenance and cron
+  // timers, and its internally-owned `pg` pool re-emits idle-client errors the
+  // same way. All of those fire on ordinary database churn (a Postgres restart,
+  // an idle-connection reset), and an 'error' emit with no listener throws out
+  // of a timer callback — an uncaughtException that no `await` can catch. One
+  // listener turns a routine DB blip from "the BFF exits 1" into a log line.
+  instance.on("error", (err: unknown) => {
+    console.error("[jobs] pg-boss error:", describeError(err));
+  });
   await instance.start();
   for (const name of Object.values(QUEUE)) await ensureQueue(instance, name);
 

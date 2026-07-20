@@ -1,8 +1,17 @@
+import { EventEmitter } from "node:events";
+import { checkServerIdentity } from "node:tls";
 import { describe, expect, it } from "vitest";
+import type { ImapFlowOptions } from "imapflow";
 import {
   EMAIL_DOMAIN_LABEL_PREFIX,
   EMAIL_LABEL,
+  EmailInbox,
+  IMAP_CONNECTION_TIMEOUT_MS,
+  IMAP_GREETING_TIMEOUT_MS,
+  IMAP_SOCKET_TIMEOUT_MS,
+  buildImapOptions,
   buildReadeckHtml,
+  imapTlsOptions,
   formatEmailCursor,
   fromParsedMail,
   isExcludedSender,
@@ -13,6 +22,8 @@ import {
   parseExcludedSenders,
   sanitizeEmailHtml,
   senderDomain,
+  type EmailInboxOptions,
+  type ImapClientLike,
   type ParsedNewsletter,
 } from "./backends/email-inbox";
 import { readeckBookmarkToCard, type ReadeckBookmark } from "./backends/readeck";
@@ -231,5 +242,264 @@ describe("readeckBookmarkToCard email mapping", () => {
     expect(card.category).toBe("article");
     expect(card.tags).toEqual(["tech"]);
     expect(card.senderDomain).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TLS identity + connection options (BUG A)
+// ---------------------------------------------------------------------------
+
+const connOpts = {
+  host: "127.0.0.1",
+  port: 1143,
+  user: "bridge",
+  password: "secret",
+  mailbox: "INBOX",
+};
+
+/**
+ * The Proton Bridge certificate shape from the production incident: self-signed,
+ * `CN=127.0.0.1`, with an IP SAN and NO DNS SAN. The missing DNS SAN is why
+ * Node falls through to matching the CN, which is what the crash reported.
+ */
+const bridgeCert = {
+  subject: { CN: "127.0.0.1" },
+  subjectaltname: "IP Address:127.0.0.1",
+} as unknown as Parameters<typeof checkServerIdentity>[1];
+
+describe("imapTlsOptions (verify against the configured host, never against a guess)", () => {
+  it("overrides the identity check for an IP literal host", () => {
+    const tls = imapTlsOptions("127.0.0.1");
+    expect(typeof tls?.checkServerIdentity).toBe("function");
+  });
+
+  it("leaves a DNS host on Node's default check", () => {
+    // For a DNS host imapflow sets `servername`, so Node already verifies
+    // against exactly the configured name on both paths. Overriding would be a
+    // no-op that opts out of future Node improvements.
+    expect(imapTlsOptions("imap.example.com")).toBeUndefined();
+    expect(imapTlsOptions("localhost")).toBeUndefined();
+  });
+
+  it("handles IPv6 literals too", () => {
+    expect(typeof imapTlsOptions("::1")?.checkServerIdentity).toBe("function");
+  });
+
+  it("accepts a cert whose IP SAN matches the configured host", () => {
+    const tls = imapTlsOptions("127.0.0.1");
+    // The hostname Node derived is the WRONG one ("localhost", per the crash);
+    // the override must ignore it and use the configured host instead.
+    expect(tls?.checkServerIdentity?.("localhost", bridgeCert)).toBeUndefined();
+  });
+
+  it("still REJECTS a cert that does not match the configured host", () => {
+    // Verification stays on. This is the assertion that would fail if anyone
+    // "fixed" this with rejectUnauthorized:false.
+    const tls = imapTlsOptions("10.1.2.3");
+    const err = tls?.checkServerIdentity?.("localhost", bridgeCert);
+    expect(err).toBeInstanceOf(Error);
+    expect(err?.message).toContain("10.1.2.3");
+  });
+});
+
+describe("buildImapOptions (what is actually handed to the IMAP client)", () => {
+  it("carries the identity override for an IP host on the implicit-TLS path", () => {
+    const opts = buildImapOptions({ ...connOpts, port: 993, secure: true });
+    expect(opts.secure).toBe(true);
+    expect(typeof opts.tls?.checkServerIdentity).toBe("function");
+    expect(opts.tls?.checkServerIdentity?.("localhost", bridgeCert)).toBeUndefined();
+  });
+
+  it("carries the identity override for an IP host on the STARTTLS path", () => {
+    // The production failure was here: imapflow's STARTTLS upgrade options carry
+    // no `host`, so Node verified against the literal string "localhost".
+    const opts = buildImapOptions({ ...connOpts, secure: false });
+    expect(opts.secure).toBe(false);
+    expect(typeof opts.tls?.checkServerIdentity).toBe("function");
+    expect(opts.tls?.checkServerIdentity?.("localhost", bridgeCert)).toBeUndefined();
+  });
+
+  it("adds no TLS options at all for a DNS host, on either path", () => {
+    const host = "imap.example.com";
+    expect(buildImapOptions({ ...connOpts, host, port: 993, secure: true }).tls).toBeUndefined();
+    expect(buildImapOptions({ ...connOpts, host, secure: false }).tls).toBeUndefined();
+  });
+
+  it("defaults to implicit TLS when `secure` is unset", () => {
+    expect(buildImapOptions(connOpts).secure).toBe(true);
+  });
+
+  it("never disables certificate verification", () => {
+    for (const host of ["127.0.0.1", "imap.example.com"]) {
+      for (const secure of [true, false]) {
+        const opts = buildImapOptions({ ...connOpts, host, secure });
+        expect(opts.tls?.rejectUnauthorized).toBeUndefined();
+      }
+    }
+  });
+
+  it("bounds every stage of the connection with a timeout", () => {
+    // `fetchNew` previously had no timeout of its own: a stalled server held the
+    // job (and its advisory lock) open until pg-boss's four-hour expiry.
+    const opts = buildImapOptions(connOpts);
+    expect(opts.connectionTimeout).toBe(IMAP_CONNECTION_TIMEOUT_MS);
+    expect(opts.greetingTimeout).toBe(IMAP_GREETING_TIMEOUT_MS);
+    expect(opts.socketTimeout).toBe(IMAP_SOCKET_TIMEOUT_MS);
+    for (const ms of [opts.connectionTimeout, opts.greetingTimeout, opts.socketTimeout]) {
+      expect(ms).toBeGreaterThan(0);
+      // Comfortably inside the 5-minute poll cadence for the connect stages.
+      expect(ms).toBeLessThanOrEqual(IMAP_SOCKET_TIMEOUT_MS);
+    }
+  });
+
+  it("passes the mailbox credentials and silences the client logger", () => {
+    const opts = buildImapOptions(connOpts);
+    expect(opts.host).toBe("127.0.0.1");
+    expect(opts.port).toBe(1143);
+    expect(opts.auth).toEqual({ user: "bridge", pass: "secret" });
+    expect(opts.logger).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EmailInbox.fetchNew failure isolation (BUG B)
+// ---------------------------------------------------------------------------
+
+/**
+ * A scriptable stand-in for `ImapFlow`. It is a real `EventEmitter`, which is
+ * the whole point: emitting `'error'` with no listener THROWS, so these tests
+ * exercise the actual crash mechanism rather than a mock of it.
+ */
+class FakeImapClient extends EventEmitter implements ImapClientLike {
+  mailbox: { uidValidity: bigint; uidNext: number; exists: number } | false = {
+    uidValidity: 42n,
+    uidNext: 11,
+    exists: 3,
+  };
+  /** Listeners present at the moment `connect()` ran — 0 means the crash route is open. */
+  errorListenersAtConnect = -1;
+  logoutCalls = 0;
+  closeCalls = 0;
+  released = 0;
+  onConnect: (() => void) | null = null;
+
+  async connect(): Promise<void> {
+    this.errorListenersAtConnect = this.listenerCount("error");
+    this.onConnect?.();
+  }
+  async getMailboxLock(): Promise<{ release: () => void }> {
+    return {
+      release: () => {
+        this.released++;
+      },
+    };
+  }
+  async search(): Promise<number[] | false> {
+    return [10];
+  }
+  async *fetch(): AsyncIterableIterator<{ uid: number; source?: Buffer | false }> {
+    // No new mail above the cursor; the cursor path is covered elsewhere.
+  }
+  async logout(): Promise<void> {
+    this.logoutCalls++;
+  }
+  close(): void {
+    this.closeCalls++;
+  }
+}
+
+function inboxWith(client: FakeImapClient, overrides: Partial<EmailInboxOptions> = {}) {
+  return new EmailInbox({ ...connOpts, ...overrides }, () => client);
+}
+
+describe("EmailInbox.fetchNew (an IMAP fault must never reach the process)", () => {
+  it("attaches an 'error' listener BEFORE anything can fail", async () => {
+    const client = new FakeImapClient();
+    await inboxWith(client).fetchNew({ uidValidity: "42", lastUid: 10 });
+    // This is the assertion that stands between a mail-server hiccup and a
+    // restart-looping BFF.
+    expect(client.errorListenersAtConnect).toBeGreaterThan(0);
+  });
+
+  it("absorbs an 'error' emitted during connect instead of letting it throw", async () => {
+    const client = new FakeImapClient();
+    const tlsError = Object.assign(new Error("Hostname/IP does not match certificate's altnames"), {
+      code: "ERR_TLS_CERT_ALTNAME_INVALID",
+    });
+    client.onConnect = () => {
+      // Exactly what imapflow's `emitError` does (imap-flow.js:409). With no
+      // listener this call itself throws, out of every promise chain.
+      client.emit("error", tlsError);
+      throw new Error("Unexpected close");
+    };
+
+    // It still fails the poll — but as a rejected promise a caller can handle,
+    // and reporting the REAL cause rather than the generic "Unexpected close".
+    await expect(inboxWith(client).fetchNew(null)).rejects.toThrow(
+      "Hostname/IP does not match certificate's altnames",
+    );
+  });
+
+  it("absorbs a late 'error' emitted after the fetch has finished", async () => {
+    const client = new FakeImapClient();
+    await inboxWith(client).fetchNew({ uidValidity: "42", lastUid: 10 });
+    // A socket reset arriving during teardown used to be enough to kill the app.
+    expect(() => client.emit("error", new Error("ECONNRESET"))).not.toThrow();
+  });
+
+  it("logs out and releases the mailbox lock on the happy path", async () => {
+    const client = new FakeImapClient();
+    await inboxWith(client).fetchNew({ uidValidity: "42", lastUid: 10 });
+    expect(client.logoutCalls).toBe(1);
+    expect(client.released).toBe(1);
+  });
+
+  it("hard-closes the socket when the connection never came up", async () => {
+    const client = new FakeImapClient();
+    client.onConnect = () => {
+      throw Object.assign(new Error("Failed to establish connection in required time"), {
+        code: "CONNECT_TIMEOUT",
+      });
+    };
+
+    await expect(inboxWith(client).fetchNew(null)).rejects.toThrow(
+      "Failed to establish connection in required time",
+    );
+    // LOGOUT speaks IMAP; there is no session to speak it on.
+    expect(client.logoutCalls).toBe(0);
+    expect(client.closeCalls).toBe(1);
+  });
+
+  it("does not let a failing teardown mask the real error", async () => {
+    const client = new FakeImapClient();
+    client.logout = async () => {
+      throw new Error("logout exploded");
+    };
+    client.onConnect = () => {
+      throw new Error("the real problem");
+    };
+
+    await expect(inboxWith(client).fetchNew(null)).rejects.toThrow("the real problem");
+  });
+
+  it("hands the client the options built by buildImapOptions", async () => {
+    let seen: ImapFlowOptions | null = null;
+    const client = new FakeImapClient();
+    const inbox = new EmailInbox({ ...connOpts, secure: false }, (o) => {
+      seen = o;
+      return client;
+    });
+
+    await inbox.fetchNew({ uidValidity: "42", lastUid: 10 });
+
+    // Compared field-by-field: `tls.checkServerIdentity` is a fresh closure per
+    // call, so a deep equality would compare two functions by reference.
+    const expected = buildImapOptions({ ...connOpts, secure: false });
+    expect(seen).not.toBeNull();
+    const { tls: seenTls, ...seenRest } = seen!;
+    const { tls: expectedTls, ...expectedRest } = expected;
+    expect(seenRest).toEqual(expectedRest);
+    expect(typeof seenTls?.checkServerIdentity).toBe(typeof expectedTls?.checkServerIdentity);
+    expect(seen!.socketTimeout).toBe(IMAP_SOCKET_TIMEOUT_MS);
   });
 });

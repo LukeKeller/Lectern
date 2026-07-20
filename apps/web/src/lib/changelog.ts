@@ -26,6 +26,32 @@ export const KIND_LABEL: Record<ChangeKind, string> = {
 
 export const releases: Release[] = [
 	{
+		version: '0.43.3',
+		date: '2026-07-20',
+		title: 'A mail hiccup can no longer take down the app',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Lectern could not connect to a mail server addressed by IP — the security check compared the certificate against the wrong name and rejected it. Connections are now checked against the address you actually configured, with verification still fully enforced.'
+			},
+			{
+				kind: 'fixed',
+				text: 'A mail server problem used to take the entire app down with it, restarting in a loop until someone intervened. Newsletter fetching is now fully isolated: a failure is logged, that round is skipped, and reading, feeds and saving carry on untouched. Connections that hang are now given up on rather than holding the job open for hours.'
+			}
+		]
+	},
+	{
+		version: '0.43.2',
+		date: '2026-07-20',
+		title: 'Settings that survive an upgrade',
+		changes: [
+			{
+				kind: 'fixed',
+				text: 'Newsletter mail settings were reset to their defaults on every upgrade, so ingestion quietly reverted to the wrong mailbox each time. They are now stored as real app settings and re-applied on upgrade, and can be edited from the admin panel instead of by hand.'
+			}
+		]
+	},
+	{
 		version: '0.43.1',
 		date: '2026-07-20',
 		title: 'Nothing falls through the gap',

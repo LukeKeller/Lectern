@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import { Card } from "@lectern/shared";
 import {
@@ -26,6 +27,8 @@ import {
 } from "./jobs";
 import { BackendHttpError } from "./errors";
 import {
+  EmailInbox,
+  IMAP_CONNECTION_TIMEOUT_MS,
   buildReadeckHtml,
   formatEmailCursor,
   newsletterUrl,
@@ -33,6 +36,7 @@ import {
   parseExcludedSenders,
   resolveFetchPlan,
   type EmailFetchResult,
+  type ImapClientLike,
   type ParsedNewsletter,
 } from "./backends/email-inbox";
 import type { IndexedUrlMatch } from "./unify";
@@ -1266,5 +1270,195 @@ describe("pruneIngestionLog", () => {
     expect(removed).toBe(LOG_RETENTION.batchSize * LOG_RETENTION.maxBatches);
     expect(rig.calls.filter((c) => c.startsWith("ok@"))).toHaveLength(LOG_RETENTION.maxBatches);
     expect(rig.remaining.ok).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// An IMAP failure must never escape the poll (the outage that took the BFF down)
+// ---------------------------------------------------------------------------
+
+/**
+ * A poll rig whose inbox is scriptable directly, so a REAL `EmailInbox` (with a
+ * fake IMAP client underneath) can be driven end-to-end without a socket.
+ */
+function failureRig(inbox: EmailPollDeps["inbox"], storedCursor = "42:900") {
+  const base = deps();
+  let cursor: string | undefined = storedCursor;
+  const logs: { status: string; message: string }[] = [];
+  const d: EmailPollDeps = {
+    inbox,
+    store: base.deps.store,
+    readLater: base.deps.readLater,
+    excluded: base.deps.excluded,
+    getCursor: async () => cursor,
+    setCursor: async (value) => {
+      cursor = value;
+    },
+    getFailures: base.deps.getFailures,
+    setFailures: base.deps.setFailures,
+    log: async (status, message) => {
+      logs.push({ status, message });
+    },
+  };
+  return { deps: d, logs, base };
+}
+
+/** Minimal scriptable `ImapFlow` stand-in — a real EventEmitter, so an
+ *  unlistened `'error'` emit genuinely throws the way it does in production. */
+function fakeImapClient(script: { onConnect?: () => void } = {}) {
+  const client = Object.assign(new EventEmitter(), {
+    mailbox: { uidValidity: 42n, uidNext: 901, exists: 0 } as const,
+    errorListenersAtConnect: -1,
+    connect: async () => {
+      client.errorListenersAtConnect = client.listenerCount("error");
+      script.onConnect?.();
+    },
+    getMailboxLock: async () => ({ release: () => {} }),
+    search: async () => [] as number[],
+    fetch: async function* (): AsyncIterableIterator<{ uid: number; source?: Buffer | false }> {},
+    logout: async () => {},
+    close: () => {},
+  });
+  return client as unknown as ImapClientLike & EventEmitter & { errorListenersAtConnect: number };
+}
+
+function inboxFor(client: ImapClientLike, host = "127.0.0.1") {
+  return new EmailInbox(
+    { host, port: 1143, user: "u", password: "p", mailbox: "INBOX", secure: false },
+    () => client,
+  );
+}
+
+describe("runEmailPoll (an optional background job must never kill the service)", () => {
+  it("catches a connect rejection, logs it, and returns a result", async () => {
+    const rig = failureRig({
+      fetchNew: async () => {
+        throw Object.assign(
+          new Error("Hostname/IP does not match certificate's altnames: Host: localhost."),
+          { code: "ERR_TLS_CERT_ALTNAME_INVALID", tlsFailed: true },
+        );
+      },
+    });
+
+    const saved = await runEmailPoll(rig.deps);
+
+    expect(saved).toBe(0);
+    expect(rig.logs).toHaveLength(1);
+    expect(rig.logs[0]?.status).toBe("error");
+    expect(rig.logs[0]?.message).toContain("imap connect/fetch failed");
+    // `describeError` reports the message (the code lives on the error itself,
+    // not on a `cause`), which for a TLS name failure is the diagnostic part.
+    expect(rig.logs[0]?.message).toContain("does not match certificate's altnames");
+  });
+
+  it("contains an 'error' EVENT emitted by the IMAP client", async () => {
+    // The actual production crash: an EventEmitter 'error' with no listener
+    // throws outside every promise chain, so the process exited 1 and systemd
+    // restart-looped the whole BFF — reader, API and RSS included.
+    const client = fakeImapClient({
+      onConnect: () => {
+        client.emit("error", new Error("socket hang up"));
+        throw new Error("Unexpected close");
+      },
+    });
+    const rig = failureRig({ fetchNew: (c) => inboxFor(client).fetchNew(c) });
+
+    const saved = await runEmailPoll(rig.deps);
+
+    expect(saved).toBe(0);
+    expect(client.errorListenersAtConnect).toBeGreaterThan(0);
+    expect(rig.logs[0]?.status).toBe("error");
+    expect(rig.logs[0]?.message).toContain("socket hang up");
+  });
+
+  it("contains an 'error' EVENT emitted after the poll has finished", async () => {
+    const client = fakeImapClient();
+    const rig = failureRig({ fetchNew: (c) => inboxFor(client).fetchNew(c) });
+
+    await runEmailPoll(rig.deps);
+
+    expect(() => client.emit("error", new Error("ECONNRESET"))).not.toThrow();
+  });
+
+  it("contains a connection timeout rather than hanging or throwing", async () => {
+    // `fetchNew` had no timeout of its own; a stalled server held the job and
+    // its advisory lock open until pg-boss's four-hour expiry.
+    const client = fakeImapClient({
+      onConnect: () => {
+        throw Object.assign(new Error("Failed to establish connection in required time"), {
+          code: "CONNECT_TIMEOUT",
+          details: { connectionTimeout: IMAP_CONNECTION_TIMEOUT_MS },
+        });
+      },
+    });
+    const rig = failureRig({ fetchNew: (c) => inboxFor(client).fetchNew(c) });
+
+    const saved = await runEmailPoll(rig.deps);
+
+    expect(saved).toBe(0);
+    expect(rig.logs[0]?.message).toContain("Failed to establish connection in required time");
+  });
+
+  it("contains a socket-inactivity timeout raised mid-fetch", async () => {
+    const client = fakeImapClient();
+    client.fetch = () => {
+      throw Object.assign(new Error("Socket timeout"), { code: "SOCKET_TIMEOUT" });
+    };
+    const rig = failureRig({ fetchNew: (c) => inboxFor(client).fetchNew(c) });
+
+    expect(await runEmailPoll(rig.deps)).toBe(0);
+    expect(rig.logs[0]?.message).toContain("Socket timeout");
+  });
+
+  it("catches an auth failure", async () => {
+    const client = fakeImapClient({
+      onConnect: () => {
+        throw Object.assign(new Error("Authentication failed"), { authenticationFailed: true });
+      },
+    });
+    const rig = failureRig({ fetchNew: (c) => inboxFor(client).fetchNew(c) });
+
+    expect(await runEmailPoll(rig.deps)).toBe(0);
+    expect(rig.logs[0]?.message).toContain("Authentication failed");
+  });
+
+  it("catches a failure outside the fetch too (reading the cursor)", async () => {
+    const rig = failureRig({ fetchNew: async () => ({ uidValidity: "42", messages: [] }) });
+    rig.deps.getCursor = async () => {
+      throw new Error("glue DB unreachable");
+    };
+
+    const saved = await runEmailPoll(rig.deps);
+
+    expect(saved).toBe(0);
+    expect(rig.logs[0]?.status).toBe("error");
+    expect(rig.logs[0]?.message).toContain("newsletter poll failed");
+    expect(rig.logs[0]?.message).toContain("glue DB unreachable");
+  });
+
+  it("survives even when writing the ingestion log is itself broken", async () => {
+    const rig = failureRig({
+      fetchNew: async () => {
+        throw new Error("imap down");
+      },
+    });
+    rig.deps.log = async () => {
+      throw new Error("ingestion_log write failed");
+    };
+
+    // Nowhere left to report to, but the process still must not go down.
+    await expect(runEmailPoll(rig.deps)).resolves.toBe(0);
+  });
+
+  it("still ingests normally when nothing is wrong", async () => {
+    const rig = failureRig({
+      fetchNew: async () => ({
+        uidValidity: "42",
+        messages: [msg({ uid: 901, messageId: "<a@x.com>" })],
+      }),
+    });
+
+    expect(await runEmailPoll(rig.deps)).toBe(1);
+    expect(rig.logs).toEqual([{ status: "ok", message: "saved 1 of 1" }]);
   });
 });

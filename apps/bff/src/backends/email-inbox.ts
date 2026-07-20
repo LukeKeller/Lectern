@@ -1,4 +1,6 @@
-import { ImapFlow } from "imapflow";
+import { isIP } from "node:net";
+import { checkServerIdentity, type ConnectionOptions } from "node:tls";
+import { ImapFlow, type ImapFlowOptions } from "imapflow";
 import { simpleParser, type ParsedMail } from "mailparser";
 
 /**
@@ -415,11 +417,151 @@ export interface EmailFetchResult {
   coldStart?: { seededLastUid: number; backlogSize: number; reason: string };
 }
 
+// ---------------------------------------------------------------------------
+// Connection options: TLS identity, timeouts, and the injectable client seam
+// ---------------------------------------------------------------------------
+
+/**
+ * How long to wait for the TCP/TLS connection to come up. ImapFlow's own default
+ * is 90s; the poll runs every 5 minutes, so a connection that has not been made
+ * in 30s is not going to be made in time to be useful.
+ */
+export const IMAP_CONNECTION_TIMEOUT_MS = 30_000;
+
+/** How long to wait for the server's `* OK` greeting (ImapFlow default 16s). */
+export const IMAP_GREETING_TIMEOUT_MS = 20_000;
+
+/**
+ * Socket INACTIVITY timeout (ImapFlow default 5 minutes). It bounds a stalled
+ * server mid-fetch, not the total runtime: a large batch keeps the socket busy,
+ * and the only quiet stretch is `simpleParser` between messages, which is
+ * sub-second. Without this `fetchNew` had no timeout of its own at all, so a
+ * half-open socket held the pg-boss job (and its advisory lock) open until the
+ * job expiry four hours later.
+ */
+export const IMAP_SOCKET_TIMEOUT_MS = 120_000;
+
+/**
+ * Extra TLS options for an IMAP host, or `undefined` when Node's defaults are
+ * already correct. Verification is ALWAYS on: this fixes *which name* is
+ * verified, it never disables the check.
+ *
+ * THE BUG. RFC 6066 forbids SNI for IP literals, so ImapFlow sets
+ * `this.servername = ... : !net.isIP(this.host) ? this.host : false` — i.e.
+ * `false` for an IP host (imap-flow.js:282). Node then derives the name it hands
+ * to `checkServerIdentity` from `servername || host || socket._host ||
+ * 'localhost'`. On the STARTTLS path ImapFlow builds
+ * `Object.assign({ socket, servername, port }, this.options.tls || {})`
+ * (imap-flow.js:1148-1155) — note there is NO `host` key, because the socket
+ * already exists. With `servername === false` and no `host`, Node falls all the
+ * way through to the literal string `"localhost"` and verifies the certificate
+ * against THAT. Against Proton Bridge's self-signed cert (`CN=127.0.0.1`, SAN
+ * `IP Address:127.0.0.1`) that yields the production crash:
+ *
+ *   ERR_TLS_CERT_ALTNAME_INVALID: Host: localhost. is not cert's CN: 127.0.0.1
+ *
+ * The CA and the certificate were both fine; the name being checked was wrong.
+ *
+ * THE FIX. Verify against the host we actually configured. Node's own
+ * `tls.checkServerIdentity` handles IP SANs correctly when it is given an IP
+ * string (`net.isIP(hostname)` → match against the cert's `IP Address:` SANs),
+ * so we delegate to it rather than reimplementing name matching.
+ *
+ * WHY IP-ONLY. For a DNS host `this.servername` IS the host, so Node already
+ * verifies against exactly the name we configured on both the implicit-TLS and
+ * STARTTLS paths — passing this override would compute the identical result
+ * while permanently opting out of any future improvement to Node's default
+ * derivation. The defect is specific to the IP-literal case that suppresses SNI,
+ * so the fix is scoped to it and the overwhelmingly common DNS path keeps stock
+ * behaviour. (Verified empirically against a local TLS server using a
+ * `CN=127.0.0.1` / `SAN IP:127.0.0.1` self-signed cert: ImapFlow's STARTTLS
+ * option shape reproduces the exact production error, and this override returns
+ * `authorized: true`.)
+ *
+ * The single `tls` object covers BOTH paths: ImapFlow merges `this.options.tls`
+ * into the implicit-TLS options (imap-flow.js:1641-1648) and into the STARTTLS
+ * upgrade options (imap-flow.js:1148-1155). The failure was on the STARTTLS
+ * path; applying it to both also hardens the implicit path, which only works
+ * today because ImapFlow happens to pass `host` there.
+ */
+export function imapTlsOptions(host: string): ConnectionOptions | undefined {
+  if (!isIP(host)) return undefined;
+  return {
+    // `_servername` is what Node derived (and is exactly what is wrong here);
+    // the configured host is the name the operator actually pointed us at.
+    checkServerIdentity: (_servername, cert) => checkServerIdentity(host, cert),
+  };
+}
+
+/**
+ * The full ImapFlow option object for a mailbox. Exported (and pure) so tests
+ * can assert on what would be handed to the client without opening a socket.
+ */
+export function buildImapOptions(opts: EmailInboxOptions): ImapFlowOptions {
+  const tls = imapTlsOptions(opts.host);
+  return {
+    host: opts.host,
+    port: opts.port,
+    // `secure: true` is implicit TLS on 993; `false` means plain 143 upgraded
+    // via STARTTLS. The TLS identity fix above has to hold for both.
+    secure: opts.secure ?? true,
+    auth: { user: opts.user, pass: opts.password },
+    logger: false,
+    connectionTimeout: IMAP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: IMAP_GREETING_TIMEOUT_MS,
+    socketTimeout: IMAP_SOCKET_TIMEOUT_MS,
+    ...(tls ? { tls } : {}),
+  };
+}
+
+/** The slice of `ImapFlow` `fetchNew` uses, so tests can inject a fake client. */
+export interface ImapClientLike {
+  readonly mailbox: { uidValidity: bigint; uidNext: number; exists: number } | false;
+  on(event: "error", listener: (err: Error) => void): unknown;
+  connect(): Promise<void>;
+  getMailboxLock(path: string): Promise<{ release: () => void }>;
+  search(query: { all: true }, options: { uid: true }): Promise<number[] | false>;
+  fetch(
+    range: string,
+    query: { uid: true; source: true },
+    options: { uid: true },
+  ): AsyncIterableIterator<{ uid: number; source?: Buffer | false }>;
+  logout(): Promise<void>;
+  close(): void;
+}
+
+export type ImapClientFactory = (options: ImapFlowOptions) => ImapClientLike;
+
+const realImapClient: ImapClientFactory = (options) => new ImapFlow(options);
+
+/**
+ * Tear the connection down without ever throwing. `logout()` speaks IMAP, so it
+ * is only meaningful on a connection that came up; when it did not (or when the
+ * polite logout itself fails) fall back to closing the socket outright. A
+ * failure here must never mask the real error propagating out of the `try`.
+ */
+async function disconnectQuietly(client: ImapClientLike, connected: boolean): Promise<void> {
+  try {
+    if (connected) await client.logout();
+    else client.close();
+    return;
+  } catch {
+    // fall through to the hard close
+  }
+  try {
+    client.close();
+  } catch {
+    // already torn down; nothing left to do
+  }
+}
+
 export class EmailInbox {
   private readonly opts: EmailInboxOptions;
+  private readonly createClient: ImapClientFactory;
 
-  constructor(opts: EmailInboxOptions) {
+  constructor(opts: EmailInboxOptions, createClient: ImapClientFactory = realImapClient) {
     this.opts = opts;
+    this.createClient = createClient;
   }
 
   /**
@@ -444,17 +586,32 @@ export class EmailInbox {
    *
    * Opens, reads, parses, and logs out; marking \Seen is unnecessary because the
    * UID cursor is the source of truth.
+   *
+   * NEVER LET AN IMAP FAULT ESCAPE AS AN UNHANDLED EVENT. `ImapFlow` is an
+   * EventEmitter and `emitError` does a bare `this.emit('error', err)`
+   * (imap-flow.js:409) for socket errors, unexpected disconnects and TLS
+   * failures — including AFTER `connect()` has resolved, mid-`fetch`. Node's
+   * EventEmitter THROWS an `'error'` emit that has no listener, and that throw
+   * lands outside every promise chain: it became an uncaughtException, exited
+   * the process 1, and systemd restart-looped the whole BFF. Newsletter
+   * ingestion is an optional background job; it must never be able to do that.
+   * So a listener is attached before anything can fail, and it stays attached
+   * through teardown so a late emit is still absorbed.
    */
   async fetchNew(cursor: EmailCursor | null): Promise<EmailFetchResult> {
-    const client = new ImapFlow({
-      host: this.opts.host,
-      port: this.opts.port,
-      secure: this.opts.secure ?? true,
-      auth: { user: this.opts.user, pass: this.opts.password },
-      logger: false,
+    const client = this.createClient(buildImapOptions(this.opts));
+    // The listener only RECORDS. ImapFlow independently rejects the in-flight
+    // operation, so rethrowing from here would produce a second copy of the
+    // failure with nowhere to go. What makes this line load-bearing is simply
+    // that a listener EXISTS — see the note above.
+    const emitted: Error[] = [];
+    client.on("error", (err) => {
+      emitted.push(err);
     });
-    await client.connect();
+    let connected = false;
     try {
+      await client.connect();
+      connected = true;
       const lock = await client.getMailboxLock(this.opts.mailbox);
       try {
         const mailbox = client.mailbox;
@@ -500,8 +657,14 @@ export class EmailInbox {
       } finally {
         lock.release();
       }
+    } catch (err) {
+      // Prefer the emitted cause. ImapFlow sometimes rejects the pending
+      // operation with a generic "Unexpected close" while the actual reason
+      // (the TLS name check, a socket reset) arrived on the 'error' event; the
+      // generic one is what made this class of failure hard to diagnose.
+      throw emitted[0] ?? err;
     } finally {
-      await client.logout();
+      await disconnectQuietly(client, connected);
     }
   }
 }
